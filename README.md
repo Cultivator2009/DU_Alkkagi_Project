@@ -1,5 +1,14 @@
-# DU_Alkkagi_Project
-
-special credits to:
-Kenney
-    for providing assets with license-free
+DU_Alkkagi_Project
+==================
+.   
+.   
+.   
+.   
+.   
+.   
+.   
+---------
+   
+special credits to:   
+#### Kenney ([kenney.nl](https://kenney.nl))   
+: for providing assets with license-free
