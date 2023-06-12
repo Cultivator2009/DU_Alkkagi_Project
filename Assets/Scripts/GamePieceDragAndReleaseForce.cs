@@ -21,6 +21,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     public bool isSelected = false;
     public bool isDragging = false;
     public bool isOnfire = false;
+    public bool isCancelled = false;
 
     public bool isGamePieceMoving = false;
 
@@ -39,8 +40,8 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         if (isDragging)
         {
             // drag based on local rotation
-            // plane.SetNormalAndPosition(transform.up,transform.position);
             // drag with 0 degree TODO
+            // plane.SetNormalAndPosition(transform.up,transform.position);
             plane.SetNormalAndPosition(Vector3.up,transform.position);
             mousePosInput = Input.mousePosition;
             ray = mainCam.ScreenPointToRay(mousePosInput);
@@ -56,15 +57,17 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             // Update the positions of the line renderer
             lr.enabled = true;
             lrDist = Vector3.Distance(startPos, endPos);
-            Debug.Log(lrDist);
+            // Debug.Log(lrDist);
             lr.SetPosition(0, startPos);
             lr.SetPosition(1, endPos);
         }
         // https://docs.unity3d.com/ScriptReference/Input.GetMouseButtonDown.html
         if (isDragging && Input.GetMouseButtonDown(1))
         {
+            Debug.Log("Cancelled");
             isSelected = false;
             isDragging = false;
+            isCancelled = true;
             lr.enabled = false;
         }
 

@@ -5,6 +5,12 @@ TagManager:
   serializedVersion: 2
   tags:
   - GamePiece_GO
+  - SpawnPoints
+  - GameManager
+  - UIManager
+  - SceneManager
+  - Input_player
+  - vcam
   layers:
   - Default
   - TransparentFX

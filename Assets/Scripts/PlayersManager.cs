@@ -8,6 +8,7 @@ public class PlayersManager : MonoBehaviour
     public int score;
     public int playerIndex; // Add playerIndex property
     public int ID;
+    public int totalPieceCnt;
 
     // https://www.csharpstudy.com/CSharp/CSharp-static.aspx
     public PlayersManager(Color color, int index, int ID) // Add index parameter to constructor

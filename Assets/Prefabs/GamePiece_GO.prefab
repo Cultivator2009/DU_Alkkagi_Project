@@ -285,7 +285,6 @@ GameObject:
   - component: {fileID: 7084761264811185742}
   - component: {fileID: 3145062450220516247}
   - component: {fileID: 7959985279619453206}
-  - component: {fileID: 2783624810091143100}
   - component: {fileID: 7760899451905981039}
   m_Layer: 6
   m_Name: GamePiece_GO
@@ -513,22 +512,6 @@ LineRenderer:
     generateLightingData: 0
   m_UseWorldSpace: 1
   m_Loop: 0
---- !u!114 &2783624810091143100
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7482516870122820086}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d3a3b3896c4cb9c4885569688c29af2f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  color: {r: 0, g: 0, b: 0, a: 0}
-  score: 0
-  playerIndex: 0
-  ID: 0
 --- !u!114 &7760899451905981039
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -541,7 +524,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5229023eacbc81e449547fe268093469, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  pieceID: 0
+  pieceID: 48
+  isDestroyed: 0
 --- !u!1 &8440621069855280877
 GameObject:
   m_ObjectHideFlags: 0

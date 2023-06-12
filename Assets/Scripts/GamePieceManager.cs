@@ -4,7 +4,8 @@ public class GamePieceManager : MonoBehaviour
 {
 
     public char pieceID;
-    public static int PlayerIndex;
+    public int playerIndex;
+    public bool isDestroyed;
 
     private void Start() {
         
