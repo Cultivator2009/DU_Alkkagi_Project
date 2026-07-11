@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,6 +14,13 @@ using UnityEngine;
 public class NetworkMatchBridge : MonoBehaviour
 {
     private const int SnapshotIntervalFixedFrames = 3;
+
+    // On the guest, TurnController.Tick() never runs (see GameManager.
+    // SkipLocalTurnProcessing), so TurnController's own events never fire
+    // past the initial StartMatch. UI that needs to reflect turn/score/
+    // match-over state on both host and guest should use these instead.
+    public event Action<int> OnGuestTurnChanged;
+    public event Action<int> OnGuestMatchEnded;
 
     private ISessionTransport transport;
     private SteamLobbyManager lobby;
@@ -219,7 +227,7 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void HandleGuestTurnResult(byte[] data)
     {
-        var (nextPlayerId, matchOver, _, removed) = NetMessage.ReadTurnResult(data);
+        var (nextPlayerId, matchOver, winnerPlayerId, removed) = NetMessage.ReadTurnResult(data);
 
         foreach (var entry in removed)
         {
@@ -234,10 +242,12 @@ public class NetworkMatchBridge : MonoBehaviour
         if (matchOver)
         {
             gameManager.gameState = GameManager.GameState.MatchOver;
+            OnGuestMatchEnded?.Invoke(winnerPlayerId);
             return;
         }
 
         guestKnownCurrentPlayerId = nextPlayerId;
+        OnGuestTurnChanged?.Invoke(nextPlayerId);
     }
 
     // ---- Shared message dispatch ----
