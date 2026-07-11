@@ -7,6 +7,10 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
 {
     public float forceMultiplier = 20f;
     public float maxForce = 50f;
+    public float settleVelocityThreshold = 0.05f;
+    public int settleFrameThreshold = 5;
+
+    private int lowVelocityFrameCount = 0;
 
     private Rigidbody rb;
     private LineRenderer lr;
@@ -24,6 +28,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     public bool isCancelled = false;
 
     public bool isGamePieceMoving = false;
+    public bool IsSettled => !isGamePieceMoving;
 
 
     private void Start()
@@ -64,7 +69,6 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         // https://docs.unity3d.com/ScriptReference/Input.GetMouseButtonDown.html
         if (isDragging && Input.GetMouseButtonDown(1))
         {
-            Debug.Log("Cancelled");
             isSelected = false;
             isDragging = false;
             isCancelled = true;
@@ -82,9 +86,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             force = (startPos - endPos) * forceMultiplier;
             // force.y = 0;
             if (force.magnitude > maxForce)force = force.normalized * maxForce;
-            Debug.Log(force);
             rb.AddForce(force,ForceMode.Impulse);
-            Debug.Log(force.magnitude);
             force=new Vector3(0,0,0);
             isOnfire=false;
             isSelected = false;
@@ -93,26 +95,24 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             // Disable the line renderer
             lr.enabled = false;
         }
+        UpdateSettleState();
     }
 
-    // private void FixedUpdate()
-    // {
-    //     if (isDragging)
-    //     {
-    //         // Calculate the force vector
-    //         Vector3 force = (startPos - endPos) * forceMultiplier;
-    //         force.y = 0f;
-
-    //         // Limit the force magnitude
-    //         if (force.magnitude > maxForce)
-    //         {
-    //             force = force.normalized * maxForce;
-    //         }
-
-    //         // Apply the force to the rigidbody
-    //         rb.AddForce(force);
-    //     }
-    // }
+    private void UpdateSettleState()
+    {
+        bool isSlow = rb.velocity.sqrMagnitude < settleVelocityThreshold * settleVelocityThreshold &&
+                      rb.angularVelocity.sqrMagnitude < settleVelocityThreshold * settleVelocityThreshold;
+        if (isSlow)
+        {
+            lowVelocityFrameCount++;
+            if (lowVelocityFrameCount >= settleFrameThreshold) isGamePieceMoving = false;
+        }
+        else
+        {
+            lowVelocityFrameCount = 0;
+            isGamePieceMoving = true;
+        }
+    }
 
     private void OnMouseDown()
     {
@@ -124,17 +124,6 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         if (isDragging)
         {
             isOnfire = true;
-        }
-    }
-    private void OnCollisionStay(Collision collision) // StopDetection
-    {
-        if (rb.velocity.magnitude > 0.1f)
-        {
-            // Code to run when RigidBody moving
-            isGamePieceMoving = true;
-        }
-        else if (rb.velocity.magnitude < 0.1f){
-            isGamePieceMoving = false;
         }
     }
 }

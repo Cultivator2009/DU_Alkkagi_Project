@@ -1,27 +1,19 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class DeathTrigger : MonoBehaviour
 {
-    // Start is called before the first frame update
-    void Start()
+    private void OnTriggerEnter(Collider other)
     {
+        if (!other.CompareTag("GamePiece_GO")) return;
 
-    }
+        var pieceManager = other.GetComponent<GamePieceManager>();
+        if (pieceManager.isDestroyed) return;
+        pieceManager.isDestroyed = true;
 
-    // Update is called once per frame
-    void Update()
-    {
+        var gameManager = GameManager.manager;
+        gameManager.Ruleset.OnPieceRemoved(pieceManager, gameManager.playersList);
+        gameManager.RemovePiece(other.GetComponent<GamePieceDragAndReleaseForce>());
 
-    }
-    void OnTriggerEnter(Collider other) {
-
-    if (other.transform.tag == "GamePiece_GO") {
-        // Destroy(other.gameObject);
-        // other.gameObject.SetActive(false);
-        other.GetComponent<GamePieceManager>().isDestroyed = true;
-        Debug.Log(other+" Destroyed");
-        }
+        Destroy(other.gameObject);
     }
 }

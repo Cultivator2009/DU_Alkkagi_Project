@@ -10,24 +10,13 @@ public class PlayersManager : MonoBehaviour
     public int ID;
     public int totalPieceCnt;
 
-    // https://www.csharpstudy.com/CSharp/CSharp-static.aspx
-    public PlayersManager(Color color, int index, int ID) // Add index parameter to constructor
+    public void AddScore(int amount)
     {
-        this.color = color;
-        this.ID = ID;
-        playerIndex = index; // Set playerIndex property
-        score = 0;
+        score += amount;
     }
 
-    // Start is called before the first frame update
-    void Start()
+    public void OnPieceLost()
     {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
+        totalPieceCnt = Mathf.Max(0, totalPieceCnt - 1);
     }
 }
