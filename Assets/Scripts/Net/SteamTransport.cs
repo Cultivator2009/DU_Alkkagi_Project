@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
@@ -10,7 +11,7 @@ using UnityEngine;
 public class SteamTransport : MonoBehaviour, ISessionTransport
 {
     private const int Channel = 0;
-    private const uint DummyAppId = 480; // Spacewar test app, replaced at Steam release time
+    private const uint FallbackAppId = 480; // Spacewar test app, used only if steam_appid.txt is missing
 
     public static SteamTransport Instance { get; private set; }
 
@@ -33,7 +34,7 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
 
         try
         {
-            SteamClient.Init(DummyAppId, true);
+            SteamClient.Init(ReadAppId(), true);
             IsReady = true;
             SteamNetworking.OnP2PSessionRequest += HandleSessionRequest;
         }
@@ -42,6 +43,19 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
             Debug.LogError($"Steam client failed to initialize: {e.Message}");
             IsReady = false;
         }
+    }
+
+    // Reads the App ID from steam_appid.txt next to the executable (or the
+    // project root in-Editor, since Application.dataPath is "<root>/Assets"
+    // there too). Keeps the real App ID out of source control entirely -
+    // only the gitignored text file needs to hold it. See steam_appid.txt.
+    private static uint ReadAppId()
+    {
+        var path = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "steam_appid.txt");
+        if (File.Exists(path) && uint.TryParse(File.ReadAllText(path).Trim(), out var id)) return id;
+
+        Debug.LogWarning($"steam_appid.txt missing or invalid at {path} - falling back to the Spacewar test app ({FallbackAppId}).");
+        return FallbackAppId;
     }
 
     private void Update()
