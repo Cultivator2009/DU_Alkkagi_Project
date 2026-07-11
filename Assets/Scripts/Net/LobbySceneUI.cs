@@ -1,5 +1,4 @@
 using System.Linq;
-using Steamworks.Data;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -180,7 +179,7 @@ public class LobbySceneUI : MonoBehaviour
 
     // ---- Lobby events ----
 
-    private void HandleLobbyReady(Lobby lobby)
+    private void HandleLobbyReady(Steamworks.Data.Lobby lobby)
     {
         statusText.text = lobbyManager.IsHost ? "로비 생성됨 - 상대를 기다리는 중" : "로비 참가됨";
         lobbyIdText.text = $"로비 코드: {lobby.Id.Value}";
