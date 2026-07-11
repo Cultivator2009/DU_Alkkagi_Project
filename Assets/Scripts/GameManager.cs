@@ -26,6 +26,11 @@ public class GameManager : MonoBehaviour
     public IRuleset Ruleset { get; private set; } = new ClassicRuleset();
     public TurnController TurnController { get; private set; }
 
+    // Set by NetworkMatchBridge on a network guest: the authoritative turn
+    // state machine only ever runs on the host, so a guest's local
+    // TurnController must not process input on its own.
+    public bool SkipLocalTurnProcessing;
+
     private void Awake()
     {
         if (manager == null)
@@ -65,6 +70,7 @@ public class GameManager : MonoBehaviour
         }
 
         if (TurnController == null) return;
+        if (SkipLocalTurnProcessing) return; // a network guest's state is driven by NetworkMatchBridge instead
         TurnController.Tick();
         gameState = TurnController.State;
     }

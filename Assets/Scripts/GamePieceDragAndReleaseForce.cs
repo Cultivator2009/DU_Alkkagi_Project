@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 // https://docs.unity3d.com/ScriptReference/Camera.ScreenToWorldPoint.html
 
@@ -29,6 +30,12 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
 
     public bool isGamePieceMoving = false;
     public bool IsSettled => !isGamePieceMoving;
+
+    // True on a local single-player piece and on the network host (who always
+    // simulates physics). False on a network guest, whose flicks are only
+    // requests sent to the host instead of being applied locally.
+    public bool isAuthority = true;
+    public event Action<Vector3> OnFlickRequested;
 
 
     private void Start()
@@ -84,9 +91,8 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         {
             // Calculate the force vector
             force = (startPos - endPos) * forceMultiplier;
-            // force.y = 0;
-            if (force.magnitude > maxForce)force = force.normalized * maxForce;
-            rb.AddForce(force,ForceMode.Impulse);
+            if (isAuthority) ApplyFlick(force);
+            else OnFlickRequested?.Invoke(force);
             force=new Vector3(0,0,0);
             isOnfire=false;
             isSelected = false;
@@ -98,9 +104,17 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         UpdateSettleState();
     }
 
+    // Only ever called on the authoritative simulation (local single-player,
+    // or the network host applying its own input or a guest's FlickCommand).
+    public void ApplyFlick(Vector3 flickForce)
+    {
+        if (flickForce.magnitude > maxForce) flickForce = flickForce.normalized * maxForce;
+        rb.AddForce(flickForce, ForceMode.Impulse);
+    }
+
     private void UpdateSettleState()
     {
-        bool isSlow = rb.velocity.sqrMagnitude < settleVelocityThreshold * settleVelocityThreshold &&
+        bool isSlow = rb.linearVelocity.sqrMagnitude < settleVelocityThreshold * settleVelocityThreshold &&
                       rb.angularVelocity.sqrMagnitude < settleVelocityThreshold * settleVelocityThreshold;
         if (isSlow)
         {

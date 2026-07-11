@@ -38,6 +38,7 @@ ExportedObj/
 *.csproj
 *.unityproj
 *.sln
+*.slnx
 *.suo
 *.tmp
 *.user
@@ -468,3 +469,6 @@ FodyWeavers.xsd
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,unity
 
 sources/*
+
+# Steam App ID (dummy 480 locally; real App ID must never be committed)
+/steam_appid.txt

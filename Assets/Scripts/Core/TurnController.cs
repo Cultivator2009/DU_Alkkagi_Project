@@ -9,6 +9,7 @@ public class TurnController
 
     public GameManager.GameState State { get; private set; } = GameManager.GameState.Mainmenu;
     public int CurrentPlayerID { get; private set; }
+    public PieceSelector PieceSelector => pieceSelector;
 
     private readonly IRuleset ruleset;
     private readonly List<PlayersManager> players;
