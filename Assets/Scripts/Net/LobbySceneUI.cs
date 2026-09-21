@@ -21,7 +21,7 @@ public class LobbySceneUI : MonoBehaviour
 
     private void Awake()
     {
-        EnsureNetworkSingletons();
+        NetworkServices.EnsureCreated();
         EnsureEventSystem();
         BuildUI();
     }
@@ -44,12 +44,6 @@ public class LobbySceneUI : MonoBehaviour
     private void HandleNetworkMessage(ulong senderId, byte[] data)
     {
         if (NetMessage.PeekType(data) == NetMessageType.LoadGameScene) SceneManager.LoadScene("GameScene");
-    }
-
-    private static void EnsureNetworkSingletons()
-    {
-        if (SteamTransport.Instance == null) new GameObject("SteamTransport").AddComponent<SteamTransport>();
-        if (SteamLobbyManager.Instance == null) new GameObject("SteamLobbyManager").AddComponent<SteamLobbyManager>();
     }
 
     private static void EnsureEventSystem()
