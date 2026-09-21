@@ -110,4 +110,18 @@ public class GameManager : MonoBehaviour
     {
         gamePieceScripts.Remove(piece);
     }
+
+    // Call before leaving GameScene. This manager outlives the scene
+    // (DontDestroyOnLoad) and GamePreparation only ever appends, so without a
+    // reset the next match would inherit the previous one's players, pieces
+    // and TurnController - and the HUD would bind to the stale controller.
+    public void EndMatch()
+    {
+        TurnController = null;
+        playersList.Clear();
+        gamePieceScripts.Clear();
+        vcams = null;
+        SkipLocalTurnProcessing = false;
+        gameState = GameState.Mainmenu;
+    }
 }

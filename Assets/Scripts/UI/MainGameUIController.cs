@@ -1,19 +1,28 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-// Attach this to the MainGame_UI prefab root and wire the fields below in the
-// Inspector. It only touches text/active-state — visual layout and styling
-// are intentionally left to be built around these hooks.
+// Drives the MainGame_UI prefab: the turn pill, one PlayerHudPanel per
+// player and the win modal. Layout and styling live in the prefab (built by
+// Tools > Alkkagi UI > 2. Build HUD); this only pushes match state into it.
 public class MainGameUIController : MonoBehaviour
 {
+    public GameObject turnPill;
     public TMP_Text turnText;
-    public TMP_Text[] scoreTexts; // index-aligned with GameManager.playersList
+    public Image turnStone;
+    public PlayerHudPanel[] playerPanels; // index-aligned with GameManager.playersList (0 = black)
     public GameObject winPanel;
     public TMP_Text winText;
+    public TMP_Text winDetailText;
+    public Button rematchButton;
+    public Button mainMenuButton;
+    public Color blackStoneColor = new Color(0.08f, 0.08f, 0.08f);
+    public Color whiteStoneColor = new Color(0.97f, 0.97f, 0.97f);
 
     // Item-mode placeholder: reserves a slot for a future item bar without
     // building any real item logic yet (Phase 1's ITurnAction is still a
@@ -26,15 +35,26 @@ public class MainGameUIController : MonoBehaviour
 
     private TurnController turnController;
     private NetworkMatchBridge networkBridge;
+    private int currentPlayerId;
+    private int? winnerPlayerId;
+
+    private void Awake()
+    {
+        rematchButton.onClick.AddListener(Rematch);
+        mainMenuButton.onClick.AddListener(ReturnToMainMenu);
+    }
 
     private void OnEnable()
     {
+        winPanel.SetActive(false);
+        Loc.OnLanguageChanged += Render;
         StartCoroutine(WaitForMatchThenSubscribe());
     }
 
     private void OnDisable()
     {
         StopAllCoroutines();
+        Loc.OnLanguageChanged -= Render;
         if (turnController != null) Unsubscribe(turnController);
         if (networkBridge != null) UnsubscribeNetwork(networkBridge);
         turnController = null;
@@ -55,6 +75,17 @@ public class MainGameUIController : MonoBehaviour
         // instead.
         networkBridge = FindObjectOfType<NetworkMatchBridge>();
         if (networkBridge != null) SubscribeNetwork(networkBridge);
+
+        // Rematching an online game needs a protocol round-trip that doesn't
+        // exist yet, so it's offered for local matches only.
+        rematchButton.gameObject.SetActive(!IsOnlineMatch());
+
+        for (var i = 0; i < playerPanels.Length; i++) playerPanels[i].Build(CountPieces(i));
+
+        // StartMatch already fired OnTurnStarted inside GamePreparation, before
+        // this coroutine could subscribe - read the opening turn directly.
+        currentPlayerId = turnController.CurrentPlayerID;
+        Render();
     }
 
     private void Subscribe(TurnController controller)
@@ -85,48 +116,89 @@ public class MainGameUIController : MonoBehaviour
 
     private void HandleTurnStarted(PlayersManager player)
     {
-        if (turnText != null) turnText.text = $"Player {player.ID + 1}'s Turn";
+        currentPlayerId = player.ID;
+        Render();
     }
 
     private void HandleTurnEnded(PlayersManager player)
     {
-        RefreshScores();
+        Render();
     }
 
     private void HandleMatchEnded(PlayersManager winner)
     {
-        RefreshScores();
         ShowWinPanel(winner.ID);
     }
 
     private void HandleGuestTurnChanged(int playerId)
     {
-        RefreshScores();
-        if (turnText != null) turnText.text = $"Player {playerId + 1}'s Turn";
+        currentPlayerId = playerId;
+        Render();
     }
 
     private void HandleGuestMatchEnded(int winnerPlayerId)
     {
-        RefreshScores();
         ShowWinPanel(winnerPlayerId);
     }
 
-    private void ShowWinPanel(int winnerPlayerId)
+    private void ShowWinPanel(int winnerId)
     {
-        if (winPanel != null) winPanel.SetActive(true);
-        if (winText != null) winText.text = $"Player {winnerPlayerId + 1} Wins!";
+        winnerPlayerId = winnerId;
+        winPanel.SetActive(true);
+        Render();
     }
 
-    private void RefreshScores()
+    private void Render()
     {
         var gameManager = GameManager.manager;
-        if (gameManager == null || scoreTexts == null) return;
+        if (turnController == null || gameManager == null) return;
 
-        for (var i = 0; i < scoreTexts.Length && i < gameManager.playersList.Count; i++)
+        turnPill.SetActive(!winnerPlayerId.HasValue);
+        turnText.text = Loc.Get("hud.turn", ColorName(currentPlayerId));
+        turnStone.color = currentPlayerId == 0 ? blackStoneColor : whiteStoneColor;
+
+        for (var i = 0; i < playerPanels.Length && i < gameManager.playersList.Count; i++)
         {
-            if (scoreTexts[i] == null) continue;
-            scoreTexts[i].text = gameManager.playersList[i].score.ToString();
+            var isTurn = !winnerPlayerId.HasValue && i == currentPlayerId;
+            playerPanels[i].Render(ColorName(i), Loc.Get("player.number", i + 1), CountPieces(i), gameManager.playersList[i].score, isTurn);
         }
+
+        if (winnerPlayerId.HasValue)
+        {
+            var winner = winnerPlayerId.Value;
+            winText.text = Loc.Get("win.title", ColorName(winner));
+            winDetailText.text = Loc.Get("win.detail", Loc.Get("player.number", winner + 1), CountPieces(winner));
+        }
+    }
+
+    private static string ColorName(int playerId) => Loc.Get(playerId == 0 ? "player.black" : "player.white");
+
+    // Counted from the live pieces rather than PlayersManager.totalPieceCnt:
+    // a network guest only receives removals (NetworkMatchBridge drops them
+    // from gamePieceScripts), its totalPieceCnt never decrements.
+    private static int CountPieces(int playerId)
+    {
+        return GameManager.manager.gamePieceScripts.Count(piece => piece != null && piece.GetComponent<GamePieceManager>().playerIndex == playerId);
+    }
+
+    private static bool IsOnlineMatch()
+    {
+        return SteamLobbyManager.Instance != null && SteamLobbyManager.Instance.CurrentLobby.HasValue;
+    }
+
+    private void Rematch()
+    {
+        GameManager.manager.EndMatch();
+        SceneManager.LoadScene("GameScene");
+    }
+
+    private void ReturnToMainMenu()
+    {
+        // Leaving the lobby matters: NetworkBootstrap treats any GameScene load
+        // with a live lobby as an online match, local games included.
+        if (IsOnlineMatch()) SteamLobbyManager.Instance.LeaveLobby();
+        GameManager.manager.EndMatch();
+        SceneManager.LoadScene("MainMenuScene");
     }
 
     // ---- Item bar placeholder ----
