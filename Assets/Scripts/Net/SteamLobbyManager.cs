@@ -2,6 +2,7 @@ using System;
 using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 // Wraps Steam's Lobby (matchmaking) API. This is the only "server" involved
 // in a match - Valve's own lobby/relay infrastructure - the match itself
@@ -14,10 +15,12 @@ public class SteamLobbyManager : MonoBehaviour
 
     public Lobby? CurrentLobby { get; private set; }
     public bool IsHost => CurrentLobby.HasValue && CurrentLobby.Value.Owner.Id.Value == SteamClient.SteamId.Value;
+    public bool IsJoining { get; private set; }
 
     public event Action<Lobby> OnLobbyReady;
     public event Action<Friend> OnMemberJoined;
     public event Action<Friend> OnMemberLeft;
+    public event Action OnLobbyFailed;
 
     private void Awake()
     {
@@ -32,6 +35,12 @@ public class SteamLobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyEntered += HandleLobbyEntered;
         SteamMatchmaking.OnLobbyMemberJoined += HandleMemberJoined;
         SteamMatchmaking.OnLobbyMemberLeave += HandleMemberLeft;
+        SteamFriends.OnGameLobbyJoinRequested += HandleJoinRequested;
+    }
+
+    private void Start()
+    {
+        TryJoinFromCommandLine();
     }
 
     private void OnDestroy()
@@ -39,6 +48,7 @@ public class SteamLobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyEntered -= HandleLobbyEntered;
         SteamMatchmaking.OnLobbyMemberJoined -= HandleMemberJoined;
         SteamMatchmaking.OnLobbyMemberLeave -= HandleMemberLeft;
+        SteamFriends.OnGameLobbyJoinRequested -= HandleJoinRequested;
     }
 
     public async void CreateLobby()
@@ -47,6 +57,7 @@ public class SteamLobbyManager : MonoBehaviour
         if (!result.HasValue)
         {
             Debug.LogError("Failed to create Steam lobby.");
+            OnLobbyFailed?.Invoke();
             return;
         }
         result.Value.SetJoinable(true);
@@ -54,8 +65,50 @@ public class SteamLobbyManager : MonoBehaviour
 
     public async void JoinLobby(ulong lobbyId)
     {
+        IsJoining = true;
         var result = await SteamMatchmaking.JoinLobbyAsync(lobbyId);
-        if (!result.HasValue) Debug.LogError($"Failed to join Steam lobby {lobbyId}.");
+        if (result.HasValue) return; // HandleLobbyEntered finishes the join
+
+        IsJoining = false;
+        Debug.LogError($"Failed to join Steam lobby {lobbyId}.");
+        OnLobbyFailed?.Invoke();
+    }
+
+    // Opens the Steam overlay's invite dialog for the current lobby. Needs
+    // the overlay, so it does nothing when run from the Unity Editor.
+    public void InviteFriends()
+    {
+        if (CurrentLobby.HasValue) SteamFriends.OpenGameInviteOverlay(CurrentLobby.Value.Id);
+    }
+
+    // A friend's invite accepted from the Steam overlay/friends list while
+    // the game is running. Ignored mid-match so it can't yank a player out
+    // of a game in progress.
+    private void HandleJoinRequested(Lobby lobby, SteamId inviter)
+    {
+        if (SceneManager.GetActiveScene().name == "GameScene")
+        {
+            Debug.Log($"Ignoring lobby invite from {inviter} during a match.");
+            return;
+        }
+        JoinInvitedLobby(lobby.Id.Value);
+    }
+
+    // An invite accepted while the game is closed launches it with
+    // "+connect_lobby <id>" on the command line.
+    private void TryJoinFromCommandLine()
+    {
+        var args = Environment.GetCommandLineArgs();
+        var index = Array.IndexOf(args, "+connect_lobby");
+        if (index < 0 || index + 1 >= args.Length || !ulong.TryParse(args[index + 1], out var lobbyId)) return;
+        JoinInvitedLobby(lobbyId);
+    }
+
+    private void JoinInvitedLobby(ulong lobbyId)
+    {
+        LeaveLobby();
+        JoinLobby(lobbyId);
+        if (SceneManager.GetActiveScene().name != "LobbyScene") SceneManager.LoadScene("LobbyScene");
     }
 
     public void LeaveLobby()
@@ -67,6 +120,7 @@ public class SteamLobbyManager : MonoBehaviour
 
     private void HandleLobbyEntered(Lobby lobby)
     {
+        IsJoining = false;
         CurrentLobby = lobby;
         foreach (var member in lobby.Members)
         {
