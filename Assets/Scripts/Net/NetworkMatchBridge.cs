@@ -85,7 +85,12 @@ public class NetworkMatchBridge : MonoBehaviour
         pieceLookup = new Dictionary<char, GamePieceDragAndReleaseForce>();
         foreach (var piece in gameManager.gamePieceScripts)
         {
-            pieceLookup[piece.GetComponent<GamePieceManager>().pieceID] = piece;
+            var id = piece.GetComponent<GamePieceManager>().pieceID;
+            // Every message addresses pieces by this id - a duplicate silently
+            // merges two pieces into one lookup entry and desyncs the match.
+            if (pieceLookup.TryGetValue(id, out var existing))
+                Debug.LogError($"Duplicate pieceID '{id}' on {existing.name} and {piece.name} - set unique ids in GameScene.");
+            pieceLookup[id] = piece;
         }
     }
 
