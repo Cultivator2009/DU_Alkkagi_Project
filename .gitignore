@@ -270,6 +270,10 @@ PublishScripts/
 !**/[Pp]ackages/build/
 # Uncomment if necessary however generally it will be regenerated when needed
 #!**/[Pp]ackages/repositories.config
+# Unity's own Packages/ folder collides with the NuGet rule above; these two
+# files define the package set and must be tracked.
+!/[Pp]ackages/manifest.json
+!/[Pp]ackages/packages-lock.json
 # NuGet v3's project.json files produces more ignorable files
 *.nuget.props
 *.nuget.targets
