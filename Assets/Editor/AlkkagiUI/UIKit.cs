@@ -148,11 +148,23 @@ namespace AlkkagiUIEditor
         private static TMP_FontAsset CreateFontAsset(Font source, string name, AtlasPopulationMode mode)
         {
             var path = $"{FontDir}/{name}.asset";
-            AssetDatabase.DeleteAsset(path);
-
-            var asset = TMP_FontAsset.CreateFontAsset(source, FontSampling, FontPadding, GlyphRenderMode.SDFAA, FontAtlasSize, FontAtlasSize, mode, true);
-            asset.name = name;
-            AssetDatabase.CreateAsset(asset, path);
+            var asset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(path);
+            if (asset == null)
+            {
+                asset = TMP_FontAsset.CreateFontAsset(source, FontSampling, FontPadding, GlyphRenderMode.SDFAA, FontAtlasSize, FontAtlasSize, mode, true);
+                asset.name = name;
+                AssetDatabase.CreateAsset(asset, path);
+            }
+            else
+            {
+                // Rebake in place. Every prefab's text references this asset by
+                // GUID - deleting and recreating it would orphan them all.
+                asset.atlasPopulationMode = AtlasPopulationMode.Dynamic;
+                // A dynamic fallback starts empty and grows on demand; keeping
+                // its full-size blank atlas would add ~2MB of text to git.
+                asset.ClearFontAssetData(setAtlasSizeToZero: mode == AtlasPopulationMode.Dynamic);
+                asset.atlasPopulationMode = mode;
+            }
             AttachSubAssets(asset);
 
             var so = new SerializedObject(asset);
