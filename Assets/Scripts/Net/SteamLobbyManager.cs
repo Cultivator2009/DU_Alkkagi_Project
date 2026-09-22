@@ -35,6 +35,9 @@ public class SteamLobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyEntered += HandleLobbyEntered;
         SteamMatchmaking.OnLobbyMemberJoined += HandleMemberJoined;
         SteamMatchmaking.OnLobbyMemberLeave += HandleMemberLeft;
+        // Steam reports a member that dropped (crash, lost connection) as a
+        // disconnect rather than a leave; to the game both mean they're gone.
+        SteamMatchmaking.OnLobbyMemberDisconnected += HandleMemberLeft;
         SteamFriends.OnGameLobbyJoinRequested += HandleJoinRequested;
     }
 
@@ -48,7 +51,15 @@ public class SteamLobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyEntered -= HandleLobbyEntered;
         SteamMatchmaking.OnLobbyMemberJoined -= HandleMemberJoined;
         SteamMatchmaking.OnLobbyMemberLeave -= HandleMemberLeft;
+        SteamMatchmaking.OnLobbyMemberDisconnected -= HandleMemberLeft;
         SteamFriends.OnGameLobbyJoinRequested -= HandleJoinRequested;
+    }
+
+    // Leave explicitly on quit so the other player is told right away;
+    // otherwise Steam only notices once the connection times out.
+    private void OnApplicationQuit()
+    {
+        LeaveLobby();
     }
 
     public async void CreateLobby()

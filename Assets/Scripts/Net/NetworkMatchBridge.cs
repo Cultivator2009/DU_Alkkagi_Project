@@ -2,7 +2,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Steamworks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 // Bridges the local, mode-agnostic TurnController/ClassicRuleset core (built
 // for hot-seat play) onto a host-authoritative network match. Only the host
@@ -20,7 +22,21 @@ public class NetworkMatchBridge : MonoBehaviour
     // past the initial StartMatch. UI that needs to reflect turn/score/
     // match-over state on both host and guest should use these instead.
     public event Action<int> OnGuestTurnChanged;
-    public event Action<int> OnGuestMatchEnded;
+    public event Action<int, MatchEndReason> OnGuestMatchEnded;
+    // Guest-side stand-in for TurnController.OnTurnEnded: shooterId just shot.
+    public event Action<int> OnGuestTurnEnded;
+
+    // The opponent quit, dropped or timed out. Before the result that's a
+    // forfeit (the match is stopped here); afterwards it only rules out a
+    // rematch.
+    public event Action OnOpponentLeft;
+    public event Action OnOpponentReturnedToLobby;
+    public event Action OnRematchStateChanged;
+
+    public int LocalPlayerId => localPlayerId;
+    public bool LocalWantsRematch { get; private set; }
+    public bool RemoteWantsRematch { get; private set; }
+    public bool OpponentGone { get; private set; }
 
     private ISessionTransport transport;
     private SteamLobbyManager lobby;
@@ -28,8 +44,10 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private bool isHost;
     private ulong hostId;
+    private ulong opponentId;
     private int localPlayerId;
     private int snapshotTickCounter;
+    private bool matchResolved;
 
     private Dictionary<char, GamePieceDragAndReleaseForce> pieceLookup;
     private Dictionary<char, int> ownerAtTurnStart;
@@ -53,15 +71,77 @@ public class NetworkMatchBridge : MonoBehaviour
 
         isHost = lobby.IsHost;
         hostId = lobby.CurrentLobby.Value.Owner.Id.Value;
+        opponentId = isHost
+            ? lobby.CurrentLobby.Value.Members.FirstOrDefault(m => m.Id.Value != transport.LocalId).Id.Value
+            : hostId;
         gameManager.SkipLocalTurnProcessing = !isHost;
         transport.OnMessageReceived += HandleMessage;
+        transport.OnPeerDisconnected += HandlePeerDisconnected;
+        lobby.OnMemberLeft += HandleMemberLeft;
 
         StartCoroutine(WaitForTurnControllerThenInit());
     }
 
     private void OnDestroy()
     {
-        if (transport != null) transport.OnMessageReceived -= HandleMessage;
+        if (transport != null)
+        {
+            transport.OnMessageReceived -= HandleMessage;
+            transport.OnPeerDisconnected -= HandlePeerDisconnected;
+        }
+        if (lobby != null) lobby.OnMemberLeft -= HandleMemberLeft;
+    }
+
+    // ---- Opponent leaving, rematch, back to lobby ----
+
+    private void HandleMemberLeft(Friend friend)
+    {
+        if (friend.Id.Value == opponentId) OpponentDeparted();
+    }
+
+    private void HandlePeerDisconnected(ulong peerId)
+    {
+        if (peerId == opponentId) OpponentDeparted();
+    }
+
+    private void OpponentDeparted()
+    {
+        if (OpponentGone) return;
+        OpponentGone = true;
+        if (!matchResolved)
+        {
+            // Nothing more can happen on this board; the leaver forfeits.
+            matchResolved = true;
+            gameManager.TurnController?.Abort();
+            gameManager.gameState = GameManager.GameState.MatchOver;
+        }
+        OnOpponentLeft?.Invoke();
+    }
+
+    public void RequestRematch()
+    {
+        if (OpponentGone || LocalWantsRematch) return;
+        LocalWantsRematch = true;
+        transport.Broadcast(NetMessage.WriteRematchRequest());
+        OnRematchStateChanged?.Invoke();
+        TryStartRematch();
+    }
+
+    public void ReturnToLobby()
+    {
+        transport.Broadcast(NetMessage.WriteReturnToLobby());
+        gameManager.EndMatch();
+        SceneManager.LoadScene("LobbyScene");
+    }
+
+    // The host owns scene flow: once both sides have asked, it restarts the
+    // match the same way the lobby's Start button does.
+    private void TryStartRematch()
+    {
+        if (!isHost || !LocalWantsRematch || !RemoteWantsRematch) return;
+        transport.Broadcast(NetMessage.WriteLoadGameScene());
+        gameManager.EndMatch();
+        SceneManager.LoadScene("GameScene");
     }
 
     private IEnumerator WaitForTurnControllerThenInit()
@@ -133,14 +213,15 @@ public class NetworkMatchBridge : MonoBehaviour
     private void HandleHostTurnStarted(PlayersManager player)
     {
         var removed = ComputeRemovedSinceTurnStart();
-        transport.Broadcast(NetMessage.WriteTurnResult(player.ID, false, -1, removed, CurrentTransforms()));
+        transport.Broadcast(NetMessage.WriteTurnResult(player.ID, false, -1, MatchEndReason.Knockout, removed, CurrentTransforms()));
         ownerAtTurnStart = SnapshotOwners();
     }
 
-    private void HandleHostMatchEnded(PlayersManager winner)
+    private void HandleHostMatchEnded(PlayersManager winner, MatchEndReason reason)
     {
+        matchResolved = true;
         var removed = ComputeRemovedSinceTurnStart();
-        transport.Broadcast(NetMessage.WriteTurnResult(-1, true, winner.ID, removed, CurrentTransforms()));
+        transport.Broadcast(NetMessage.WriteTurnResult(-1, true, winner.ID, reason, removed, CurrentTransforms()));
     }
 
     // The physics pose, not transform: with interpolation on, transform is
@@ -256,8 +337,11 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void HandleGuestTurnResult(byte[] data)
     {
-        var (nextPlayerId, matchOver, winnerPlayerId, removed, finalTransforms) = NetMessage.ReadTurnResult(data);
+        var (nextPlayerId, matchOver, winnerPlayerId, reason, removed, finalTransforms) = NetMessage.ReadTurnResult(data);
         awaitingTurnResult = false;
+        // Turns alternate, so the same player again means a state resync
+        // (a rejected flick), not a completed shot.
+        if (matchOver || nextPlayerId != guestKnownCurrentPlayerId) OnGuestTurnEnded?.Invoke(guestKnownCurrentPlayerId);
 
         foreach (var entry in removed)
         {
@@ -279,8 +363,9 @@ public class NetworkMatchBridge : MonoBehaviour
 
         if (matchOver)
         {
+            matchResolved = true;
             gameManager.gameState = GameManager.GameState.MatchOver;
-            OnGuestMatchEnded?.Invoke(winnerPlayerId);
+            OnGuestMatchEnded?.Invoke(winnerPlayerId, reason);
             return;
         }
 
@@ -293,6 +378,19 @@ public class NetworkMatchBridge : MonoBehaviour
     private void HandleMessage(ulong senderId, byte[] data)
     {
         var type = NetMessage.PeekType(data);
+
+        switch (type)
+        {
+            case NetMessageType.RematchRequest:
+                RemoteWantsRematch = true;
+                OnRematchStateChanged?.Invoke();
+                TryStartRematch();
+                return;
+            case NetMessageType.ReturnToLobby:
+                OpponentGone = true;
+                OnOpponentReturnedToLobby?.Invoke();
+                return;
+        }
 
         if (isHost)
         {
@@ -313,7 +411,7 @@ public class NetworkMatchBridge : MonoBehaviour
                         // board or whose turn it is - resend the current state so
                         // its view and input line up again. (Mid-turn rejections
                         // need nothing: the turn's own TurnResult will arrive.)
-                        transport.Send(senderId, NetMessage.WriteTurnResult(controller.CurrentPlayerID, false, -1, new List<RemovedPieceEntry>(), CurrentTransforms()));
+                        transport.Send(senderId, NetMessage.WriteTurnResult(controller.CurrentPlayerID, false, -1, MatchEndReason.Knockout, new List<RemovedPieceEntry>(), CurrentTransforms()));
                     }
                     break;
             }
@@ -331,6 +429,12 @@ public class NetworkMatchBridge : MonoBehaviour
                 break;
             case NetMessageType.TurnResult:
                 HandleGuestTurnResult(data);
+                break;
+            case NetMessageType.LoadGameScene:
+                // A rematch, or the host starting a new match from the lobby
+                // while this guest was still on the game-over screen.
+                gameManager.EndMatch();
+                SceneManager.LoadScene("GameScene");
                 break;
         }
     }

@@ -9,7 +9,9 @@ public enum NetMessageType : byte
     PieceSnapshot = 3,
     TurnResult = 4,
     ClientReady = 5,
-    LoadGameScene = 6
+    LoadGameScene = 6,
+    RematchRequest = 7,
+    ReturnToLobby = 8
 }
 
 public struct PieceOwnerEntry
@@ -108,7 +110,7 @@ public static class NetMessage
     // Carries the settled position of every piece still in play, so the
     // guest converges on the host's board every turn even if some of the
     // unreliable mid-turn snapshots were dropped.
-    public static byte[] WriteTurnResult(int nextPlayerId, bool matchOver, int winnerPlayerId, IReadOnlyList<RemovedPieceEntry> removed, IReadOnlyList<PieceTransform> finalTransforms)
+    public static byte[] WriteTurnResult(int nextPlayerId, bool matchOver, int winnerPlayerId, MatchEndReason reason, IReadOnlyList<RemovedPieceEntry> removed, IReadOnlyList<PieceTransform> finalTransforms)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
@@ -116,6 +118,7 @@ public static class NetMessage
         writer.Write(nextPlayerId);
         writer.Write(matchOver);
         writer.Write(winnerPlayerId);
+        writer.Write((byte)reason);
         writer.Write(removed.Count);
         foreach (var entry in removed)
         {
@@ -126,7 +129,7 @@ public static class NetMessage
         return stream.ToArray();
     }
 
-    public static (int nextPlayerId, bool matchOver, int winnerPlayerId, List<RemovedPieceEntry> removed, List<PieceTransform> finalTransforms) ReadTurnResult(byte[] data)
+    public static (int nextPlayerId, bool matchOver, int winnerPlayerId, MatchEndReason reason, List<RemovedPieceEntry> removed, List<PieceTransform> finalTransforms) ReadTurnResult(byte[] data)
     {
         using var stream = new MemoryStream(data);
         using var reader = new BinaryReader(stream);
@@ -134,13 +137,14 @@ public static class NetMessage
         var nextPlayerId = reader.ReadInt32();
         var matchOver = reader.ReadBoolean();
         var winnerPlayerId = reader.ReadInt32();
+        var reason = (MatchEndReason)reader.ReadByte();
         var count = reader.ReadInt32();
         var removed = new List<RemovedPieceEntry>(count);
         for (var i = 0; i < count; i++)
         {
             removed.Add(new RemovedPieceEntry { PieceId = reader.ReadChar(), ScoredForPlayerId = reader.ReadInt32() });
         }
-        return (nextPlayerId, matchOver, winnerPlayerId, removed, ReadTransforms(reader));
+        return (nextPlayerId, matchOver, winnerPlayerId, reason, removed, ReadTransforms(reader));
     }
 
     private static void WriteTransforms(BinaryWriter writer, IReadOnlyList<PieceTransform> transforms)
@@ -176,6 +180,10 @@ public static class NetMessage
     public static byte[] WriteClientReady() => new[] { (byte)NetMessageType.ClientReady };
 
     public static byte[] WriteLoadGameScene() => new[] { (byte)NetMessageType.LoadGameScene };
+
+    public static byte[] WriteRematchRequest() => new[] { (byte)NetMessageType.RematchRequest };
+
+    public static byte[] WriteReturnToLobby() => new[] { (byte)NetMessageType.ReturnToLobby };
 
     public static NetMessageType PeekType(byte[] data) => (NetMessageType)data[0];
 }

@@ -15,9 +15,10 @@ public class ClassicRuleset : IRuleset
         scorer?.AddScore(1);
     }
 
-    public bool TryGetMatchWinner(List<PlayersManager> players, out PlayersManager winner)
+    public bool TryGetMatchWinner(List<PlayersManager> players, int shooterId, out PlayersManager winner, out MatchEndReason reason)
     {
         winner = null;
+        reason = MatchEndReason.Knockout;
         PlayersManager remaining = null;
         var remainingCount = 0;
         foreach (var player in players)
@@ -26,8 +27,20 @@ public class ClassicRuleset : IRuleset
             remaining = player;
             remainingCount++;
         }
-        if (remainingCount != 1) return false;
-        winner = remaining;
-        return true;
+
+        if (remainingCount == 1)
+        {
+            winner = remaining;
+            return true;
+        }
+        if (remainingCount == 0)
+        {
+            // Both last stones went out on the same flick. Without this the
+            // match had no winner and the next player had nothing to move.
+            winner = players.Find(p => p.ID != shooterId);
+            reason = MatchEndReason.BothOut;
+            return winner != null;
+        }
+        return false;
     }
 }

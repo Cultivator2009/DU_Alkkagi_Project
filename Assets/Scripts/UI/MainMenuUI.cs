@@ -21,7 +21,11 @@ public class MainMenuUI : MonoBehaviour
     {
         NetworkServices.EnsureCreated();
 
-        localButton.onClick.AddListener(() => SceneManager.LoadScene("GameScene"));
+        localButton.onClick.AddListener(() =>
+        {
+            MatchSeries.Reset(); // a fresh local session; rematches from the game-over screen keep counting
+            SceneManager.LoadScene("GameScene");
+        });
         onlineButton.onClick.AddListener(() => SceneManager.LoadScene("LobbyScene"));
         settingsButton.onClick.AddListener(() => settingsPanel.SetActive(true));
         settingsCloseButton.onClick.AddListener(() => settingsPanel.SetActive(false));

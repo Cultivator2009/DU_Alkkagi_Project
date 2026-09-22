@@ -13,4 +13,6 @@ public interface ISessionTransport
     void Broadcast(byte[] data, bool reliable = true);
 
     event Action<ulong, byte[]> OnMessageReceived;
+    // The P2P link to a peer failed (it crashed, lost network, or timed out).
+    event Action<ulong> OnPeerDisconnected;
 }

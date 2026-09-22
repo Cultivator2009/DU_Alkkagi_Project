@@ -19,6 +19,7 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
     public bool IsReady { get; private set; }
 
     public event Action<ulong, byte[]> OnMessageReceived;
+    public event Action<ulong> OnPeerDisconnected;
 
     private readonly HashSet<ulong> knownPeers = new HashSet<ulong>();
 
@@ -41,6 +42,7 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
             SteamNetworking.IsP2PPacketAvailable(Channel);
             IsReady = true;
             SteamNetworking.OnP2PSessionRequest += HandleSessionRequest;
+            SteamNetworking.OnP2PConnectionFailed += HandleConnectionFailed;
         }
         catch (Exception e)
         {
@@ -74,12 +76,20 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
     {
         if (!IsReady) return;
         SteamNetworking.OnP2PSessionRequest -= HandleSessionRequest;
+        SteamNetworking.OnP2PConnectionFailed -= HandleConnectionFailed;
         SteamClient.Shutdown();
     }
 
     private void HandleSessionRequest(SteamId remoteId)
     {
         if (knownPeers.Contains(remoteId.Value)) SteamNetworking.AcceptP2PSessionWithUser(remoteId);
+    }
+
+    private void HandleConnectionFailed(SteamId remoteId, P2PSessionError error)
+    {
+        Debug.LogWarning($"P2P connection to {remoteId} failed: {error}");
+        knownPeers.Remove(remoteId.Value);
+        OnPeerDisconnected?.Invoke(remoteId.Value);
     }
 
     public void ConnectPeer(ulong id)

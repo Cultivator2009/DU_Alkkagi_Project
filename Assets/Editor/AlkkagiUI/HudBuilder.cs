@@ -47,7 +47,7 @@ namespace AlkkagiUIEditor
                 BuildPlayerPanel(root, "BlackPanel", new Vector2(0, 0), new Vector2(Margin, Margin), Theme.StoneBlack, Theme.Ink),
                 BuildPlayerPanel(root, "WhitePanel", new Vector2(1, 1), new Vector2(-Margin, -Margin), Theme.StoneWhite, Theme.InkMuted),
             };
-            BuildWinPanel(root, controller);
+            BuildGameOverPanel(root, controller);
             return canvas.gameObject;
         }
 
@@ -114,42 +114,93 @@ namespace AlkkagiUIEditor
             return panel;
         }
 
-        private static void BuildWinPanel(Transform root, MainGameUIController controller)
+        // Result, reason, a per-side scoreboard, the running series, and the
+        // next-step buttons (Lobby only shows online).
+        private static void BuildGameOverPanel(Transform root, MainGameUIController controller)
         {
-            var overlay = UIKit.Image(root, "WinPanel", null, Theme.Overlay, raycast: true);
+            var overlay = UIKit.Image(root, "GameOverPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
-            controller.winPanel = overlay.gameObject;
+            controller.gameOverPanel = overlay.gameObject;
 
             var modal = UIKit.Panel(overlay.transform, "Modal", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
-            modal.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(600, 500));
+            modal.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 760));
             var m = modal.transform;
             var top = new Vector2(0.5f, 1);
 
             var stamp = UIKit.Panel(m, "Stamp", Theme.Seal, null, 2f);
-            stamp.rectTransform.Place(top, new Vector2(0, -48), new Vector2(128, 128));
+            stamp.rectTransform.Place(top, new Vector2(0, -40), new Vector2(120, 120));
             stamp.rectTransform.localRotation = Quaternion.Euler(0, 0, 8);
-            var stampText = UIKit.Label(stamp.transform, "Label", "win.stamp", 64, true, Theme.SealText, TextAlignmentOptions.Center);
-            stampText.rectTransform.Stretch(10);
-            stampText.enableAutoSizing = true;
-            stampText.fontSizeMin = 28;
-            stampText.fontSizeMax = 64;
+            controller.stampText = UIKit.Text(stamp.transform, "Label", "승", 60, true, Theme.SealText, TextAlignmentOptions.Center);
+            controller.stampText.rectTransform.Stretch(10);
+            controller.stampText.enableAutoSizing = true;
+            controller.stampText.fontSizeMin = 28;
+            controller.stampText.fontSizeMax = 60;
 
-            controller.winText = UIKit.Text(m, "Title", "흑 승리", 64, true, Theme.Ink, TextAlignmentOptions.Center);
-            controller.winText.rectTransform.Place(top, new Vector2(0, -196), new Vector2(540, 80));
-            controller.winDetailText = UIKit.Text(m, "Detail", "플레이어 1 · 남은 돌 4개", 30, false, Theme.InkSoft, TextAlignmentOptions.Center);
-            controller.winDetailText.rectTransform.Place(top, new Vector2(0, -280), new Vector2(540, 40));
+            controller.resultTitleText = UIKit.Text(m, "Title", "흑 승리", 60, true, Theme.Ink, TextAlignmentOptions.Center);
+            controller.resultTitleText.rectTransform.Place(top, new Vector2(0, -176), new Vector2(680, 76));
+            controller.resultReasonText = UIKit.Text(m, "Reason", "백의 돌이 모두 떨어졌어요", 28, false, Theme.InkSoft, TextAlignmentOptions.Center);
+            controller.resultReasonText.rectTransform.Place(top, new Vector2(0, -252), new Vector2(680, 40));
 
-            // Layout group so the row re-centers when rematch is hidden online.
-            var buttons = UIKit.Node("Buttons", m).Place(new Vector2(0.5f, 0), new Vector2(0, 56), new Vector2(540, 84));
+            BuildScoreboard(m, controller);
+
+            controller.matchTimeText = UIKit.Text(m, "MatchTime", "경기 시간 1:23", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+            controller.matchTimeText.rectTransform.Place(new Vector2(0, 1), new Vector2(60, -548), new Vector2(320, 36));
+            controller.seriesText = UIKit.Text(m, "Series", "연속 전적  흑 1 : 0 백", 26, false, Theme.Ink, TextAlignmentOptions.MidlineRight);
+            controller.seriesText.rectTransform.Place(new Vector2(1, 1), new Vector2(-60, -548), new Vector2(360, 36));
+            controller.statusText = UIKit.Text(m, "Status", "", 26, false, Theme.Seal, TextAlignmentOptions.Center);
+            controller.statusText.rectTransform.Place(top, new Vector2(0, -596), new Vector2(680, 36));
+
+            // Layout group so the row re-centers when Lobby is hidden locally.
+            var buttons = UIKit.Node("Buttons", m).Place(new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(680, 84));
             var layout = buttons.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 20;
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childControlWidth = layout.childControlHeight = false;
             layout.childForceExpandWidth = layout.childForceExpandHeight = false;
-            controller.rematchButton = UIKit.CapsuleButton(buttons, "RematchButton", "win.rematch", new Vector2(240, 84), true, 32);
-            controller.mainMenuButton = UIKit.CapsuleButton(buttons, "MainMenuButton", "win.menu", new Vector2(240, 84), false, 32);
+            controller.rematchButton = UIKit.CapsuleButton(buttons, "RematchButton", "win.rematch", new Vector2(220, 84), true, 30);
+            controller.rematchLabel = controller.rematchButton.GetComponentInChildren<TMP_Text>();
+            // Play again / Rematch / Accept / Waiting - set by the controller.
+            Object.DestroyImmediate(controller.rematchLabel.GetComponent<LocalizedText>());
+            controller.lobbyButton = UIKit.CapsuleButton(buttons, "LobbyButton", "gameover.lobby", new Vector2(210, 84), false, 30);
+            controller.mainMenuButton = UIKit.CapsuleButton(buttons, "MainMenuButton", "win.menu", new Vector2(210, 84), false, 30);
 
             overlay.gameObject.SetActive(false);
+        }
+
+        private static void BuildScoreboard(Transform modal, MainGameUIController controller)
+        {
+            var board = UIKit.Panel(modal, "Scoreboard", Theme.HanjiField, Theme.FieldBorder, 1.4f);
+            board.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -310), new Vector2(640, 212));
+            var b = board.transform;
+            var topLeft = new Vector2(0, 1);
+            float[] columns = { 400, 540 }; // value column centers, from the board's left edge
+
+            for (var player = 0; player < 2; player++)
+            {
+                var x = columns[player];
+                var black = player == 0;
+                UIKit.Stone(b, black ? "BlackHeader" : "WhiteHeader", 24, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
+                    .Place(topLeft, new Vector2(x - 34, -28), new Vector2(24, 24));
+                UIKit.Label(b, black ? "BlackLabel" : "WhiteLabel", black ? "player.black" : "player.white", 28, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
+                    .rectTransform.Place(topLeft, new Vector2(x - 2, -20), new Vector2(80, 40));
+            }
+
+            TMP_Text[] Row(string name, string labelKey, float y)
+            {
+                UIKit.Label(b, name + "Label", labelKey, 28, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                    .rectTransform.Place(topLeft, new Vector2(32, y), new Vector2(280, 40));
+                var cells = new TMP_Text[2];
+                for (var player = 0; player < 2; player++)
+                {
+                    cells[player] = UIKit.Text(b, $"{name}{player}", "0", 32, true, Theme.Ink, TextAlignmentOptions.Center);
+                    cells[player].rectTransform.Place(topLeft, new Vector2(columns[player], y), new Vector2(120, 40), new Vector2(0.5f, 1));
+                }
+                return cells;
+            }
+
+            controller.remainingCells = Row("Remaining", "hud.remaining", -72);
+            controller.capturedCells = Row("Captured", "stats.captured", -118);
+            controller.shotsCells = Row("Shots", "stats.shots", -164);
         }
 
         private static void WireScene(GameObject prefab)

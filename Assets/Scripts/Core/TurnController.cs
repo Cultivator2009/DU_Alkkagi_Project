@@ -6,7 +6,7 @@ public class TurnController
 {
     public event Action<PlayersManager> OnTurnStarted;
     public event Action<PlayersManager> OnTurnEnded;
-    public event Action<PlayersManager> OnMatchEnded;
+    public event Action<PlayersManager, MatchEndReason> OnMatchEnded;
 
     public GameManager.GameState State { get; private set; } = GameManager.GameState.Mainmenu;
     public int CurrentPlayerID { get; private set; }
@@ -74,6 +74,13 @@ public class TurnController
         return true;
     }
 
+    // Stops the match without a ruleset result, e.g. when the online
+    // opponent leaves. Whoever called it reports the outcome.
+    public void Abort()
+    {
+        State = GameManager.GameState.MatchOver;
+    }
+
     private void InputReady()
     {
         var picked = pieceSelector.TrySelect(CurrentPlayerID);
@@ -119,10 +126,10 @@ public class TurnController
         var finishedPlayer = players.Find(p => p.ID == CurrentPlayerID);
         OnTurnEnded?.Invoke(finishedPlayer);
 
-        if (ruleset.TryGetMatchWinner(players, out var winner))
+        if (ruleset.TryGetMatchWinner(players, CurrentPlayerID, out var winner, out var reason))
         {
             State = GameManager.GameState.MatchOver;
-            OnMatchEnded?.Invoke(winner);
+            OnMatchEnded?.Invoke(winner, reason);
             return;
         }
 
