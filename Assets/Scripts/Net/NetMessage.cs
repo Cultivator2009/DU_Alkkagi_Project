@@ -93,18 +93,7 @@ public static class NetMessage
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
         writer.Write((byte)NetMessageType.PieceSnapshot);
-        writer.Write(transforms.Count);
-        foreach (var t in transforms)
-        {
-            writer.Write(t.PieceId);
-            writer.Write(t.Position.x);
-            writer.Write(t.Position.y);
-            writer.Write(t.Position.z);
-            writer.Write(t.Rotation.x);
-            writer.Write(t.Rotation.y);
-            writer.Write(t.Rotation.z);
-            writer.Write(t.Rotation.w);
-        }
+        WriteTransforms(writer, transforms);
         return stream.ToArray();
     }
 
@@ -113,19 +102,13 @@ public static class NetMessage
         using var stream = new MemoryStream(data);
         using var reader = new BinaryReader(stream);
         reader.ReadByte();
-        var count = reader.ReadInt32();
-        var transforms = new List<PieceTransform>(count);
-        for (var i = 0; i < count; i++)
-        {
-            var pieceId = reader.ReadChar();
-            var position = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
-            var rotation = new Quaternion(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
-            transforms.Add(new PieceTransform { PieceId = pieceId, Position = position, Rotation = rotation });
-        }
-        return transforms;
+        return ReadTransforms(reader);
     }
 
-    public static byte[] WriteTurnResult(int nextPlayerId, bool matchOver, int winnerPlayerId, IReadOnlyList<RemovedPieceEntry> removed)
+    // Carries the settled position of every piece still in play, so the
+    // guest converges on the host's board every turn even if some of the
+    // unreliable mid-turn snapshots were dropped.
+    public static byte[] WriteTurnResult(int nextPlayerId, bool matchOver, int winnerPlayerId, IReadOnlyList<RemovedPieceEntry> removed, IReadOnlyList<PieceTransform> finalTransforms)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
@@ -139,10 +122,11 @@ public static class NetMessage
             writer.Write(entry.PieceId);
             writer.Write(entry.ScoredForPlayerId);
         }
+        WriteTransforms(writer, finalTransforms);
         return stream.ToArray();
     }
 
-    public static (int nextPlayerId, bool matchOver, int winnerPlayerId, List<RemovedPieceEntry> removed) ReadTurnResult(byte[] data)
+    public static (int nextPlayerId, bool matchOver, int winnerPlayerId, List<RemovedPieceEntry> removed, List<PieceTransform> finalTransforms) ReadTurnResult(byte[] data)
     {
         using var stream = new MemoryStream(data);
         using var reader = new BinaryReader(stream);
@@ -156,7 +140,37 @@ public static class NetMessage
         {
             removed.Add(new RemovedPieceEntry { PieceId = reader.ReadChar(), ScoredForPlayerId = reader.ReadInt32() });
         }
-        return (nextPlayerId, matchOver, winnerPlayerId, removed);
+        return (nextPlayerId, matchOver, winnerPlayerId, removed, ReadTransforms(reader));
+    }
+
+    private static void WriteTransforms(BinaryWriter writer, IReadOnlyList<PieceTransform> transforms)
+    {
+        writer.Write(transforms.Count);
+        foreach (var t in transforms)
+        {
+            writer.Write(t.PieceId);
+            writer.Write(t.Position.x);
+            writer.Write(t.Position.y);
+            writer.Write(t.Position.z);
+            writer.Write(t.Rotation.x);
+            writer.Write(t.Rotation.y);
+            writer.Write(t.Rotation.z);
+            writer.Write(t.Rotation.w);
+        }
+    }
+
+    private static List<PieceTransform> ReadTransforms(BinaryReader reader)
+    {
+        var count = reader.ReadInt32();
+        var transforms = new List<PieceTransform>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var pieceId = reader.ReadChar();
+            var position = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+            var rotation = new Quaternion(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+            transforms.Add(new PieceTransform { PieceId = pieceId, Position = position, Rotation = rotation });
+        }
+        return transforms;
     }
 
     public static byte[] WriteClientReady() => new[] { (byte)NetMessageType.ClientReady };

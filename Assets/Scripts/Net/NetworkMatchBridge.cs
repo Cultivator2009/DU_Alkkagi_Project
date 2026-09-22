@@ -35,6 +35,7 @@ public class NetworkMatchBridge : MonoBehaviour
     private Dictionary<char, int> ownerAtTurnStart;
     private PieceSelector guestSelector;
     private int guestKnownCurrentPlayerId;
+    private bool awaitingTurnResult;
     private readonly Dictionary<char, Vector3> snapshotTargetPosition = new Dictionary<char, Vector3>();
     private readonly Dictionary<char, Quaternion> snapshotTargetRotation = new Dictionary<char, Quaternion>();
 
@@ -132,14 +133,28 @@ public class NetworkMatchBridge : MonoBehaviour
     private void HandleHostTurnStarted(PlayersManager player)
     {
         var removed = ComputeRemovedSinceTurnStart();
-        transport.Broadcast(NetMessage.WriteTurnResult(player.ID, false, -1, removed));
+        transport.Broadcast(NetMessage.WriteTurnResult(player.ID, false, -1, removed, CurrentTransforms()));
         ownerAtTurnStart = SnapshotOwners();
     }
 
     private void HandleHostMatchEnded(PlayersManager winner)
     {
         var removed = ComputeRemovedSinceTurnStart();
-        transport.Broadcast(NetMessage.WriteTurnResult(-1, true, winner.ID, removed));
+        transport.Broadcast(NetMessage.WriteTurnResult(-1, true, winner.ID, removed, CurrentTransforms()));
+    }
+
+    // The physics pose, not transform: with interpolation on, transform is
+    // the render pose, which lags or overshoots the simulated one.
+    private List<PieceTransform> CurrentTransforms()
+    {
+        return gameManager.gamePieceScripts
+            .Where(piece => piece != null)
+            .Select(piece =>
+            {
+                var rb = piece.GetComponent<Rigidbody>();
+                return new PieceTransform { PieceId = piece.GetComponent<GamePieceManager>().pieceID, Position = rb.position, Rotation = rb.rotation };
+            })
+            .ToList();
     }
 
     private void SendStartMatchTo(ulong targetId)
@@ -152,26 +167,19 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (!isHost || gameManager.TurnController == null) return;
+        if (isHost) HostFixedUpdate();
+        else GuestFixedUpdate();
+    }
+
+    private void HostFixedUpdate()
+    {
+        if (gameManager.TurnController == null) return;
         if (gameManager.gameState != GameManager.GameState.ProcessingTurn) return;
 
         snapshotTickCounter++;
         if (snapshotTickCounter < SnapshotIntervalFixedFrames) return;
         snapshotTickCounter = 0;
-        BroadcastSnapshot();
-    }
-
-    private void BroadcastSnapshot()
-    {
-        var transforms = gameManager.gamePieceScripts
-            .Select(piece => new PieceTransform
-            {
-                PieceId = piece.GetComponent<GamePieceManager>().pieceID,
-                Position = piece.transform.position,
-                Rotation = piece.transform.rotation
-            })
-            .ToList();
-        transport.Broadcast(NetMessage.WritePieceSnapshot(transforms), reliable: false);
+        transport.Broadcast(NetMessage.WritePieceSnapshot(CurrentTransforms()), reliable: false);
     }
 
     // ---- Guest ----
@@ -192,9 +200,18 @@ public class NetworkMatchBridge : MonoBehaviour
             var pieceId = kv.Key;
             var piece = kv.Value;
             var rb = piece.GetComponent<Rigidbody>();
+            // Kinematic bodies don't support ContinuousDynamic; set the mode
+            // first so the switch doesn't warn. Interpolate keeps the
+            // MovePosition-driven motion smooth between physics steps.
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             rb.isKinematic = true;
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
             piece.isAuthority = false;
-            piece.OnFlickRequested += force => transport.Send(hostId, NetMessage.WriteFlickCommand(pieceId, force));
+            piece.OnFlickRequested += force =>
+            {
+                awaitingTurnResult = true;
+                transport.Send(hostId, NetMessage.WriteFlickCommand(pieceId, force));
+            };
         }
 
         guestSelector.LocalPlayerId = localPlayerId;
@@ -204,20 +221,27 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         if (isHost || pieceLookup == null || guestSelector == null || !guestSelector.LocalPlayerId.HasValue) return;
 
+        // One flick per turn: after sending it, wait for the host's verdict
+        // (the TurnResult that ends the turn) before accepting another.
+        if (awaitingTurnResult) return;
         var picked = guestSelector.TrySelect(guestKnownCurrentPlayerId);
         if (picked != null) picked.isDragging = true;
-
-        InterpolateSnapshots();
     }
 
-    private void InterpolateSnapshots()
+    // Drives the kinematic guest pieces toward the host's latest poses through
+    // the Rigidbody. Writing transform directly (as before) fights the
+    // Rigidbody's own interpolation, which re-applies the physics pose every
+    // frame.
+    private void GuestFixedUpdate()
     {
+        if (pieceLookup == null) return;
+        var t = 15f * Time.fixedDeltaTime;
         foreach (var kv in pieceLookup)
         {
-            if (!snapshotTargetPosition.TryGetValue(kv.Key, out var targetPos)) continue;
-            var t = kv.Value.transform;
-            t.position = Vector3.Lerp(t.position, targetPos, 15f * Time.deltaTime);
-            t.rotation = Quaternion.Slerp(t.rotation, snapshotTargetRotation[kv.Key], 15f * Time.deltaTime);
+            if (kv.Value == null || !snapshotTargetPosition.TryGetValue(kv.Key, out var targetPos)) continue;
+            var rb = kv.Value.GetComponent<Rigidbody>();
+            rb.MovePosition(Vector3.Lerp(rb.position, targetPos, t));
+            rb.MoveRotation(Quaternion.Slerp(rb.rotation, snapshotTargetRotation[kv.Key], t));
         }
     }
 
@@ -232,7 +256,8 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void HandleGuestTurnResult(byte[] data)
     {
-        var (nextPlayerId, matchOver, winnerPlayerId, removed) = NetMessage.ReadTurnResult(data);
+        var (nextPlayerId, matchOver, winnerPlayerId, removed, finalTransforms) = NetMessage.ReadTurnResult(data);
+        awaitingTurnResult = false;
 
         foreach (var entry in removed)
         {
@@ -242,6 +267,14 @@ public class NetworkMatchBridge : MonoBehaviour
             var scorer = gameManager.playersList.Find(p => p.ID == entry.ScoredForPlayerId);
             scorer?.AddScore(1);
             Destroy(piece.gameObject);
+        }
+
+        // The host's settled board is the truth; GuestFixedUpdate eases every
+        // piece onto it whatever the snapshots did or didn't deliver.
+        foreach (var t in finalTransforms)
+        {
+            snapshotTargetPosition[t.PieceId] = t.Position;
+            snapshotTargetRotation[t.PieceId] = t.Rotation;
         }
 
         if (matchOver)
@@ -270,10 +303,17 @@ public class NetworkMatchBridge : MonoBehaviour
                     break;
                 case NetMessageType.FlickCommand:
                     var (pieceId, force) = NetMessage.ReadFlickCommand(data);
-                    if (pieceLookup.TryGetValue(pieceId, out var piece))
+                    // Unity-null once DeathTrigger destroyed it: a lagging guest
+                    // board can still name a piece that's already gone.
+                    pieceLookup.TryGetValue(pieceId, out var piece);
+                    var controller = gameManager.TurnController;
+                    if (!controller.TryApplyExternalFlick(piece, force) && controller.State == GameManager.GameState.WaitingForInput)
                     {
-                        var owner = piece.GetComponent<GamePieceManager>().playerIndex;
-                        if (gameManager.TurnController.CurrentPlayerID == owner) piece.ApplyFlick(force);
+                        // Rejected while idle means the guest disagrees about the
+                        // board or whose turn it is - resend the current state so
+                        // its view and input line up again. (Mid-turn rejections
+                        // need nothing: the turn's own TurnResult will arrive.)
+                        transport.Send(senderId, NetMessage.WriteTurnResult(controller.CurrentPlayerID, false, -1, new List<RemovedPieceEntry>(), CurrentTransforms()));
                     }
                     break;
             }

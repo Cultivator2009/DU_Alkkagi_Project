@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 public class TurnController
 {
@@ -51,6 +52,26 @@ public class TurnController
                 TurnProcess();
                 break;
         }
+    }
+
+    // A flick that didn't come from local input - the network guest's
+    // FlickCommand, applied on the host. It goes through the same turn flow
+    // as a local flick: before this existed the host simulated the guest's
+    // shot but its turn state never left WaitingForInput, so the guest's
+    // turn could never end. Only accepted for the side to move, while this
+    // controller is waiting for input.
+    public bool TryApplyExternalFlick(GamePieceDragAndReleaseForce piece, Vector3 force)
+    {
+        if (State != GameManager.GameState.WaitingForInput || piece == null) return false;
+        var pieceManager = piece.GetComponent<GamePieceManager>();
+        if (pieceManager.playerIndex != CurrentPlayerID) return false;
+
+        if (selGamePiece != null) selGamePiece.isCancelled = false;
+        selGamePiece = piece;
+        ruleset.OnBeforeFlick(pieceManager);
+        piece.ApplyFlick(force);
+        State = GameManager.GameState.ProcessingTurn;
+        return true;
     }
 
     private void InputReady()

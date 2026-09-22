@@ -110,6 +110,13 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     {
         if (flickForce.magnitude > maxForce) flickForce = flickForce.normalized * maxForce;
         rb.AddForce(flickForce, ForceMode.Impulse);
+
+        // The impulse only shows up in linearVelocity after the next physics
+        // step, so a resting piece would still read as settled for a frame
+        // and TurnController could end the turn before anything moved. Count
+        // it as moving until it has genuinely come to rest again.
+        lowVelocityFrameCount = 0;
+        isGamePieceMoving = true;
     }
 
     private void UpdateSettleState()

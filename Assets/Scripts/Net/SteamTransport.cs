@@ -35,12 +35,17 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
         try
         {
             SteamClient.Init(ReadAppId(), true);
+            // Init can return without throwing while Steam is still starting up
+            // or not logged in, leaving the API interfaces null - every call
+            // then throws. Probe one before claiming to be ready.
+            SteamNetworking.IsP2PPacketAvailable(Channel);
             IsReady = true;
             SteamNetworking.OnP2PSessionRequest += HandleSessionRequest;
         }
         catch (Exception e)
         {
             Debug.LogError($"Steam client failed to initialize: {e.Message}");
+            if (SteamClient.IsValid) SteamClient.Shutdown();
             IsReady = false;
         }
     }
@@ -87,7 +92,10 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
     public void Send(ulong targetId, byte[] data, bool reliable = true)
     {
         if (!IsReady) return;
-        var sendType = reliable ? P2PSend.Reliable : P2PSend.UnreliableNoDelay;
+        // Unreliable, not UnreliableNoDelay: NoDelay drops a packet outright
+        // whenever it can't go out immediately, which over a relayed
+        // connection loses a large share of the mid-turn snapshots.
+        var sendType = reliable ? P2PSend.Reliable : P2PSend.Unreliable;
         SteamNetworking.SendP2PPacket(targetId, data, data.Length, Channel, sendType);
     }
 
@@ -98,9 +106,24 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
 
     private void DrainIncomingPackets()
     {
-        while (SteamNetworking.IsP2PPacketAvailable(Channel))
+        while (true)
         {
-            var packet = SteamNetworking.ReadP2PPacket(Channel);
+            P2Packet? packet;
+            try
+            {
+                if (!SteamNetworking.IsP2PPacketAvailable(Channel)) return;
+                packet = SteamNetworking.ReadP2PPacket(Channel);
+            }
+            catch (Exception e)
+            {
+                // Steam went away underneath us (client quit or logged out).
+                // Stop polling rather than throwing every frame.
+                Debug.LogError($"Steam networking stopped responding: {e.Message}");
+                IsReady = false;
+                return;
+            }
+            // Outside the try: a handler bug should surface as itself, not
+            // shut networking down.
             if (packet.HasValue) OnMessageReceived?.Invoke(packet.Value.SteamId.Value, packet.Value.Data);
         }
     }
