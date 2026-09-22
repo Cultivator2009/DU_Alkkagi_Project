@@ -436,8 +436,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -1310,8 +1311,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -2369,8 +2371,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -4589,8 +4592,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -6890,8 +6894,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -7808,8 +7813,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -9397,8 +9403,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -9713,8 +9720,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -11456,6 +11464,108 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 8dd8154ce137f92499201497eda8a339, type: 3}
   m_PrefabInstance: {fileID: 1182677279}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &1194739450
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1805459813}
+    m_Modifications:
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_Pivot.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_Pivot.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2501713318385862171, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+      propertyPath: m_Name
+      value: MainGame_UI
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+--- !u!224 &1194739451 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
+  m_PrefabInstance: {fileID: 1194739450}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1202874581
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -12054,8 +12164,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -15684,8 +15795,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -16605,7 +16717,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 2028467775}
+  - {fileID: 1194739451}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1814629155
@@ -18244,108 +18356,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac0b09e7857660247b1477e93731de29, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!1001 &2028467774
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 1805459813}
-    m_Modifications:
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_Pivot.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_Pivot.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_AnchorMax.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_AnchorMax.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_AnchorMin.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_AnchorMin.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_SizeDelta.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_SizeDelta.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_AnchoredPosition.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_AnchoredPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2501713318385862171, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-      propertyPath: m_Name
-      value: MainGame_UI
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
---- !u!224 &2028467775 stripped
-RectTransform:
-  m_CorrespondingSourceObject: {fileID: 2501713318385862167, guid: 20d6f8ccc2ab27546973f378f42d3b8c, type: 3}
-  m_PrefabInstance: {fileID: 2028467774}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &2043787973
 GameObject:
   m_ObjectHideFlags: 0
@@ -19225,8 +19235,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0
@@ -19636,8 +19647,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  forceMultiplier: 50
   maxForce: 50
+  maxDragDistance: 1
+  minShotPower: 0.03
   settleVelocityThreshold: 0.05
   settleFrameThreshold: 5
   isSelected: 0

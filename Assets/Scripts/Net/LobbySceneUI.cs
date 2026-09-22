@@ -26,6 +26,7 @@ public class LobbySceneUI : MonoBehaviour
     public TMP_Text copyLabel;
     public LobbyPlayerSlot hostSlot;
     public LobbyPlayerSlot guestSlot;
+    public BoolToggle aimGuideToggle; // host sets it, the guest sees it read-only
     public Button leaveButton;
     public Button startButton;
 
@@ -55,6 +56,7 @@ public class LobbySceneUI : MonoBehaviour
         guestSlot.inviteButton.onClick.AddListener(() => lobbyManager.InviteFriends());
         leaveButton.onClick.AddListener(OnClickLeave);
         startButton.onClick.AddListener(OnClickStartMatch);
+        aimGuideToggle.OnChanged += value => lobbyManager.SetLobbyOption(MatchOptions.AimGuideLobbyKey, value);
     }
 
     private void Start()
@@ -64,6 +66,7 @@ public class LobbySceneUI : MonoBehaviour
         lobbyManager.OnMemberJoined += HandleMemberChanged;
         lobbyManager.OnMemberLeft += HandleMemberChanged;
         lobbyManager.OnLobbyFailed += HandleLobbyFailed;
+        lobbyManager.OnLobbyDataChanged += Render;
         SteamTransport.Instance.OnMessageReceived += HandleNetworkMessage;
         Loc.OnLanguageChanged += Render;
         Render();
@@ -79,6 +82,7 @@ public class LobbySceneUI : MonoBehaviour
             lobbyManager.OnMemberJoined -= HandleMemberChanged;
             lobbyManager.OnMemberLeft -= HandleMemberChanged;
             lobbyManager.OnLobbyFailed -= HandleLobbyFailed;
+            lobbyManager.OnLobbyDataChanged -= Render;
         }
         if (SteamTransport.Instance != null) SteamTransport.Instance.OnMessageReceived -= HandleNetworkMessage;
         Loc.OnLanguageChanged -= Render;
@@ -206,6 +210,9 @@ public class LobbySceneUI : MonoBehaviour
         hostSlot.ShowPlayer(host.Name, $"{Loc.Get("lobby.host")} · {Loc.Get("player.black")}");
         if (members.Count > 1) guestSlot.ShowPlayer(guest.Name, $"{Loc.Get("lobby.guest")} · {Loc.Get("player.white")}");
         else guestSlot.ShowEmpty(lobbyManager.IsHost);
+
+        aimGuideToggle.SetValue(lobbyManager.GetLobbyOption(MatchOptions.AimGuideLobbyKey, true));
+        aimGuideToggle.SetInteractable(lobbyManager.IsHost);
 
         var full = members.Count >= 2;
         startButton.gameObject.SetActive(lobbyManager.IsHost);

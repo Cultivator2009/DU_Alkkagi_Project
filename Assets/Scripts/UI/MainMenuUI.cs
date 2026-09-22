@@ -14,6 +14,7 @@ public class MainMenuUI : MonoBehaviour
     public Button quitButton;
     public GameObject settingsPanel;
     public Button settingsCloseButton;
+    public BoolToggle aimGuideToggle; // local matches; online the lobby host decides
     public GameObject steamUserRow;
     public TMP_Text steamUserText;
 
@@ -30,6 +31,8 @@ public class MainMenuUI : MonoBehaviour
         settingsButton.onClick.AddListener(() => settingsPanel.SetActive(true));
         settingsCloseButton.onClick.AddListener(() => settingsPanel.SetActive(false));
         quitButton.onClick.AddListener(Quit);
+        aimGuideToggle.SetValue(MatchOptions.LocalAimGuide);
+        aimGuideToggle.OnChanged += value => MatchOptions.LocalAimGuide = value;
         settingsPanel.SetActive(false);
     }
 

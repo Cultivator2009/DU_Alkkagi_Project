@@ -99,27 +99,9 @@ namespace AlkkagiUIEditor
             toggle.selectedTextColor = Theme.Hanji;
             toggle.idleTextColor = Theme.Ink;
 
-            (Button button, Graphic highlight, TMP_Text label) Segment(string segName, string text, float anchorX)
-            {
-                var hit = UIKit.Node(segName, frame.transform);
-                hit.anchorMin = new Vector2(anchorX, 0);
-                hit.anchorMax = new Vector2(anchorX + 0.5f, 1);
-                hit.offsetMin = hit.offsetMax = Vector2.zero;
-                var highlight = UIKit.Capsule(hit, "Highlight", 60, Theme.Ink, null);
-                highlight.rectTransform.Stretch(8);
-                var label = UIKit.Text(hit, "Label", text, 30, true, Theme.Ink, TextAlignmentOptions.Center);
-                label.rectTransform.Stretch();
-                // A transparent raycast target makes the whole half clickable.
-                var target = hit.gameObject.AddComponent<Image>();
-                target.color = Color.clear;
-                var button = hit.gameObject.AddComponent<Button>();
-                button.targetGraphic = target;
-                button.transition = Selectable.Transition.None;
-                return (button, highlight, label);
-            }
-
-            var ko = Segment("Korean", "한", 0f);
-            var en = Segment("English", "EN", 0.5f);
+            var ko = UIKit.Segment(frame.transform, "Korean", "한", null, 0f, 72);
+            var en = UIKit.Segment(frame.transform, "English", "EN", null, 0.5f, 72);
+            UIKit.ShowSelected(ko, en);
             toggle.koreanButton = ko.button;
             toggle.koreanHighlight = ko.highlight;
             toggle.koreanLabel = ko.label;
@@ -136,7 +118,7 @@ namespace AlkkagiUIEditor
             menu.settingsPanel = overlay.gameObject;
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
-            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(640, 420));
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(640, 520));
             var top = new Vector2(0.5f, 1);
 
             UIKit.Label(card.transform, "Title", "settings.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
@@ -145,6 +127,11 @@ namespace AlkkagiUIEditor
                 .rectTransform.Place(new Vector2(0, 1), new Vector2(64, -172), new Vector2(240, 72));
             BuildLanguageToggle(card.transform, "LanguageToggle").GetComponent<RectTransform>()
                 .Place(new Vector2(1, 1), new Vector2(-64, -172), new Vector2(236, 72));
+            // Local matches only; an online match uses the lobby host's choice.
+            UIKit.Label(card.transform, "AimGuideLabel", "settings.aimGuide", 30, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(new Vector2(0, 1), new Vector2(64, -268), new Vector2(240, 72));
+            menu.aimGuideToggle = UIKit.OnOffToggle(card.transform, "AimGuideToggle", 72);
+            menu.aimGuideToggle.GetComponent<RectTransform>().Place(new Vector2(1, 1), new Vector2(-64, -268), new Vector2(236, 72));
 
             menu.settingsCloseButton = UIKit.CapsuleButton(card.transform, "CloseButton", "settings.close", new Vector2(240, 84), false, 32);
             menu.settingsCloseButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 48), new Vector2(240, 84), new Vector2(0.5f, 0));

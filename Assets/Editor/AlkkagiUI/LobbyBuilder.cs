@@ -16,7 +16,7 @@ namespace AlkkagiUIEditor
         private const string ScenePath = "Assets/Scenes/LobbyScene.unity";
         private const string OldBootstrapName = "LobbyBootstrap";
 
-        private static readonly Vector2 CardSize = new Vector2(1000, 740);
+        private static readonly Vector2 CardSize = new Vector2(1000, 820);
         private const float Pad = 64;
 
         [MenuItem("Tools/Alkkagi UI/4. Build lobby")]
@@ -101,8 +101,14 @@ namespace AlkkagiUIEditor
             // Toggled between Copy/Copied by LobbySceneUI, so no static binding.
             Object.DestroyImmediate(ui.copyLabel.GetComponent<LocalizedText>());
 
-            ui.hostSlot = Slot(view, "HostSlot", TopLeft, new Vector2(Pad, -318), true, "Host", "lobby.host");
-            ui.guestSlot = Slot(view, "GuestSlot", TopRight, new Vector2(-Pad, -318), false, "Guest", "lobby.guest");
+            // Match option: the host sets it here, the guest sees it read-only.
+            UIKit.Label(view, "AimGuideLabel", "settings.aimGuide", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(TopLeft, new Vector2(Pad, -312), new Vector2(400, 60));
+            ui.aimGuideToggle = UIKit.OnOffToggle(view, "AimGuideToggle", 60);
+            ui.aimGuideToggle.GetComponent<RectTransform>().Place(TopRight, new Vector2(-Pad, -312), new Vector2(236, 60));
+
+            ui.hostSlot = Slot(view, "HostSlot", TopLeft, new Vector2(Pad, -396), true, "Host", "lobby.host");
+            ui.guestSlot = Slot(view, "GuestSlot", TopRight, new Vector2(-Pad, -396), false, "Guest", "lobby.guest");
 
             ui.leaveButton = UIKit.CapsuleButton(view, "LeaveButton", "lobby.leave", new Vector2(264, 92), false, 32);
             ui.leaveButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(Pad, 56), new Vector2(264, 92));

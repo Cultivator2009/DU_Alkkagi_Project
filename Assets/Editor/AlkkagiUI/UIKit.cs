@@ -67,7 +67,7 @@ namespace AlkkagiUIEditor
         private const int FontPadding = 6;
         private const int FontAtlasSize = 1024;
 
-        public static Sprite RRect, RRectRing, Pill, PillOutline, Circle, CircleOutline, CircleDashed, Board;
+        public static Sprite RRect, RRectRing, Pill, PillOutline, Circle, CircleOutline, CircleDashed, Triangle, Board;
         public static TMP_FontAsset Regular, Bold;
 
         [MenuItem("Tools/Alkkagi UI/1. Generate kit assets")]
@@ -83,6 +83,7 @@ namespace AlkkagiUIEditor
             WriteShape("circle", ShapeSize, 0, (x, y) => Coverage(CircleDistance(x, y, ShapeSize)));
             WriteShape("circle_ring", ShapeSize, 0, (x, y) => Ring(CircleDistance(x, y, ShapeSize), CircleRing));
             WriteShape("circle_ring_dashed", ShapeSize, 0, (x, y) => Ring(CircleDistance(x, y, ShapeSize), CircleRing) * Dash(x, y, ShapeSize, 12));
+            WriteShape("triangle", 64, 0, (x, y) => TriangleCoverage(x, y, 64));
 
             // The main menu shows the in-game board texture flat; a copy keeps the
             // 3D material's import settings (mipmaps etc.) untouched.
@@ -104,6 +105,7 @@ namespace AlkkagiUIEditor
             Circle = LoadSprite("circle");
             CircleOutline = LoadSprite("circle_ring");
             CircleDashed = LoadSprite("circle_ring_dashed");
+            Triangle = LoadSprite("triangle");
             Board = LoadSprite("menu_board");
             Regular = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontDir + "/Pretendard-Regular SDF.asset");
             Bold = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontDir + "/Pretendard-Bold SDF.asset");
@@ -264,6 +266,21 @@ namespace AlkkagiUIEditor
             return new Vector2(x - half, y - half).magnitude - (half - 1);
         }
 
+        // Upward-pointing triangle (apex at the top), 4x4 supersampled.
+        private static float TriangleCoverage(float x, float y, float size)
+        {
+            var inside = 0;
+            for (var sy = 0; sy < 4; sy++)
+            for (var sx = 0; sx < 4; sx++)
+            {
+                var px = x - 0.5f + (sx + 0.5f) / 4f;
+                var py = y - 0.5f + (sy + 0.5f) / 4f;
+                var halfWidth = (1f - py / size) * size / 2f;
+                if (py >= 0 && py <= size && Mathf.Abs(px - size / 2f) <= halfWidth) inside++;
+            }
+            return inside / 16f;
+        }
+
         private static float Coverage(float distance) => Mathf.Clamp01(0.5f - distance);
 
         private static float Ring(float distance, float width) => Coverage(distance) * Mathf.Clamp01(0.5f + distance + width);
@@ -415,6 +432,57 @@ namespace AlkkagiUIEditor
                 lost.gameObject.SetActive(false);
             }
             return root;
+        }
+
+        // One half of a two-segment capsule switch: an ink highlight under the
+        // selected half, and a transparent raycast target so the whole half
+        // is clickable. locKey null = literal text (e.g. 한 / EN).
+        public static (Button button, Graphic highlight, TMP_Text label) Segment(Transform frame, string name, string text, string locKey, float anchorX, float height)
+        {
+            var hit = Node(name, frame);
+            hit.anchorMin = new Vector2(anchorX, 0);
+            hit.anchorMax = new Vector2(anchorX + 0.5f, 1);
+            hit.offsetMin = hit.offsetMax = Vector2.zero;
+            var highlight = Capsule(hit, "Highlight", height - 16, Theme.Ink, null);
+            highlight.rectTransform.Stretch(8);
+            var label = locKey == null
+                ? Text(hit, "Label", text, height * 0.42f, true, Theme.Ink, TextAlignmentOptions.Center)
+                : Label(hit, "Label", locKey, height * 0.42f, true, Theme.Ink, TextAlignmentOptions.Center);
+            label.rectTransform.Stretch();
+            var target = hit.gameObject.AddComponent<Image>();
+            target.color = Color.clear;
+            var button = hit.gameObject.AddComponent<Button>();
+            button.targetGraphic = target;
+            button.transition = Selectable.Transition.None;
+            return (button, highlight, label);
+        }
+
+        // 켜기 | 끄기 switch for a bool match option.
+        public static BoolToggle OnOffToggle(Transform parent, string name, float height)
+        {
+            var frame = Capsule(parent, name, height, Theme.Hanji, Theme.Ink);
+            frame.gameObject.AddComponent<CanvasGroup>();
+            var toggle = frame.gameObject.AddComponent<BoolToggle>();
+            toggle.selectedTextColor = Theme.Hanji;
+            toggle.idleTextColor = Theme.Ink;
+            var on = Segment(frame.transform, "On", null, "option.on", 0f, height);
+            var off = Segment(frame.transform, "Off", null, "option.off", 0.5f, height);
+            (toggle.onButton, toggle.onHighlight, toggle.onLabel) = on;
+            (toggle.offButton, toggle.offHighlight, toggle.offLabel) = off;
+            ShowSelected(on, off);
+            return toggle;
+        }
+
+        // Bakes a resting "left side selected" look into the prefab. The
+        // runtime component repaints on enable, but in the editor nothing
+        // runs, so without this both halves show as selected with unreadable
+        // labels.
+        public static void ShowSelected((Button button, Graphic highlight, TMP_Text label) selected, (Button button, Graphic highlight, TMP_Text label) other)
+        {
+            selected.highlight.enabled = true;
+            selected.label.color = Theme.Hanji;
+            other.highlight.enabled = false;
+            other.label.color = Theme.Ink;
         }
 
         public static Canvas Canvas(string name, float matchWidthOrHeight, int sortingOrder)

@@ -92,6 +92,9 @@ public static class Loc
         { "settings.title", ("설정", "Settings") },
         { "settings.language", ("언어", "Language") },
         { "settings.close", ("닫기", "Close") },
+        { "settings.aimGuide", ("조준 가이드", "Aim guide") },
+        { "option.on", ("켜기", "On") },
+        { "option.off", ("끄기", "Off") },
 
         { "lobby.title", ("온라인 대전", "Online match") },
         { "lobby.create", ("로비 만들기", "Create lobby") },

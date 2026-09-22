@@ -21,6 +21,7 @@ public class SteamLobbyManager : MonoBehaviour
     public event Action<Friend> OnMemberJoined;
     public event Action<Friend> OnMemberLeft;
     public event Action OnLobbyFailed;
+    public event Action OnLobbyDataChanged;
 
     private void Awake()
     {
@@ -38,6 +39,7 @@ public class SteamLobbyManager : MonoBehaviour
         // Steam reports a member that dropped (crash, lost connection) as a
         // disconnect rather than a leave; to the game both mean they're gone.
         SteamMatchmaking.OnLobbyMemberDisconnected += HandleMemberLeft;
+        SteamMatchmaking.OnLobbyDataChanged += HandleLobbyDataChanged;
         SteamFriends.OnGameLobbyJoinRequested += HandleJoinRequested;
     }
 
@@ -52,6 +54,7 @@ public class SteamLobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyMemberJoined -= HandleMemberJoined;
         SteamMatchmaking.OnLobbyMemberLeave -= HandleMemberLeft;
         SteamMatchmaking.OnLobbyMemberDisconnected -= HandleMemberLeft;
+        SteamMatchmaking.OnLobbyDataChanged -= HandleLobbyDataChanged;
         SteamFriends.OnGameLobbyJoinRequested -= HandleJoinRequested;
     }
 
@@ -72,6 +75,27 @@ public class SteamLobbyManager : MonoBehaviour
             return;
         }
         result.Value.SetJoinable(true);
+        // The host's own settings become the lobby's match options.
+        result.Value.SetData(MatchOptions.AimGuideLobbyKey, MatchOptions.LocalAimGuide ? "1" : "0");
+    }
+
+    // Match options live in lobby data: only the owner may write them,
+    // every member reads the same values.
+    public void SetLobbyOption(string key, bool value)
+    {
+        if (IsHost) CurrentLobby.Value.SetData(key, value ? "1" : "0");
+    }
+
+    public bool GetLobbyOption(string key, bool fallback)
+    {
+        if (!CurrentLobby.HasValue) return fallback;
+        var value = CurrentLobby.Value.GetData(key);
+        return string.IsNullOrEmpty(value) ? fallback : value == "1";
+    }
+
+    private void HandleLobbyDataChanged(Lobby lobby)
+    {
+        if (CurrentLobby.HasValue && lobby.Id == CurrentLobby.Value.Id) OnLobbyDataChanged?.Invoke();
     }
 
     public async void JoinLobby(ulong lobbyId)

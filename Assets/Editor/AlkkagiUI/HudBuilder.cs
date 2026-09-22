@@ -47,6 +47,7 @@ namespace AlkkagiUIEditor
                 BuildPlayerPanel(root, "BlackPanel", new Vector2(0, 0), new Vector2(Margin, Margin), Theme.StoneBlack, Theme.Ink),
                 BuildPlayerPanel(root, "WhitePanel", new Vector2(1, 1), new Vector2(-Margin, -Margin), Theme.StoneWhite, Theme.InkMuted),
             };
+            BuildAim(root);
             BuildGameOverPanel(root, controller);
             return canvas.gameObject;
         }
@@ -112,6 +113,60 @@ namespace AlkkagiUIEditor
             panel.capturedText = UIKit.Text(t, "Captured", "잡은 돌 0", 24, false, Theme.InkSoft, TextAlignmentOptions.TopLeft);
             panel.capturedText.rectTransform.Place(topLeft, new Vector2(Pad, -302), new Vector2(PanelSize.x - Pad * 2, 30));
             return panel;
+        }
+
+        // Option A from the aim-UI mockups: power ring around the stone, shot
+        // arrow, % label, a faint pull line, and the optional first-contact
+        // guide. AimIndicator positions everything each frame; sizes here are
+        // just the resting shape.
+        private static void BuildAim(Transform root)
+        {
+            var area = UIKit.Node("Aim", root).Stretch();
+            var aim = area.gameObject.AddComponent<AimIndicator>();
+            var center = new Vector2(0.5f, 0.5f);
+            Color Faded(Color c, float a) => new Color(c.r, c.g, c.b, a);
+
+            // Drawn first so everything else sits on top of it.
+            var pull = UIKit.Image(area, "PullLine", null, Faded(Theme.Ink, 0.35f));
+            pull.rectTransform.Place(center, Vector2.zero, new Vector2(3, 10), new Vector2(0.5f, 0));
+            aim.pullLine = pull.rectTransform;
+            var pullMark = UIKit.Image(area, "PullMark", UIKit.CircleOutline, Faded(Theme.Ink, 0.6f));
+            pullMark.rectTransform.Place(center, Vector2.zero, new Vector2(18, 18));
+            aim.pullMark = pullMark.rectTransform;
+
+            aim.guideRoot = UIKit.Node("Guide", area).Stretch();
+            var dot = UIKit.Image(aim.guideRoot, "DotTemplate", UIKit.Circle, Faded(Theme.Ink, 0.7f));
+            dot.rectTransform.Place(center, Vector2.zero, new Vector2(7, 7));
+            dot.gameObject.SetActive(false);
+            aim.dotTemplate = dot.gameObject;
+            var targetMark = UIKit.Image(area, "TargetMark", UIKit.CircleOutline, Faded(Theme.Seal, 0.85f));
+            targetMark.rectTransform.Place(center, Vector2.zero, new Vector2(60, 60));
+            aim.targetMark = targetMark.rectTransform;
+
+            aim.ring = UIKit.Node("Ring", area).Place(center, Vector2.zero, new Vector2(80, 80));
+            UIKit.Image(aim.ring, "Track", UIKit.CircleOutline, Faded(Theme.Ink, 0.2f)).rectTransform.Stretch();
+            aim.ringFill = UIKit.Image(aim.ring, "Fill", UIKit.CircleOutline, Theme.Seal);
+            aim.ringFill.rectTransform.Stretch();
+            aim.ringFill.type = UnityEngine.UI.Image.Type.Filled;
+            aim.ringFill.fillMethod = UnityEngine.UI.Image.FillMethod.Radial360;
+            aim.ringFill.fillOrigin = (int)UnityEngine.UI.Image.Origin360.Top;
+            aim.ringFill.fillClockwise = true;
+            aim.ringFill.fillAmount = 0.72f;
+
+            // Pivot at the base so it rotates about the ring edge; the head rides
+            // on the shaft's tip as the shaft grows with power.
+            aim.arrow = UIKit.Node("Arrow", area).Place(center, Vector2.zero, new Vector2(30, 10), new Vector2(0.5f, 0));
+            var shaft = UIKit.Image(aim.arrow, "Shaft", null, Theme.Seal);
+            shaft.rectTransform.Place(new Vector2(0.5f, 0), Vector2.zero, new Vector2(8, 100), new Vector2(0.5f, 0));
+            aim.arrowShaft = shaft.rectTransform;
+            UIKit.Image(shaft.transform, "Head", UIKit.Triangle, Theme.Seal).rectTransform
+                .Place(new Vector2(0.5f, 1), new Vector2(0, -2), new Vector2(30, 26), new Vector2(0.5f, 0));
+
+            var label = UIKit.Capsule(area, "PowerLabel", 40, Theme.Hanji, Theme.Ink);
+            label.rectTransform.Place(center, Vector2.zero, new Vector2(96, 40));
+            aim.powerLabel = label.rectTransform;
+            aim.powerText = UIKit.Text(label.transform, "Text", "72%", 24, true, Theme.Seal, TextAlignmentOptions.Center);
+            aim.powerText.rectTransform.Stretch();
         }
 
         // Result, reason, a per-side scoreboard, the running series, and the

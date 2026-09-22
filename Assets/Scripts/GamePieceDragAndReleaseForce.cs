@@ -6,8 +6,13 @@ using UnityEngine;
 [RequireComponent(typeof(LineRenderer))]
 public class GamePieceDragAndReleaseForce : MonoBehaviour
 {
-    public float forceMultiplier = 20f;
     public float maxForce = 50f;
+    // Pull-back distance (world units) that reads as 100% power. 1.0 keeps
+    // the previous feel exactly: the scene used forceMultiplier 50 x
+    // distance, capped at maxForce 50.
+    public float maxDragDistance = 1f;
+    // Releasing below this is treated as a cancel rather than a wasted turn.
+    public float minShotPower = 0.03f;
     public float settleVelocityThreshold = 0.05f;
     public int settleFrameThreshold = 5;
 
@@ -20,7 +25,6 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     private Vector3 startPos;
     private Vector3 endPos;
     private Vector3 force;
-    private float lrDist;
     private Plane plane;
     private Ray ray;
     public bool isSelected = false;
@@ -30,6 +34,11 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
 
     public bool isGamePieceMoving = false;
     public bool IsSettled => !isGamePieceMoving;
+
+    // Read by AimIndicator while this piece is being dragged.
+    public float AimPower { get; private set; }         // 0..1
+    public Vector3 AimDirection { get; private set; }   // shot direction on the board plane (unit, or zero)
+    public Vector3 DragPoint => endPos;                 // where the pull is held, on the board plane
 
     // True on a local single-player piece and on the network host (who always
     // simulates physics). False on a network guest, whose flicks are only
@@ -66,21 +75,14 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             // endPos = mainCam.ScreenToWorldPoint(new Vector3(mousePosInput.x, mousePosInput.y, mainCam.transform.position.y));
             // endPos.y = transform.position.y;
 
-            // Update the positions of the line renderer
-            lr.enabled = true;
-            lrDist = Vector3.Distance(startPos, endPos);
-            // Debug.Log(lrDist);
-            lr.SetPosition(0, startPos);
-            lr.SetPosition(1, endPos);
+            // Slingshot: the shot goes opposite the pull.
+            var pull = startPos - endPos;
+            pull.y = 0;
+            AimPower = Mathf.Clamp01(pull.magnitude / maxDragDistance);
+            AimDirection = pull.sqrMagnitude > 1e-6f ? pull.normalized : Vector3.zero;
         }
         // https://docs.unity3d.com/ScriptReference/Input.GetMouseButtonDown.html
-        if (isDragging && Input.GetMouseButtonDown(1))
-        {
-            isSelected = false;
-            isDragging = false;
-            isCancelled = true;
-            lr.enabled = false;
-        }
+        if (isDragging && Input.GetMouseButtonDown(1)) Cancel();
 
         // Debug lines
         // Debug.Log(mainCam.transform.position.y);
@@ -89,19 +91,32 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     {
         if (isOnfire)
         {
-            // Calculate the force vector
-            force = (startPos - endPos) * forceMultiplier;
-            if (isAuthority) ApplyFlick(force);
-            else OnFlickRequested?.Invoke(force);
-            force=new Vector3(0,0,0);
-            isOnfire=false;
-            isSelected = false;
-            // End dragging
-            isDragging = false;
-            // Disable the line renderer
-            lr.enabled = false;
+            isOnfire = false;
+            if (AimPower < minShotPower)
+            {
+                Cancel();
+            }
+            else
+            {
+                force = AimDirection * (AimPower * maxForce);
+                if (isAuthority) ApplyFlick(force);
+                else OnFlickRequested?.Invoke(force);
+                isSelected = false;
+                isDragging = false;
+            }
+            AimPower = 0;
         }
         UpdateSettleState();
+    }
+
+    // Back to choosing a piece; TurnController sees isCancelled and waits
+    // for input again.
+    private void Cancel()
+    {
+        isSelected = false;
+        isDragging = false;
+        isCancelled = true;
+        AimPower = 0;
     }
 
     // Only ever called on the authoritative simulation (local single-player,
