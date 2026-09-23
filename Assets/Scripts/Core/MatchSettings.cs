@@ -3,6 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
+public enum BoardType : byte
+{
+    Go,
+    Janggi // folding board: the hinges across the middle are obstacles
+}
+
+public enum PieceType : byte
+{
+    GoStones,
+    JanggiPieces
+}
+
 public enum SpawnMode : byte
 {
     Preset,    // stones start on the layout mapped in GameScene (BoardSetup)
@@ -23,9 +35,12 @@ public enum BothOutRule : byte
     Draw
 }
 
-// Index into MatchSettings.Defs - keep the two in the same order.
+// Index into MatchSettings.Defs - keep the two in the same order (it's also
+// the order the rows are shown in).
 public enum MatchSettingId : byte
 {
+    BoardType,
+    PieceType,
     AimGuide,
     BlackStones,
     WhiteStones,
@@ -75,6 +90,10 @@ public sealed class MatchSettings
 
     public static readonly MatchSettingDef[] Defs =
     {
+        new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board", new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi }, (int)global::BoardType.Go,
+            v => Loc.Get("board." + (global::BoardType)v)),
+        new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces }, (int)global::PieceType.GoStones,
+            v => Loc.Get("pieces." + (global::PieceType)v)),
         new MatchSettingDef(MatchSettingId.AimGuide, "aimGuide", "match.aimGuide", new[] { 1, 0 }, 1,
             v => Loc.Get(v == 1 ? "option.on" : "option.off")),
         new MatchSettingDef(MatchSettingId.BlackStones, "blackStones", "match.blackStones", StoneCounts, 6,
@@ -115,6 +134,8 @@ public sealed class MatchSettings
         values[(int)id] = Array.IndexOf(def.Values, value) >= 0 ? value : def.Default;
     }
 
+    public BoardType BoardType => (BoardType)Get(MatchSettingId.BoardType);
+    public PieceType PieceType => (PieceType)Get(MatchSettingId.PieceType);
     public bool AimGuide => Get(MatchSettingId.AimGuide) == 1;
     public int StonesFor(int playerId) => Get(playerId == 0 ? MatchSettingId.BlackStones : MatchSettingId.WhiteStones);
     public SpawnMode SpawnMode => (SpawnMode)Get(MatchSettingId.SpawnMode);

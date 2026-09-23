@@ -32,7 +32,11 @@ public class PlacementHud : MonoBehaviour
         var gameManager = GameManager.manager;
         var phase = gameManager != null ? gameManager.Placement : null;
         var show = phase != null && !phase.Done && gameManager.gameState == GameManager.GameState.Placement && Controller != null;
-        if (panel.activeSelf != show) panel.SetActive(show);
+        if (panel.activeSelf != show)
+        {
+            panel.SetActive(show);
+            if (show) SideMark.ShowAll(this, MatchSettings.Current.PieceType);
+        }
         if (!show) return;
 
         var actor = Controller.Actor;
@@ -70,7 +74,7 @@ public class PlacementHud : MonoBehaviour
         if (showReady) SetInteractable(readyButton, acting && phase.Unplaced(actor) == 0);
     }
 
-    private static string ColorName(int playerId) => Loc.Get(playerId == 0 ? "player.black" : "player.white");
+    private static string ColorName(int playerId) => SideStyle.Name(playerId);
 
     private static void SetInteractable(Button button, bool interactable)
     {

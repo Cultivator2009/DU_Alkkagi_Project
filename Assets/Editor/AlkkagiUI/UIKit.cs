@@ -434,6 +434,28 @@ namespace AlkkagiUIEditor
             return root;
         }
 
+        // Lets the stone icon repaint for the pieces in play (black/white or
+        // Cho/Han); see SideMark.
+        public static SideMark Mark(RectTransform stone, int playerId)
+        {
+            var mark = stone.gameObject.AddComponent<SideMark>();
+            mark.playerId = playerId;
+            mark.fill = stone.Find("Fill").GetComponent<Image>();
+            mark.ring = stone.Find("Ring").GetComponent<Image>();
+            return mark;
+        }
+
+        // A side name that follows the pieces in play instead of a fixed Loc key.
+        public static SideMark MarkLabel(TMP_Text text, int playerId)
+        {
+            var localized = text.GetComponent<LocalizedText>();
+            if (localized != null) Object.DestroyImmediate(localized);
+            var mark = text.gameObject.AddComponent<SideMark>();
+            mark.playerId = playerId;
+            mark.label = text;
+            return mark;
+        }
+
         // One half of a two-segment capsule switch: an ink highlight under the
         // selected half, and a transparent raycast target so the whole half
         // is clickable. locKey null = literal text (e.g. 한 / EN).
@@ -509,6 +531,54 @@ namespace AlkkagiUIEditor
             button.targetGraphic = target;
             button.transition = Selectable.Transition.None;
             return button;
+        }
+
+        // 0..1 slider: a thin field-coloured track, a seal-red fill and a hanji
+        // knob. The transparent root image takes the drags.
+        public static Slider Slider(Transform parent, string name, Vector2 size)
+        {
+            const float trackHeight = 12;
+            var knob = size.y;
+            var root = Node(name, parent);
+            root.sizeDelta = size;
+            var hit = root.gameObject.AddComponent<Image>();
+            hit.color = Color.clear;
+
+            var track = Capsule(root, "Track", trackHeight, Theme.HanjiField, Theme.FieldBorder);
+            track.rectTransform.anchorMin = new Vector2(0, 0.5f);
+            track.rectTransform.anchorMax = new Vector2(1, 0.5f);
+            track.rectTransform.sizeDelta = new Vector2(0, trackHeight);
+
+            var fillArea = Node("FillArea", root);
+            fillArea.anchorMin = new Vector2(0, 0.5f);
+            fillArea.anchorMax = new Vector2(1, 0.5f);
+            fillArea.sizeDelta = new Vector2(-knob / 2, trackHeight);
+            fillArea.anchoredPosition = new Vector2(-knob / 4, 0);
+            var fill = Capsule(fillArea, "Fill", trackHeight, Theme.Seal, null);
+            fill.rectTransform.sizeDelta = new Vector2(knob / 2, 0);
+
+            var handleArea = Node("HandleArea", root);
+            handleArea.anchorMin = Vector2.zero;
+            handleArea.anchorMax = Vector2.one;
+            handleArea.offsetMin = new Vector2(knob / 2, 0);
+            handleArea.offsetMax = new Vector2(-knob / 2, 0);
+            var handle = Image(handleArea, "Handle", Circle, Theme.Hanji);
+            handle.rectTransform.sizeDelta = new Vector2(knob, 0);
+            Image(handle.transform, "Ring", CircleOutline, Theme.Ink).rectTransform.Stretch();
+
+            var slider = root.gameObject.AddComponent<Slider>();
+            slider.fillRect = fill.rectTransform;
+            slider.handleRect = handle.rectTransform;
+            slider.targetGraphic = handle;
+            slider.direction = UnityEngine.UI.Slider.Direction.LeftToRight;
+            slider.minValue = 0;
+            slider.maxValue = 1;
+            slider.value = GameSettings.DefaultVolume;
+            var colors = slider.colors;
+            colors.highlightedColor = new Color(0.94f, 0.94f, 0.94f);
+            colors.pressedColor = new Color(0.84f, 0.84f, 0.84f);
+            slider.colors = colors;
+            return slider;
         }
 
         // Bakes a resting "left side selected" look into the prefab. The

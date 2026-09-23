@@ -54,9 +54,6 @@ namespace AlkkagiUIEditor
             menu.quitButton = UIKit.CapsuleButton(root, "QuitButton", "menu.quit", new Vector2(290, 104), false, 36);
             menu.quitButton.GetComponent<RectTransform>().Place(topLeft, new Vector2(422, -670), new Vector2(290, 104));
 
-            BuildLanguageToggle(root, "LanguageToggle").GetComponent<RectTransform>()
-                .Place(new Vector2(1, 1), new Vector2(-40, -40), new Vector2(236, 72));
-
             var steamRow = UIKit.Node("SteamUser", root).Place(new Vector2(0, 0), new Vector2(112, 56), new Vector2(760, 40));
             UIKit.Image(steamRow, "Dot", UIKit.Circle, Theme.StatusOk).rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(16, 16), new Vector2(0, 0.5f));
             // ASCII placeholder: anything outside the baked charset would land in
@@ -112,25 +109,78 @@ namespace AlkkagiUIEditor
             return toggle;
         }
 
+        // Language, sound and controls. SettingsPanel keeps each control and
+        // its saved value in step.
         private static void BuildSettingsPanel(Transform root, MainMenuUI menu)
         {
+            const float width = 780, pad = 64, rowHeight = 60;
             var overlay = UIKit.Image(root, "SettingsPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             menu.settingsPanel = overlay.gameObject;
+            var panel = overlay.gameObject.AddComponent<SettingsPanel>();
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
-            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(640, 420));
-            var top = new Vector2(0.5f, 1);
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 800));
+            var c = card.transform;
+            var topLeft = new Vector2(0, 1);
+            var topRight = new Vector2(1, 1);
+            var labelWidth = 300f;
 
-            UIKit.Label(card.transform, "Title", "settings.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
-                .rectTransform.Place(top, new Vector2(0, -44), new Vector2(560, 64));
-            UIKit.Label(card.transform, "LanguageLabel", "settings.language", 30, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
-                .rectTransform.Place(new Vector2(0, 1), new Vector2(64, -172), new Vector2(240, 72));
-            BuildLanguageToggle(card.transform, "LanguageToggle").GetComponent<RectTransform>()
-                .Place(new Vector2(1, 1), new Vector2(-64, -172), new Vector2(236, 72));
+            UIKit.Label(c, "Title", "settings.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
+                .rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -44), new Vector2(width - pad * 2, 64));
 
-            menu.settingsCloseButton = UIKit.CapsuleButton(card.transform, "CloseButton", "settings.close", new Vector2(240, 84), false, 32);
-            menu.settingsCloseButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 48), new Vector2(240, 84), new Vector2(0.5f, 0));
+            void RowLabel(string name, string key, float y) =>
+                UIKit.Label(c, name, key, 28, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                    .rectTransform.Place(topLeft, new Vector2(pad, y), new Vector2(labelWidth, rowHeight));
+            void Section(string name, string key, float y)
+            {
+                UIKit.Label(c, name, key, 24, true, Theme.InkFaint, TextAlignmentOptions.MidlineLeft)
+                    .rectTransform.Place(topLeft, new Vector2(pad, y), new Vector2(width - pad * 2, 32));
+                UIKit.Image(c, name + "Divider", null, Theme.Divider).rectTransform.Place(topLeft, new Vector2(pad, y - 38), new Vector2(width - pad * 2, 2));
+            }
+
+            RowLabel("LanguageLabel", "settings.language", -136);
+            BuildLanguageToggle(c, "LanguageToggle").GetComponent<RectTransform>()
+                .Place(topRight, new Vector2(-pad, -130), new Vector2(236, 72));
+
+            Section("Sound", "settings.sound", -232);
+            (Slider, TMP_Text) VolumeRow(string name, string key, float y)
+            {
+                RowLabel(name + "Label", key, y);
+                var slider = UIKit.Slider(c, name + "Slider", new Vector2(250, 36));
+                slider.GetComponent<RectTransform>().Place(topRight, new Vector2(-pad - 100, y - 12), new Vector2(250, 36));
+                var value = UIKit.Text(c, name + "Value", "80%", 26, true, Theme.Ink, TextAlignmentOptions.MidlineRight);
+                value.rectTransform.Place(topRight, new Vector2(-pad, y), new Vector2(84, rowHeight));
+                return (slider, value);
+            }
+            (panel.masterSlider, panel.masterValue) = VolumeRow("Master", "settings.masterVolume", -286);
+            (panel.interfaceSlider, panel.interfaceValue) = VolumeRow("Interface", "settings.interfaceVolume", -356);
+
+            Section("Controls", "settings.controls", -444);
+            var rows = new System.Collections.Generic.List<KeyBindRow>();
+            var actions = (GameAction[])System.Enum.GetValues(typeof(GameAction));
+            for (var i = 0; i < actions.Length; i++)
+            {
+                var y = -498 - i * 76;
+                RowLabel("Bind" + actions[i] + "Label", "bind." + actions[i], y);
+                var button = UIKit.CapsuleButton(c, "Bind" + actions[i], "settings.reset", new Vector2(300, rowHeight), false, 24);
+                button.GetComponent<RectTransform>().Place(topRight, new Vector2(-pad, y), new Vector2(300, rowHeight));
+                var keyText = button.GetComponentInChildren<TMP_Text>();
+                // The key name is set by SettingsPanel, not a Loc key.
+                Object.DestroyImmediate(keyText.GetComponent<LocalizedText>());
+                keyText.text = "Ctrl";
+                var row = button.gameObject.AddComponent<KeyBindRow>();
+                row.action = actions[i];
+                row.button = button;
+                row.keyText = keyText;
+                rows.Add(row);
+            }
+            panel.keyRows = rows.ToArray();
+
+            panel.resetButton = UIKit.CapsuleButton(c, "ResetButton", "settings.reset", new Vector2(240, 84), false, 30);
+            panel.resetButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(pad, 48), new Vector2(240, 84));
+            menu.settingsCloseButton = UIKit.CapsuleButton(c, "CloseButton", "settings.close", new Vector2(240, 84), true, 32);
+            menu.settingsCloseButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 48), new Vector2(240, 84));
             overlay.gameObject.SetActive(false);
         }
 
@@ -138,7 +188,7 @@ namespace AlkkagiUIEditor
         // Start / Cancel. MainMenuUI fills it from the last-used rules.
         private static void BuildSetupPanel(Transform root, MainMenuUI menu)
         {
-            const float width = 840, pad = 64, rowHeight = 60, gap = 10;
+            const float width = 840, pad = 64, rowHeight = 52, gap = 8;
             var rulesHeight = MatchSettings.Defs.Length * (rowHeight + gap) - gap;
             var overlay = UIKit.Image(root, "SetupPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();

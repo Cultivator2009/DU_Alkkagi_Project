@@ -222,11 +222,14 @@ public class LobbySceneUI : MonoBehaviour
         var members = lobby.Members.ToList();
         var host = members.FirstOrDefault(m => m.Id.Value == lobby.Owner.Id.Value);
         var guest = members.FirstOrDefault(m => m.Id.Value != lobby.Owner.Id.Value);
-        hostSlot.ShowPlayer(host.Name, $"{Loc.Get("lobby.host")} · {Loc.Get("player.black")}");
-        if (members.Count > 1) guestSlot.ShowPlayer(guest.Name, $"{Loc.Get("lobby.guest")} · {Loc.Get("player.white")}");
+        // Seats read black/white or Cho/Han, whichever pieces the rules pick.
+        var rules = lobbyManager.ReadLobbySettings();
+        hostSlot.ShowPlayer(host.Name, $"{Loc.Get("lobby.host")} · {SideStyle.Name(0, rules.PieceType)}");
+        if (members.Count > 1) guestSlot.ShowPlayer(guest.Name, $"{Loc.Get("lobby.guest")} · {SideStyle.Name(1, rules.PieceType)}");
         else guestSlot.ShowEmpty(lobbyManager.IsHost);
+        SideMark.ShowAll(lobbyView.transform, rules.PieceType);
 
-        rulesPanel.Show(lobbyManager.ReadLobbySettings(), lobbyManager.IsHost);
+        rulesPanel.Show(rules, lobbyManager.IsHost);
         rulesCaption.text = Loc.Get(lobbyManager.IsHost ? "lobby.rulesHost" : "lobby.rulesGuest");
 
         var full = members.Count >= 2;

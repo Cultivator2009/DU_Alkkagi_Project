@@ -1,16 +1,33 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using TMPro;
 using UnityEngine;
 
-// GameScene's board. Spawns each side's stones from the inactive templates
-// (the count is a match rule, so stones are no longer hand-placed in the
-// scene), holds the preset layouts and the placement zones, and shows the
-// placement phase while it runs.
+// GameScene's board. Turns on the board the match rules pick, spawns each
+// side's pieces - go stones from the black/white templates, or janggi
+// pieces from the janggi template - holds the preset layouts and placement
+// zones, and shows the placement phase while it runs.
 public class BoardSetup : MonoBehaviour
 {
     public const int MaxStones = 12;
+    public const float StoneRadius = 0.1f; // a go stone; zones are drawn for this size
+
+    // A janggi piece size, as on a real set: the general, the four major
+    // pieces, then the guards and soldiers.
+    [Serializable]
+    public struct JanggiKind
+    {
+        public string choLabel; // Loc keys of the letter each side's piece carries
+        public string hanLabel;
+        public float width;     // across the flats
+        public float height;
+    }
 
     public GamePieceDragAndReleaseForce blackTemplate;
     public GamePieceDragAndReleaseForce whiteTemplate;
+    public GamePieceDragAndReleaseForce janggiTemplate;
+    public BoardVariant[] boards;
 
     // Children named "1".."12", each holding that many points: black's preset
     // layout for that stone count, editable in the scene. White uses the same
@@ -19,30 +36,54 @@ public class BoardSetup : MonoBehaviour
     // regenerates the defaults.
     public Transform layouts;
 
-    // Black's placement zone on the board, in (x, z); white's is its mirror.
-    // Keeps stones inside the rim and away from the center line.
-    public Rect blackZone = new Rect(-1.35f, -1.35f, 2.7f, 1.05f);
-    public float minSpacing = 0.22f; // center to center: stone diameter 0.2 plus a little air
+    public JanggiKind[] janggiKinds =
+    {
+        new JanggiKind { choLabel = "piece.cho", hanLabel = "piece.han", width = 0.28f, height = 0.09f },
+        new JanggiKind { choLabel = "piece.cha", hanLabel = "piece.cha", width = 0.24f, height = 0.08f },
+        new JanggiKind { choLabel = "piece.po", hanLabel = "piece.po", width = 0.24f, height = 0.08f },
+        new JanggiKind { choLabel = "piece.ma", hanLabel = "piece.ma", width = 0.24f, height = 0.08f },
+        new JanggiKind { choLabel = "piece.sang", hanLabel = "piece.sang", width = 0.24f, height = 0.08f },
+        new JanggiKind { choLabel = "piece.sa", hanLabel = "piece.sa", width = 0.2f, height = 0.07f },
+        new JanggiKind { choLabel = "piece.jol", hanLabel = "piece.byeong", width = 0.2f, height = 0.07f },
+    };
+    // Which kinds a side of N pieces gets: the first N of this list, handed
+    // out back row first, each row from the middle outward, so the general
+    // sits at the back in the middle as on a real board.
+    public int[] janggiLineup = { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6 };
+
+    public float gap = 0.02f; // between two pieces placed side by side
     public Color zoneColor = new Color(0.18f, 0.14f, 0.10f, 0.10f);
     public Color activeZoneColor = new Color(0.70f, 0.19f, 0.16f, 0.22f);
 
+    public BoardVariant Active { get; private set; }
+    public Bounds SurfaceBounds => ActiveOrFirst.surface.bounds;
+    // Where pieces rest while placed by hand (they drop onto the board when
+    // the match starts).
+    public float PieceHeight { get; private set; }
+
     private readonly Dictionary<Rigidbody, CollisionDetectionMode> frozenBodies = new Dictionary<Rigidbody, CollisionDetectionMode>();
     private SpriteRenderer[] zoneMarkers;
+
+    private BoardVariant ActiveOrFirst => Active != null ? Active : boards[0];
 
     // ---- Spawning ----
 
     public List<GamePieceDragAndReleaseForce> Spawn(MatchSettings settings)
     {
+        UseBoard(settings.BoardType);
+        var janggi = settings.PieceType == PieceType.JanggiPieces;
+        PieceHeight = (janggi ? janggiTemplate : blackTemplate).transform.position.y;
+
         var parent = new GameObject("Pieces").transform;
         var pieces = new List<GamePieceDragAndReleaseForce>();
         for (var player = 0; player < 2; player++)
         {
             var count = Mathf.Clamp(settings.StonesFor(player), 1, MaxStones);
-            var template = player == 0 ? blackTemplate : whiteTemplate;
+            var lineup = LineupRanks(count);
             for (var i = 0; i < count; i++)
             {
-                var piece = Instantiate(template, PresetPosition(player, i, count), template.transform.rotation, parent);
-                piece.name = $"{(player == 0 ? "Black" : "White")} {i + 1}";
+                var position = PresetPosition(player, i, count);
+                var piece = janggi ? SpawnJanggiPiece(player, i, lineup[i], position, parent) : SpawnStone(player, i, position, parent);
                 var manager = piece.GetComponent<GamePieceManager>();
                 manager.playerIndex = player;
                 manager.pieceID = PieceId(player, i);
@@ -53,15 +94,70 @@ public class BoardSetup : MonoBehaviour
         return pieces;
     }
 
-    // Unique per stone and the same on both machines: every network message
-    // addresses stones by it.
+    // Unique per piece and the same on both machines: every network message
+    // addresses pieces by it.
     public static char PieceId(int player, int index) => (char)((player == 0 ? 'A' : 'a') + index);
+
+    private void UseBoard(BoardType type)
+    {
+        Active = Array.Find(boards, b => b.type == type) ?? boards[0];
+        foreach (var board in boards) board.gameObject.SetActive(board == Active);
+    }
+
+    private GamePieceDragAndReleaseForce SpawnStone(int player, int index, Vector3 position, Transform parent)
+    {
+        var template = player == 0 ? blackTemplate : whiteTemplate;
+        var piece = Instantiate(template, position, template.transform.rotation, parent);
+        piece.name = $"{(player == 0 ? "Black" : "White")} {index + 1}";
+        piece.GetComponent<GamePieceManager>().radius = StoneRadius;
+        return piece;
+    }
+
+    // Letters face their owner, so white's pieces are turned around. Mass
+    // goes with volume against a go stone's: the general is the hardest to
+    // move, as on a real board.
+    private GamePieceDragAndReleaseForce SpawnJanggiPiece(int player, int index, int rank, Vector3 position, Transform parent)
+    {
+        var kind = janggiKinds[janggiLineup[Mathf.Min(rank, janggiLineup.Length - 1)]];
+        var piece = Instantiate(janggiTemplate, position, Quaternion.Euler(0, player == 0 ? 0 : 180, 0), parent);
+        var mesh = JanggiPieceMesh.Get(kind.width, kind.height);
+        piece.GetComponent<MeshFilter>().sharedMesh = mesh;
+        piece.GetComponent<MeshCollider>().sharedMesh = mesh;
+
+        var label = piece.GetComponentInChildren<TMP_Text>(true);
+        label.text = Loc.Get(player == 0 ? kind.choLabel : kind.hanLabel);
+        label.color = player == 0 ? SideStyle.Cho : SideStyle.Han;
+        label.transform.localPosition = new Vector3(0, kind.height + 0.001f, 0);
+        label.rectTransform.sizeDelta = Vector2.one * kind.width * 0.62f;
+
+        var stoneBox = blackTemplate.GetComponent<BoxCollider>().size;
+        var volume = 2 * (Mathf.Sqrt(2) - 1) * kind.width * kind.width * kind.height; // regular octagon area x height
+        piece.GetComponent<Rigidbody>().mass = blackTemplate.GetComponent<Rigidbody>().mass * volume / (stoneBox.x * stoneBox.y * stoneBox.z);
+
+        piece.GetComponent<GamePieceManager>().radius = JanggiPieceMesh.Circumradius(kind.width);
+        piece.name = $"{(player == 0 ? "Cho" : "Han")} {index + 1} ({label.text})";
+        return piece;
+    }
+
+    // For each layout slot, its place in the lineup: back row first (black's
+    // layout, so further from the center line = smaller z), then from the
+    // middle outward. Only layout positions go in, so both machines agree.
+    private int[] LineupRanks(int count)
+    {
+        var order = Enumerable.Range(0, count)
+            .OrderBy(i => LayoutPoint(i, count).y)
+            .ThenBy(i => Mathf.Abs(LayoutPoint(i, count).x))
+            .ToArray();
+        var ranks = new int[count];
+        for (var rank = 0; rank < count; rank++) ranks[order[rank]] = rank;
+        return ranks;
+    }
 
     public Vector3 PresetPosition(int player, int index, int count)
     {
         var point = LayoutPoint(index, count);
         if (player == 1) point = -point;
-        return OnBoard(player, point);
+        return OnBoard(point);
     }
 
     private Vector2 LayoutPoint(int index, int count)
@@ -88,63 +184,72 @@ public class BoardSetup : MonoBehaviour
         return points.ToArray();
     }
 
-    private Vector3 OnBoard(int player, Vector2 point)
-    {
-        var template = player == 0 ? blackTemplate : whiteTemplate;
-        return new Vector3(point.x, template.transform.position.y, point.y);
-    }
+    private Vector3 OnBoard(Vector2 point) => new Vector3(point.x, PieceHeight, point.y);
 
     // ---- Zones ----
 
-    public Rect Zone(int player)
+    // Where the center of a piece of this radius may go: the board's zone,
+    // pulled in for pieces bigger than a go stone.
+    public Rect Zone(int player, float radius = StoneRadius)
     {
-        return player == 0 ? blackZone : new Rect(-blackZone.xMax, -blackZone.yMax, blackZone.width, blackZone.height);
+        var zone = ActiveOrFirst.blackZone;
+        var inset = Mathf.Max(0, radius - StoneRadius);
+        zone = Rect.MinMaxRect(zone.xMin + inset, zone.yMin + inset, zone.xMax - inset, zone.yMax - inset);
+        return player == 0 ? zone : Rect.MinMaxRect(-zone.xMax, -zone.yMax, -zone.xMin, -zone.yMin);
     }
 
-    public bool InZone(int player, Vector3 position) => Zone(player).Contains(new Vector2(position.x, position.z));
-
-    public Vector3 ClampToZone(int player, Vector3 position)
+    // Edges count as inside: ClampToZone lands exactly on them, and
+    // Rect.Contains would turn every stone dragged to the edge away.
+    public bool InZone(int player, Vector3 position, float radius)
     {
-        var zone = Zone(player);
-        return OnBoard(player, new Vector2(Mathf.Clamp(position.x, zone.xMin, zone.xMax), Mathf.Clamp(position.z, zone.yMin, zone.yMax)));
+        var zone = Zone(player, radius);
+        return position.x >= zone.xMin && position.x <= zone.xMax && position.z >= zone.yMin && position.z <= zone.yMax;
     }
 
-    public bool IsClear(Vector3 position, IEnumerable<Vector3> others)
+    public Vector3 ClampToZone(int player, Vector3 position, float radius)
+    {
+        var zone = Zone(player, radius);
+        return OnBoard(new Vector2(Mathf.Clamp(position.x, zone.xMin, zone.xMax), Mathf.Clamp(position.z, zone.yMin, zone.yMax)));
+    }
+
+    public bool IsClear(Vector3 position, float radius, IEnumerable<(Vector3 position, float radius)> others)
     {
         foreach (var other in others)
         {
-            var dx = other.x - position.x;
-            var dz = other.z - position.z;
-            if (dx * dx + dz * dz < minSpacing * minSpacing) return false;
+            var dx = other.position.x - position.x;
+            var dz = other.position.z - position.z;
+            var min = radius + other.radius + gap;
+            if (dx * dx + dz * dz < min * min) return false;
         }
         return true;
     }
 
-    // A random spot in the zone clear of every stone in `occupied`. Falls back
-    // to scanning the zone on a grid, which with 12 stones always finds room.
-    public Vector3 RandomFreePosition(int player, List<Vector3> occupied, System.Random random)
+    // A random spot in the zone clear of every piece in `occupied`. Falls back
+    // to scanning the zone on a grid, which with 12 pieces always finds room.
+    public Vector3 RandomFreePosition(int player, float radius, List<(Vector3 position, float radius)> occupied, System.Random random)
     {
-        var zone = Zone(player);
+        var zone = Zone(player, radius);
         for (var attempt = 0; attempt < 200; attempt++)
         {
-            var candidate = OnBoard(player, new Vector2(
+            var candidate = OnBoard(new Vector2(
                 zone.xMin + (float)random.NextDouble() * zone.width,
                 zone.yMin + (float)random.NextDouble() * zone.height));
-            if (IsClear(candidate, occupied)) return candidate;
+            if (IsClear(candidate, radius, occupied)) return candidate;
         }
-        for (var z = zone.yMin; z <= zone.yMax; z += minSpacing)
-        for (var x = zone.xMin; x <= zone.xMax; x += minSpacing)
+        var step = radius + gap;
+        for (var z = zone.yMin; z <= zone.yMax; z += step)
+        for (var x = zone.xMin; x <= zone.xMax; x += step)
         {
-            var candidate = OnBoard(player, new Vector2(x, z));
-            if (IsClear(candidate, occupied)) return candidate;
+            var candidate = OnBoard(new Vector2(x, z));
+            if (IsClear(candidate, radius, occupied)) return candidate;
         }
-        return OnBoard(player, zone.center);
+        return OnBoard(zone.center);
     }
 
     // ---- Placement phase view ----
 
-    // Stones sit still (kinematic) until the match starts, so dragging one
-    // never shoves the others; unplaced stones are hidden until
+    // Pieces sit still (kinematic) until the match starts, so dragging one
+    // never shoves the others; unplaced pieces are hidden until
     // PlacementController shows them.
     public void BeginPlacement(IEnumerable<GamePieceDragAndReleaseForce> pieces)
     {
@@ -167,7 +272,7 @@ public class BoardSetup : MonoBehaviour
         foreach (var marker in zoneMarkers) marker.gameObject.SetActive(true);
     }
 
-    // restorePhysics: false on a network guest, whose stones stay kinematic
+    // restorePhysics: false on a network guest, whose pieces stay kinematic
     // and host-driven.
     public void EndPlacement(PlacementPhase phase, IEnumerable<GamePieceDragAndReleaseForce> pieces, bool restorePhysics)
     {
@@ -178,7 +283,7 @@ public class BoardSetup : MonoBehaviour
             var id = piece.GetComponent<GamePieceManager>().pieceID;
             if (phase.TryGetPosition(id, out var position))
             {
-                // The body too, not just the transform: a stone that was hidden
+                // The body too, not just the transform: a piece that was hidden
                 // (or moved while kinematic) still has its spawn pose there,
                 // and that's what the host sends and the guest eases from.
                 piece.transform.position = position;
@@ -208,12 +313,13 @@ public class BoardSetup : MonoBehaviour
         // Flat on the board, just above the surface; sprite height runs along z.
         marker.transform.SetPositionAndRotation(new Vector3(zone.center.x, 0.003f, zone.center.y), Quaternion.Euler(90, 0, 0));
         // Pad by a stone radius so the tint covers the stones, not just their centers.
-        marker.transform.localScale = new Vector3(zone.width + 0.2f, zone.height + 0.2f, 1);
+        marker.transform.localScale = new Vector3(zone.width + 2 * StoneRadius, zone.height + 2 * StoneRadius, 1);
         return marker;
     }
 
     private void OnDrawGizmos()
     {
+        if (boards == null || boards.Length == 0 || boards[0] == null) return;
         for (var player = 0; player < 2; player++)
         {
             var zone = Zone(player);

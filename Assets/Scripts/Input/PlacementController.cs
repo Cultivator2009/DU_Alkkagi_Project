@@ -70,17 +70,17 @@ public class PlacementController : MonoBehaviour
                 var manager = hit.GetComponent<GamePieceManager>();
                 if (manager.playerIndex == player && phase.CanMoveStones) dragging = hit;
             }
-            else if (board.InZone(player, point))
+            else
             {
                 var next = phase.NextUnplaced(player);
-                if (next != null) Place(phase, player, next.pieceID, point);
+                if (next != null && board.InZone(player, point, next.radius)) Place(phase, player, next.pieceID, point);
             }
         }
 
         if (dragging == null) return;
         if (Input.GetMouseButton(0))
         {
-            dragging.transform.position = board.ClampToZone(player, point);
+            dragging.transform.position = board.ClampToZone(player, point, dragging.GetComponent<GamePieceManager>().radius);
             return;
         }
         // Released: keep it there if the spot is clear, otherwise the next
@@ -121,8 +121,7 @@ public class PlacementController : MonoBehaviour
     {
         point = default;
         if (mainCamera == null) return false;
-        var height = board.ClampToZone(player, Vector3.zero).y;
-        boardPlane.SetNormalAndPosition(Vector3.up, new Vector3(0, height, 0));
+        boardPlane.SetNormalAndPosition(Vector3.up, new Vector3(0, board.PieceHeight, 0));
         var ray = mainCamera.ScreenPointToRay(Input.mousePosition);
         if (!boardPlane.Raycast(ray, out var distance)) return false;
         point = ray.GetPoint(distance);

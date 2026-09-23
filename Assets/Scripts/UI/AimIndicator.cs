@@ -33,7 +33,6 @@ public class AimIndicator : MonoBehaviour
     private Canvas canvas;
     private Camera worldCamera;
     private bool guideEnabled;
-    private Bounds board;
 
     private void OnEnable()
     {
@@ -41,8 +40,6 @@ public class AimIndicator : MonoBehaviour
         canvas = GetComponentInParent<Canvas>();
         worldCamera = Camera.main;
         guideEnabled = MatchSettings.Current.AimGuide; // fixed for the match
-        var boardGo = GameObject.Find("Board_GO");
-        if (boardGo != null) board = boardGo.GetComponentInChildren<Collider>().bounds;
         SetVisible(false);
     }
 
@@ -58,7 +55,7 @@ public class AimIndicator : MonoBehaviour
         SetVisible(true);
 
         var origin = piece.transform.position;
-        var stoneRadius = piece.GetComponent<Collider>().bounds.extents.x;
+        var stoneRadius = piece.GetComponent<GamePieceManager>().radius;
         var center = ToLocal(origin);
         var ringRadius = (ToLocal(origin + Vector3.right * stoneRadius) - center).magnitude + ringPadding;
         var power = piece.AimPower;
@@ -87,20 +84,22 @@ public class AimIndicator : MonoBehaviour
         else HideGuide();
     }
 
-    // First contact along the shot, on the board plane: the nearest stone
-    // whose center comes within one diameter of the shot line, else where
-    // the moving stone would cross the board edge.
+    // First contact along the shot, on the board plane: the nearest piece
+    // whose center comes within the two pieces' radii of the shot line, else
+    // where the moving piece would cross the board edge.
     private void DrawGuide(GamePieceDragAndReleaseForce piece, GameManager gameManager, Vector3 origin, float radius, Vector2 from)
     {
         var dir = piece.AimDirection;
-        var reach = radius * 2f;
-        var best = DistanceToBoardEdge(origin, dir);
+        var best = DistanceToBoardEdge(gameManager.Board.SurfaceBounds, origin, dir);
         Transform target = null;
+        var targetRadius = 0f;
         foreach (var other in gameManager.gamePieceScripts)
         {
             if (other == null || other == piece) continue;
             var to = other.transform.position - origin;
             to.y = 0;
+            var otherRadius = other.GetComponent<GamePieceManager>().radius;
+            var reach = radius + otherRadius; // pieces come in sizes
             var along = Vector3.Dot(to, dir);
             if (along <= 0) continue;
             var offLine = to.sqrMagnitude - along * along;
@@ -109,6 +108,7 @@ public class AimIndicator : MonoBehaviour
             if (contact >= best) continue;
             best = contact;
             target = other.transform;
+            targetRadius = otherRadius;
         }
 
         var to2D = ToLocal(origin + dir * Mathf.Max(best, 0f));
@@ -131,9 +131,9 @@ public class AimIndicator : MonoBehaviour
         if (target != null)
         {
             var targetCenter = ToLocal(target.position);
-            var targetRadius = (ToLocal(target.position + Vector3.right * radius) - targetCenter).magnitude;
+            var screenRadius = (ToLocal(target.position + Vector3.right * targetRadius) - targetCenter).magnitude;
             targetMark.anchoredPosition = targetCenter;
-            targetMark.sizeDelta = Vector2.one * (targetRadius * 2f + 16f);
+            targetMark.sizeDelta = Vector2.one * (screenRadius * 2f + 16f);
         }
     }
 
@@ -143,7 +143,7 @@ public class AimIndicator : MonoBehaviour
         targetMark.gameObject.SetActive(false);
     }
 
-    private float DistanceToBoardEdge(Vector3 origin, Vector3 dir)
+    private static float DistanceToBoardEdge(Bounds board, Vector3 origin, Vector3 dir)
     {
         var t = float.MaxValue;
         if (dir.x > 1e-5f) t = Mathf.Min(t, (board.max.x - origin.x) / dir.x);

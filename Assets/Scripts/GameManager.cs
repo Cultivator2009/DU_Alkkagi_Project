@@ -61,10 +61,11 @@ public class GameManager : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.LeftAlt))
+        // Held: the other camera angle (Settings > Controls, Left Ctrl by default).
+        if (KeyBindings.Down(GameAction.CameraView))
             if (vcams != null)
                 vcams[0].SetActive(false);
-        if (Input.GetKeyUp(KeyCode.LeftAlt))
+        if (KeyBindings.Up(GameAction.CameraView))
             if (vcams != null)
                 vcams[0].SetActive(true);
 

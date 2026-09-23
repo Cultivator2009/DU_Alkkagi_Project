@@ -82,7 +82,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             AimDirection = pull.sqrMagnitude > 1e-6f ? pull.normalized : Vector3.zero;
         }
         // https://docs.unity3d.com/ScriptReference/Input.GetMouseButtonDown.html
-        if (isDragging && Input.GetMouseButtonDown(1)) Cancel();
+        if (isDragging && KeyBindings.Down(GameAction.CancelAim)) Cancel();
 
         // Debug lines
         // Debug.Log(mainCam.transform.position.y);

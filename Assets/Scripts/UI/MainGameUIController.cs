@@ -15,10 +15,8 @@ public class MainGameUIController : MonoBehaviour
 {
     public GameObject turnPill;
     public TMP_Text turnText;
-    public Image turnStone;
+    public SideMark turnStone;
     public PlayerHudPanel[] playerPanels; // index-aligned with GameManager.playersList (0 = black)
-    public Color blackStoneColor = new Color(0.08f, 0.08f, 0.08f);
-    public Color whiteStoneColor = new Color(0.97f, 0.97f, 0.97f);
     public Color turnTextColor = Color.black;
     public Color clockWarningColor = Color.red;
     public float clockWarningSeconds = 5f;
@@ -115,6 +113,8 @@ public class MainGameUIController : MonoBehaviour
         MatchSeries.Begin(online ? $"lobby:{SteamLobbyManager.Instance.CurrentLobby.Value.Id.Value}" : "local");
 
         for (var i = 0; i < playerPanels.Length; i++) playerPanels[i].Build(CountPieces(i));
+        // Every icon and side name: black/white, or Cho/Han with janggi pieces.
+        SideMark.ShowAll(this, MatchSettings.Current.PieceType);
 
         // A local game without placement has already fired its opening
         // OnTurnStarted by now - read the opening turn directly.
@@ -294,7 +294,8 @@ public class MainGameUIController : MonoBehaviour
 
         var playing = turnsStarted && !winnerPlayerId.HasValue;
         turnPill.SetActive(playing);
-        turnStone.color = currentPlayerId == 0 ? blackStoneColor : whiteStoneColor;
+        turnStone.playerId = currentPlayerId;
+        turnStone.Show(MatchSettings.Current.PieceType);
         if (playing) RenderTurn();
         else
             foreach (var panel in playerPanels) panel.skipButton.gameObject.SetActive(false);
@@ -349,7 +350,7 @@ public class MainGameUIController : MonoBehaviour
         }
         var seconds = Mathf.FloorToInt(matchEndTime - matchStartTime);
         matchTimeText.text = Loc.Get("stats.time", $"{seconds / 60}:{seconds % 60:00}");
-        seriesText.text = Loc.Get("series.score", MatchSeries.Wins(0), MatchSeries.Wins(1))
+        seriesText.text = Loc.Get("series.score", ColorName(0), MatchSeries.Wins(0), MatchSeries.Wins(1), ColorName(1))
                           + (MatchSeries.Draws > 0 ? Loc.Get("series.draws", MatchSeries.Draws) : string.Empty);
 
         if (!online)
@@ -372,7 +373,7 @@ public class MainGameUIController : MonoBehaviour
         SetInteractable(rematchButton, !networkBridge.OpponentGone && !networkBridge.LocalWantsRematch);
     }
 
-    private static string ColorName(int playerId) => Loc.Get(playerId == 0 ? "player.black" : "player.white");
+    private static string ColorName(int playerId) => SideStyle.Name(playerId);
 
     private static string PlayerLabel(int playerId)
     {

@@ -25,7 +25,7 @@ public class PieceSelector
     {
         foreach (var piece in pieces)
         {
-            if (!piece.isSelected || Input.GetMouseButtonDown(1)) continue;
+            if (!piece.isSelected || KeyBindings.Down(GameAction.CancelAim)) continue;
 
             var pieceManager = piece.GetComponent<GamePieceManager>();
             if (LocalPlayerId.HasValue && pieceManager.playerIndex != LocalPlayerId.Value)

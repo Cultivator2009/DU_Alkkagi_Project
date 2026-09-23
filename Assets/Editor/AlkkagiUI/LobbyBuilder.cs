@@ -16,8 +16,8 @@ namespace AlkkagiUIEditor
         private const string ScenePath = "Assets/Scenes/LobbyScene.unity";
         private const string OldBootstrapName = "LobbyBootstrap";
 
-        private static readonly Vector2 CardSize = new Vector2(1000, 740);
-        private static readonly Vector2 RulesCardSize = new Vector2(600, 740);
+        private static readonly Vector2 CardSize = new Vector2(1000, 860);
+        private static readonly Vector2 RulesCardSize = new Vector2(600, 860);
         private const float CardGap = 32;
         private const float Pad = 64;
 
@@ -122,7 +122,7 @@ namespace AlkkagiUIEditor
         // guest sees them read-only.
         private static void BuildRulesCard(Transform lobbyView, LobbySceneUI ui)
         {
-            const float pad = 48, rowHeight = 56, gap = 8;
+            const float pad = 48, rowHeight = 54, gap = 6;
             var card = UIKit.Panel(lobbyView, "RulesCard", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             card.rectTransform.Place(new Vector2(1, 0.5f), new Vector2(CardGap, 0), RulesCardSize, new Vector2(0, 0.5f));
             var c = card.transform;
@@ -148,8 +148,9 @@ namespace AlkkagiUIEditor
 
             var filled = UIKit.Panel(node, "Filled", new Color(1, 1, 1, 0.55f), Theme.Ink);
             filled.rectTransform.Stretch();
-            UIKit.Stone(filled.transform, "Stone", 64, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
+            var stone = UIKit.Stone(filled.transform, "Stone", 64, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
                 .Place(TopLeft, new Vector2(32, -32), new Vector2(64, 64));
+            UIKit.Mark(stone, black ? 0 : 1);
             // ASCII placeholders: the real Steam name replaces them at runtime.
             slot.nameText = UIKit.Text(filled.transform, "Name", placeholderName, 36, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
             slot.nameText.overflowMode = TextOverflowModes.Ellipsis;
@@ -163,8 +164,9 @@ namespace AlkkagiUIEditor
             UIKit.Image(empty.transform, "Stone", UIKit.CircleDashed, Theme.InkFaint).rectTransform.Place(TopLeft, new Vector2(32, -32), new Vector2(64, 64));
             UIKit.Label(empty.transform, "Name", "lobby.emptySlot", 36, true, Theme.InkFaint, TextAlignmentOptions.MidlineLeft)
                 .rectTransform.Place(TopLeft, new Vector2(116, -28), new Vector2(280, 48));
-            UIKit.Label(empty.transform, "Role", colorKey, 26, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft)
-                .rectTransform.Place(TopLeft, new Vector2(116, -78), new Vector2(280, 36));
+            var emptyRole = UIKit.Text(empty.transform, "Role", Loc.Get(colorKey), 26, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft);
+            emptyRole.rectTransform.Place(TopLeft, new Vector2(116, -78), new Vector2(280, 36));
+            UIKit.MarkLabel(emptyRole, black ? 0 : 1);
             slot.inviteButton = UIKit.CapsuleButton(empty.transform, "InviteButton", "lobby.invite", new Vector2(340, 72), false, 26);
             slot.inviteButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 28), new Vector2(340, 72));
             slot.emptyView = empty.gameObject;

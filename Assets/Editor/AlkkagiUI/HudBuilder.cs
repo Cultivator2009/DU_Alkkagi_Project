@@ -38,16 +38,14 @@ namespace AlkkagiUIEditor
             var canvas = UIKit.Canvas("MainGame_UI", 1f, 0);
             var root = canvas.transform;
             var controller = canvas.gameObject.AddComponent<MainGameUIController>();
-            controller.blackStoneColor = Theme.StoneBlack;
-            controller.whiteStoneColor = Theme.StoneWhite;
             controller.turnTextColor = Theme.Ink;
             controller.clockWarningColor = Theme.Seal;
 
             BuildTurnPill(root, controller);
             controller.playerPanels = new[]
             {
-                BuildPlayerPanel(root, "BlackPanel", new Vector2(0, 0), new Vector2(Margin, Margin), Theme.StoneBlack, Theme.Ink),
-                BuildPlayerPanel(root, "WhitePanel", new Vector2(1, 1), new Vector2(-Margin, -Margin), Theme.StoneWhite, Theme.InkMuted),
+                BuildPlayerPanel(root, "BlackPanel", 0, new Vector2(0, 0), new Vector2(Margin, Margin), Theme.StoneBlack, Theme.Ink),
+                BuildPlayerPanel(root, "WhitePanel", 1, new Vector2(1, 1), new Vector2(-Margin, -Margin), Theme.StoneWhite, Theme.InkMuted),
             };
             BuildPlacementPanel(root);
             BuildAim(root);
@@ -62,10 +60,9 @@ namespace AlkkagiUIEditor
             pill.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -10), new Vector2(340, 56));
             controller.turnPill = pill.gameObject;
 
-            var stone = UIKit.Image(pill.transform, "TurnStone", UIKit.Circle, Theme.StoneBlack);
-            stone.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(26, 0), new Vector2(28, 28), new Vector2(0, 0.5f));
-            UIKit.Image(stone.transform, "Ring", UIKit.CircleOutline, Theme.Ink).rectTransform.Stretch();
-            controller.turnStone = stone;
+            var stone = UIKit.Stone(pill.transform, "TurnStone", 28, Theme.StoneBlack, Theme.Ink, false);
+            stone.Place(new Vector2(0, 0.5f), new Vector2(26, 0), new Vector2(28, 28), new Vector2(0, 0.5f));
+            controller.turnStone = UIKit.Mark(stone, 0); // the controller switches its side each turn
 
             var text = UIKit.Text(pill.transform, "TurnText", "흑 차례", 30, true, Theme.Ink, TextAlignmentOptions.Center);
             text.rectTransform.Stretch();
@@ -82,7 +79,7 @@ namespace AlkkagiUIEditor
             notice.gameObject.SetActive(false);
         }
 
-        private static PlayerHudPanel BuildPlayerPanel(Transform root, string name, Vector2 corner, Vector2 offset, Color stoneFill, Color stoneRing)
+        private static PlayerHudPanel BuildPlayerPanel(Transform root, string name, int playerId, Vector2 corner, Vector2 offset, Color stoneFill, Color stoneRing)
         {
             var bg = UIKit.Panel(root, name, Theme.Hanji, Theme.Ink);
             bg.rectTransform.Place(corner, offset, PanelSize);
@@ -92,7 +89,8 @@ namespace AlkkagiUIEditor
             var topLeft = new Vector2(0, 1);
             var topRight = new Vector2(1, 1);
 
-            UIKit.Stone(t, "Stone", 64, stoneFill, stoneRing, false).Place(topLeft, new Vector2(Pad, -Pad), new Vector2(64, 64));
+            var bigStone = UIKit.Stone(t, "Stone", 64, stoneFill, stoneRing, false).Place(topLeft, new Vector2(Pad, -Pad), new Vector2(64, 64));
+            UIKit.Mark(bigStone, playerId);
             panel.nameText = UIKit.Text(t, "Name", "흑", 40, true, Theme.Ink, TextAlignmentOptions.TopLeft);
             panel.nameText.rectTransform.Place(topLeft, new Vector2(108, -24), new Vector2(140, 48));
             panel.numberText = UIKit.Text(t, "Number", "플레이어 1", 24, false, Theme.InkSoft, TextAlignmentOptions.TopLeft);
@@ -119,7 +117,9 @@ namespace AlkkagiUIEditor
             layout.childControlWidth = layout.childControlHeight = false;
             layout.childForceExpandWidth = layout.childForceExpandHeight = false;
             panel.stoneRow = row;
-            panel.stoneTemplate = UIKit.Stone(row, "StoneTemplate", 40, stoneFill, stoneRing, true).gameObject;
+            var template = UIKit.Stone(row, "StoneTemplate", 40, stoneFill, stoneRing, true);
+            UIKit.Mark(template, playerId); // copies keep it
+            panel.stoneTemplate = template.gameObject;
             panel.stoneTemplate.SetActive(false);
 
             panel.capturedText = UIKit.Text(t, "Captured", "잡은 돌 0", 24, false, Theme.InkSoft, TextAlignmentOptions.TopLeft);
@@ -164,8 +164,9 @@ namespace AlkkagiUIEditor
             {
                 var black = player == 0;
                 var y = -214 - player * 48;
-                UIKit.Stone(t, black ? "BlackStone" : "WhiteStone", 28, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
+                var clockStone = UIKit.Stone(t, black ? "BlackStone" : "WhiteStone", 28, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
                     .Place(topLeft, new Vector2(Pad, y - 8), new Vector2(28, 28));
+                UIKit.Mark(clockStone, player);
                 hud.clockTexts[player] = UIKit.Text(t, black ? "BlackClock" : "WhiteClock", black ? "흑 1:00" : "백 1:00", 30, true, Theme.Ink, TextAlignmentOptions.TopLeft);
                 hud.clockTexts[player].rectTransform.Place(topLeft, new Vector2(Pad + 44, y), new Vector2(width - 44, 40));
             }
@@ -298,10 +299,12 @@ namespace AlkkagiUIEditor
             {
                 var x = columns[player];
                 var black = player == 0;
-                UIKit.Stone(b, black ? "BlackHeader" : "WhiteHeader", 24, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
+                var header = UIKit.Stone(b, black ? "BlackHeader" : "WhiteHeader", 24, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
                     .Place(topLeft, new Vector2(x - 34, -28), new Vector2(24, 24));
-                UIKit.Label(b, black ? "BlackLabel" : "WhiteLabel", black ? "player.black" : "player.white", 28, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
-                    .rectTransform.Place(topLeft, new Vector2(x - 2, -20), new Vector2(80, 40));
+                UIKit.Mark(header, player);
+                var headerLabel = UIKit.Text(b, black ? "BlackLabel" : "WhiteLabel", Loc.Get(black ? "player.black" : "player.white"), 28, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+                headerLabel.rectTransform.Place(topLeft, new Vector2(x - 2, -20), new Vector2(80, 40));
+                UIKit.MarkLabel(headerLabel, player);
             }
 
             TMP_Text[] Row(string name, string labelKey, float y)

@@ -130,6 +130,7 @@ GameObject:
   - component: {fileID: 595224060}
   - component: {fileID: 595224059}
   - component: {fileID: 595224058}
+  - component: {fileID: 595224061}
   m_Layer: 0
   m_Name: Reporter
   m_TagString: Untagged
@@ -196,7 +197,7 @@ MonoBehaviour:
     reporterScrollerSkin: {fileID: 11400000, guid: 1cc68832d00d3284a9324a4dc05be753, type: 2}
   size: {x: 32, y: 32}
   maxSize: 20
-  numOfCircleToShow: 1
+  numOfCircleToShow: 9999
   Initialized: 0
 --- !u!4 &595224060
 Transform:
@@ -213,6 +214,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &595224061
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 595224057}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0685eed2f12c403a9412ab04aeefc92, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ReporterHotkey
+  key: 293
 --- !u!1 &620566097
 GameObject:
   m_ObjectHideFlags: 0
@@ -404,7 +418,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1001 &1104432617
+--- !u!1001 &1373130888
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -671,4 +685,4 @@ SceneRoots:
   - {fileID: 620566098}
   - {fileID: 1546112842}
   - {fileID: 595224060}
-  - {fileID: 1104432617}
+  - {fileID: 1373130888}
