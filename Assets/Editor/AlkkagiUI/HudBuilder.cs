@@ -40,6 +40,8 @@ namespace AlkkagiUIEditor
             var controller = canvas.gameObject.AddComponent<MainGameUIController>();
             controller.blackStoneColor = Theme.StoneBlack;
             controller.whiteStoneColor = Theme.StoneWhite;
+            controller.turnTextColor = Theme.Ink;
+            controller.clockWarningColor = Theme.Seal;
 
             BuildTurnPill(root, controller);
             controller.playerPanels = new[]
@@ -47,6 +49,7 @@ namespace AlkkagiUIEditor
                 BuildPlayerPanel(root, "BlackPanel", new Vector2(0, 0), new Vector2(Margin, Margin), Theme.StoneBlack, Theme.Ink),
                 BuildPlayerPanel(root, "WhitePanel", new Vector2(1, 1), new Vector2(-Margin, -Margin), Theme.StoneWhite, Theme.InkMuted),
             };
+            BuildPlacementPanel(root);
             BuildAim(root);
             BuildGameOverPanel(root, controller);
             return canvas.gameObject;
@@ -55,7 +58,8 @@ namespace AlkkagiUIEditor
         private static void BuildTurnPill(Transform root, MainGameUIController controller)
         {
             var pill = UIKit.Capsule(root, "TurnPill", 56, Theme.Hanji, Theme.Ink);
-            pill.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -10), new Vector2(280, 56));
+            // Wide enough for "흑 차례 · 30" when the turn timer is on.
+            pill.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -10), new Vector2(340, 56));
             controller.turnPill = pill.gameObject;
 
             var stone = UIKit.Image(pill.transform, "TurnStone", UIKit.Circle, Theme.StoneBlack);
@@ -68,6 +72,14 @@ namespace AlkkagiUIEditor
             text.rectTransform.offsetMin = new Vector2(48, 0);
             text.rectTransform.offsetMax = new Vector2(-20, 0);
             controller.turnText = text;
+
+            // Timed-out / skipped turn, shown for a moment under the pill.
+            var notice = UIKit.Capsule(root, "Notice", 48, Theme.Seal, null);
+            notice.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -78), new Vector2(460, 48));
+            controller.notice = notice.gameObject;
+            controller.noticeText = UIKit.Text(notice.transform, "Text", "흑 시간 초과 · 턴을 넘겨요", 24, true, Theme.SealText, TextAlignmentOptions.Center);
+            controller.noticeText.rectTransform.Stretch();
+            notice.gameObject.SetActive(false);
         }
 
         private static PlayerHudPanel BuildPlayerPanel(Transform root, string name, Vector2 corner, Vector2 offset, Color stoneFill, Color stoneRing)
@@ -112,7 +124,59 @@ namespace AlkkagiUIEditor
 
             panel.capturedText = UIKit.Text(t, "Captured", "잡은 돌 0", 24, false, Theme.InkSoft, TextAlignmentOptions.TopLeft);
             panel.capturedText.rectTransform.Place(topLeft, new Vector2(Pad, -302), new Vector2(PanelSize.x - Pad * 2, 30));
+
+            // Skip turn: just outside the panel, on the side facing the middle
+            // of the column (above black's, below white's).
+            var below = corner.y > 0.5f;
+            panel.skipButton = UIKit.CapsuleButton(root, name + "Skip", "hud.skip", new Vector2(PanelSize.x, 72), false, 28);
+            panel.skipButton.GetComponent<RectTransform>().Place(corner, offset + new Vector2(0, below ? -(PanelSize.y + 16) : PanelSize.y + 16), new Vector2(PanelSize.x, 72));
+            panel.skipButton.gameObject.SetActive(false);
             return panel;
+        }
+
+        // Top of the left column, clear of the board: whose go it is, what to
+        // do, both clocks, and Ready.
+        private static void BuildPlacementPanel(Transform root)
+        {
+            var area = UIKit.Node("Placement", root).Stretch();
+            var hud = area.gameObject.AddComponent<PlacementHud>();
+            hud.clockColor = Theme.Ink;
+            hud.clockIdleColor = Theme.InkFaint;
+            hud.clockWarningColor = Theme.Seal;
+
+            var size = new Vector2(PanelSize.x, 500);
+            var bg = UIKit.Panel(area, "Panel", Theme.Hanji, Theme.Ink);
+            bg.rectTransform.Place(new Vector2(0, 1), new Vector2(Margin, -Margin), size);
+            hud.panel = bg.gameObject;
+            var t = bg.transform;
+            var topLeft = new Vector2(0, 1);
+            var width = size.x - Pad * 2;
+
+            hud.titleText = UIKit.Text(t, "Title", "돌 배치", 36, true, Theme.Ink, TextAlignmentOptions.TopLeft);
+            hud.titleText.rectTransform.Place(topLeft, new Vector2(Pad, -Pad), new Vector2(width, 44));
+            hud.hintText = UIKit.Text(t, "Hint", "내 진영을 눌러 돌을 놓으세요", 24, false, Theme.InkSoft, TextAlignmentOptions.TopLeft);
+            hud.hintText.rectTransform.Place(topLeft, new Vector2(Pad, -84), new Vector2(width, 100));
+            hud.hintText.textWrappingMode = TextWrappingModes.Normal;
+
+            UIKit.Image(t, "Divider", null, Theme.Divider).rectTransform.Place(topLeft, new Vector2(Pad, -196), new Vector2(width, 2));
+            hud.clockTexts = new TMP_Text[2];
+            for (var player = 0; player < 2; player++)
+            {
+                var black = player == 0;
+                var y = -214 - player * 48;
+                UIKit.Stone(t, black ? "BlackStone" : "WhiteStone", 28, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
+                    .Place(topLeft, new Vector2(Pad, y - 8), new Vector2(28, 28));
+                hud.clockTexts[player] = UIKit.Text(t, black ? "BlackClock" : "WhiteClock", black ? "흑 1:00" : "백 1:00", 30, true, Theme.Ink, TextAlignmentOptions.TopLeft);
+                hud.clockTexts[player].rectTransform.Place(topLeft, new Vector2(Pad + 44, y), new Vector2(width - 44, 40));
+            }
+
+            hud.statusText = UIKit.Text(t, "Status", "시간이 끝나면 남은 돌은 무작위로 놓여요", 22, false, Theme.InkFaint, TextAlignmentOptions.TopLeft);
+            hud.statusText.rectTransform.Place(topLeft, new Vector2(Pad, -316), new Vector2(width, 48));
+            hud.statusText.textWrappingMode = TextWrappingModes.Normal;
+
+            hud.readyButton = UIKit.CapsuleButton(t, "ReadyButton", "placement.ready", new Vector2(width, 72), true, 30);
+            hud.readyButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, Pad), new Vector2(width, 72), new Vector2(0.5f, 0));
+            bg.gameObject.SetActive(false);
         }
 
         // Option A from the aim-UI mockups: power ring around the stone, shot

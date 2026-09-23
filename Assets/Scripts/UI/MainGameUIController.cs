@@ -19,6 +19,12 @@ public class MainGameUIController : MonoBehaviour
     public PlayerHudPanel[] playerPanels; // index-aligned with GameManager.playersList (0 = black)
     public Color blackStoneColor = new Color(0.08f, 0.08f, 0.08f);
     public Color whiteStoneColor = new Color(0.97f, 0.97f, 0.97f);
+    public Color turnTextColor = Color.black;
+    public Color clockWarningColor = Color.red;
+    public float clockWarningSeconds = 5f;
+    public GameObject notice;   // "Black ran out of time" and the like, briefly
+    public TMP_Text noticeText;
+    public float noticeSeconds = 2.5f;
 
     [Header("Game over")]
     public GameObject gameOverPanel;
@@ -51,20 +57,28 @@ public class MainGameUIController : MonoBehaviour
     private readonly int[] shots = new int[2];
     private float matchStartTime;
     private float matchEndTime;
-    private int? winnerPlayerId;
+    private int? winnerPlayerId; // set once the result is in; -1 = draw
     private MatchEndReason endReason;
     private bool opponentReturnedToLobby;
+    private bool turnsStarted;
+    private float noticeUntil;
 
     private void Awake()
     {
         rematchButton.onClick.AddListener(OnClickRematch);
         lobbyButton.onClick.AddListener(() => networkBridge.ReturnToLobby());
         mainMenuButton.onClick.AddListener(ReturnToMainMenu);
+        for (var i = 0; i < playerPanels.Length; i++)
+        {
+            var playerId = i;
+            playerPanels[i].skipButton.onClick.AddListener(() => OnClickSkip(playerId));
+        }
     }
 
     private void OnEnable()
     {
         gameOverPanel.SetActive(false);
+        notice.SetActive(false);
         Loc.OnLanguageChanged += Render;
         StartCoroutine(WaitForMatchThenSubscribe());
     }
@@ -99,20 +113,82 @@ public class MainGameUIController : MonoBehaviour
         // The series runs for as long as the same two players keep rematching:
         // the lobby online, the session since the main menu locally.
         MatchSeries.Begin(online ? $"lobby:{SteamLobbyManager.Instance.CurrentLobby.Value.Id.Value}" : "local");
-        matchStartTime = Time.time;
 
         for (var i = 0; i < playerPanels.Length; i++) playerPanels[i].Build(CountPieces(i));
 
-        // StartMatch already fired OnTurnStarted inside GamePreparation, before
-        // this coroutine could subscribe - read the opening turn directly.
+        // A local game without placement has already fired its opening
+        // OnTurnStarted by now - read the opening turn directly.
         currentPlayerId = turnController.CurrentPlayerID;
         Render();
+    }
+
+    private void Update()
+    {
+        if (turnController == null) return;
+        var gameManager = GameManager.manager;
+
+        // Turns begin after the guest has loaded and any placement is done;
+        // the match clock starts there too.
+        if (!turnsStarted && IsTurnState(gameManager.gameState))
+        {
+            turnsStarted = true;
+            matchStartTime = Time.time;
+            Render();
+        }
+        if (noticeUntil > 0 && Time.time >= noticeUntil)
+        {
+            noticeUntil = 0;
+            notice.SetActive(false);
+        }
+        if (turnsStarted && !winnerPlayerId.HasValue) RenderTurn();
+    }
+
+    private static bool IsTurnState(GameManager.GameState state)
+    {
+        return state == GameManager.GameState.WaitingForInput || state == GameManager.GameState.WaitingForEndTurn
+            || state == GameManager.GameState.ProcessingTurn || state == GameManager.GameState.TurnChanging;
+    }
+
+    // The turn pill with its countdown, and the skip button for the side
+    // whose turn it is when this screen plays that side. Every frame, since
+    // the clock moves.
+    private void RenderTurn()
+    {
+        var remaining = TurnTimeRemaining();
+        turnText.text = remaining.HasValue
+            ? Loc.Get("hud.turnTimed", ColorName(currentPlayerId), Mathf.CeilToInt(remaining.Value))
+            : Loc.Get("hud.turn", ColorName(currentPlayerId));
+        turnText.color = remaining.HasValue && remaining.Value <= clockWarningSeconds ? clockWarningColor : turnTextColor;
+
+        for (var i = 0; i < playerPanels.Length; i++)
+            playerPanels[i].skipButton.gameObject.SetActive(i == currentPlayerId && CanSkip(i));
+    }
+
+    private float? TurnTimeRemaining()
+    {
+        if (networkBridge != null && !networkBridge.IsHost) return networkBridge.GuestTurnTimeRemaining;
+        if (turnController.TurnSeconds <= 0 || !turnController.IsAwaitingShot) return null;
+        return turnController.TurnTimeRemaining;
+    }
+
+    private bool CanSkip(int playerId)
+    {
+        if (networkBridge == null) return turnController.IsAwaitingShot; // hot seat: whoever's turn it is
+        if (playerId != networkBridge.LocalPlayerId) return false;
+        return networkBridge.IsHost ? turnController.IsAwaitingShot : networkBridge.GuestCanPass;
+    }
+
+    private void OnClickSkip(int playerId)
+    {
+        if (networkBridge != null && !networkBridge.IsHost) networkBridge.RequestPass();
+        else turnController.TryPassTurn(playerId);
     }
 
     private void Subscribe(TurnController controller)
     {
         controller.OnTurnStarted += HandleTurnStarted;
         controller.OnTurnEnded += HandleTurnEnded;
+        controller.OnTurnPassed += HandleTurnPassed;
         controller.OnMatchEnded += HandleMatchEnded;
     }
 
@@ -120,6 +196,7 @@ public class MainGameUIController : MonoBehaviour
     {
         controller.OnTurnStarted -= HandleTurnStarted;
         controller.OnTurnEnded -= HandleTurnEnded;
+        controller.OnTurnPassed -= HandleTurnPassed;
         controller.OnMatchEnded -= HandleMatchEnded;
     }
 
@@ -127,6 +204,7 @@ public class MainGameUIController : MonoBehaviour
     {
         bridge.OnGuestTurnChanged += HandleGuestTurnChanged;
         bridge.OnGuestTurnEnded += HandleGuestTurnEnded;
+        bridge.OnGuestTurnPassed += ShowPassNotice;
         bridge.OnGuestMatchEnded += ShowResult;
         bridge.OnOpponentLeft += HandleOpponentLeft;
         bridge.OnOpponentReturnedToLobby += HandleOpponentReturnedToLobby;
@@ -137,6 +215,7 @@ public class MainGameUIController : MonoBehaviour
     {
         bridge.OnGuestTurnChanged -= HandleGuestTurnChanged;
         bridge.OnGuestTurnEnded -= HandleGuestTurnEnded;
+        bridge.OnGuestTurnPassed -= ShowPassNotice;
         bridge.OnGuestMatchEnded -= ShowResult;
         bridge.OnOpponentLeft -= HandleOpponentLeft;
         bridge.OnOpponentReturnedToLobby -= HandleOpponentReturnedToLobby;
@@ -156,9 +235,21 @@ public class MainGameUIController : MonoBehaviour
         Render();
     }
 
+    private void HandleTurnPassed(PlayersManager player, TurnEnd why)
+    {
+        ShowPassNotice(player.ID, why);
+    }
+
+    private void ShowPassNotice(int playerId, TurnEnd why)
+    {
+        noticeText.text = Loc.Get(why == TurnEnd.Timeout ? "hud.timeout" : "hud.skipped", ColorName(playerId));
+        notice.SetActive(true);
+        noticeUntil = Time.time + noticeSeconds;
+    }
+
     private void HandleMatchEnded(PlayersManager winner, MatchEndReason reason)
     {
-        ShowResult(winner.ID, reason);
+        ShowResult(winner != null ? winner.ID : -1, reason);
     }
 
     private void HandleGuestTurnChanged(int playerId)
@@ -201,13 +292,16 @@ public class MainGameUIController : MonoBehaviour
         var gameManager = GameManager.manager;
         if (turnController == null || gameManager == null) return;
 
-        turnPill.SetActive(!winnerPlayerId.HasValue);
-        turnText.text = Loc.Get("hud.turn", ColorName(currentPlayerId));
+        var playing = turnsStarted && !winnerPlayerId.HasValue;
+        turnPill.SetActive(playing);
         turnStone.color = currentPlayerId == 0 ? blackStoneColor : whiteStoneColor;
+        if (playing) RenderTurn();
+        else
+            foreach (var panel in playerPanels) panel.skipButton.gameObject.SetActive(false);
 
         for (var i = 0; i < playerPanels.Length && i < gameManager.playersList.Count; i++)
         {
-            var isTurn = !winnerPlayerId.HasValue && i == currentPlayerId;
+            var isTurn = playing && i == currentPlayerId;
             playerPanels[i].Render(ColorName(i), PlayerLabel(i), CountPieces(i), gameManager.playersList[i].score, isTurn);
         }
 
@@ -220,7 +314,12 @@ public class MainGameUIController : MonoBehaviour
         var loser = 1 - winner;
         var online = networkBridge != null;
 
-        if (online)
+        if (winner < 0)
+        {
+            stampText.text = Loc.Get("result.stampDraw");
+            resultTitleText.text = Loc.Get("result.draw");
+        }
+        else if (online)
         {
             // Online the result reads from this player's side of the board.
             var won = winner == networkBridge.LocalPlayerId;
@@ -235,6 +334,8 @@ public class MainGameUIController : MonoBehaviour
 
         resultReasonText.text = endReason switch
         {
+            MatchEndReason.BothOut when winner < 0 => Loc.Get("reason.bothOutDraw"),
+            MatchEndReason.BothOut when MatchSettings.Current.BothOutRule == BothOutRule.ShooterWins => Loc.Get("reason.bothOutWin", ColorName(winner)),
             MatchEndReason.BothOut => Loc.Get("reason.bothOut", ColorName(loser)),
             MatchEndReason.OpponentLeft => Loc.Get("reason.opponentLeft"),
             _ => Loc.Get("reason.knockout", ColorName(loser)),
@@ -248,7 +349,8 @@ public class MainGameUIController : MonoBehaviour
         }
         var seconds = Mathf.FloorToInt(matchEndTime - matchStartTime);
         matchTimeText.text = Loc.Get("stats.time", $"{seconds / 60}:{seconds % 60:00}");
-        seriesText.text = Loc.Get("series.score", MatchSeries.Wins(0), MatchSeries.Wins(1));
+        seriesText.text = Loc.Get("series.score", MatchSeries.Wins(0), MatchSeries.Wins(1))
+                          + (MatchSeries.Draws > 0 ? Loc.Get("series.draws", MatchSeries.Draws) : string.Empty);
 
         if (!online)
         {

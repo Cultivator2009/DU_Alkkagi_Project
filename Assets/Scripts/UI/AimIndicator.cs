@@ -7,7 +7,7 @@ using UnityEngine.UI;
 // Screen-space aiming feedback for the piece being dragged: a ring around
 // the stone that fills with power, an arrow in the shot direction, the
 // power percentage, a faint line back to the pull point, and - when the
-// match allows it (MatchOptions.AimGuide) - a dotted guide up to the first
+// match allows it (MatchSettings.AimGuide) - a dotted guide up to the first
 // stone or board edge the shot would reach. Only ever shows for this
 // machine's own drag.
 public class AimIndicator : MonoBehaviour
@@ -40,7 +40,7 @@ public class AimIndicator : MonoBehaviour
         area = (RectTransform)transform;
         canvas = GetComponentInParent<Canvas>();
         worldCamera = Camera.main;
-        guideEnabled = MatchOptions.AimGuide; // fixed for the match; the lobby can't change it mid-game
+        guideEnabled = MatchSettings.Current.AimGuide; // fixed for the match
         var boardGo = GameObject.Find("Board_GO");
         if (boardGo != null) board = boardGo.GetComponentInChildren<Collider>().bounds;
         SetVisible(false);

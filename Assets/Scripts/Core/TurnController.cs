@@ -2,15 +2,33 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
+// How a turn finished, for the HUD and the network guest.
+public enum TurnEnd : byte
+{
+    None,    // no turn has finished yet (the opening turn), or a resync
+    Shot,
+    Timeout,
+    Skipped
+}
+
 public class TurnController
 {
     public event Action<PlayersManager> OnTurnStarted;
-    public event Action<PlayersManager> OnTurnEnded;
-    public event Action<PlayersManager, MatchEndReason> OnMatchEnded;
+    public event Action<PlayersManager> OnTurnEnded;            // after a shot
+    public event Action<PlayersManager, TurnEnd> OnTurnPassed;  // timed out or skipped, nothing moved
+    public event Action<PlayersManager, MatchEndReason> OnMatchEnded; // winner null = draw
 
     public GameManager.GameState State { get; private set; } = GameManager.GameState.Mainmenu;
+    public bool HasStarted => State != GameManager.GameState.Mainmenu;
     public int CurrentPlayerID { get; private set; }
     public PieceSelector PieceSelector => pieceSelector;
+    public TurnEnd LastTurnEnd { get; private set; }
+
+    // 0 = no turn timer. The clock runs while the side to move is choosing
+    // and aiming, and stops once the stone is flicked.
+    public int TurnSeconds { get; }
+    public float TurnTimeRemaining { get; private set; }
+    public bool IsAwaitingShot => State == GameManager.GameState.WaitingForInput || State == GameManager.GameState.WaitingForEndTurn;
 
     private readonly IRuleset ruleset;
     private readonly List<PlayersManager> players;
@@ -23,23 +41,34 @@ public class TurnController
         IRuleset ruleset,
         List<PlayersManager> players,
         List<GamePieceDragAndReleaseForce> gamePieceScripts,
-        PieceSelector pieceSelector)
+        PieceSelector pieceSelector,
+        int turnSeconds)
     {
         this.ruleset = ruleset;
         this.players = players;
         this.gamePieceScripts = gamePieceScripts;
         this.pieceSelector = pieceSelector;
+        TurnSeconds = turnSeconds;
     }
 
     public void StartMatch()
     {
-        CurrentPlayerID = players[0].ID;
-        State = GameManager.GameState.WaitingForInput;
-        OnTurnStarted?.Invoke(players[0]);
+        LastTurnEnd = TurnEnd.None;
+        BeginTurn(0);
     }
 
     public void Tick()
     {
+        if (TurnSeconds > 0 && IsAwaitingShot)
+        {
+            TurnTimeRemaining -= Time.deltaTime;
+            if (TurnTimeRemaining <= 0)
+            {
+                PassTurn(TurnEnd.Timeout);
+                return;
+            }
+        }
+
         switch (State)
         {
             case GameManager.GameState.WaitingForInput:
@@ -71,6 +100,15 @@ public class TurnController
         ruleset.OnBeforeFlick(pieceManager);
         piece.ApplyFlick(force);
         State = GameManager.GameState.ProcessingTurn;
+        return true;
+    }
+
+    // The skip-turn button (or the guest's PassCommand on the host). Only for
+    // the side to move, before its stone is flicked.
+    public bool TryPassTurn(int playerId)
+    {
+        if (!IsAwaitingShot || playerId != CurrentPlayerID) return false;
+        PassTurn(TurnEnd.Skipped);
         return true;
     }
 
@@ -124,6 +162,7 @@ public class TurnController
     private void EndTurn()
     {
         var finishedPlayer = players.Find(p => p.ID == CurrentPlayerID);
+        LastTurnEnd = TurnEnd.Shot;
         OnTurnEnded?.Invoke(finishedPlayer);
 
         if (ruleset.TryGetMatchWinner(players, CurrentPlayerID, out var winner, out var reason))
@@ -133,10 +172,33 @@ public class TurnController
             return;
         }
 
+        BeginTurn(NextPlayerIndex());
+    }
+
+    // Nothing moved, so there's no winner to check: straight to the next side.
+    private void PassTurn(TurnEnd why)
+    {
+        if (selGamePiece != null)
+        {
+            // Drop a drag in progress so the release can't fire a shot.
+            selGamePiece.isDragging = false;
+            selGamePiece.isSelected = false;
+            selGamePiece.isCancelled = false;
+        }
+        var passer = players.Find(p => p.ID == CurrentPlayerID);
+        LastTurnEnd = why;
+        OnTurnPassed?.Invoke(passer, why);
+        BeginTurn(NextPlayerIndex());
+    }
+
+    private int NextPlayerIndex() => (players.FindIndex(p => p.ID == CurrentPlayerID) + 1) % players.Count;
+
+    private void BeginTurn(int playerIndex)
+    {
         selGamePiece = null;
-        var nextPlayerIndex = (players.FindIndex(p => p.ID == CurrentPlayerID) + 1) % players.Count;
-        CurrentPlayerID = players[nextPlayerIndex].ID;
+        CurrentPlayerID = players[playerIndex].ID;
+        TurnTimeRemaining = TurnSeconds;
         State = GameManager.GameState.WaitingForInput;
-        OnTurnStarted?.Invoke(players[nextPlayerIndex]);
+        OnTurnStarted?.Invoke(players[playerIndex]);
     }
 }

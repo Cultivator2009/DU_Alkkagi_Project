@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class GameManager : MonoBehaviour
@@ -8,6 +9,8 @@ public class GameManager : MonoBehaviour
     {
         Mainmenu,
         GameReadyProcess,
+        WaitingForPlayers, // online: stones spawned, waiting for the guest to load in
+        Placement,         // SpawnMode.Placement: sides placing their stones
         WaitingForInput,
         WaitingForEndTurn,
         ProcessingTurn,
@@ -23,8 +26,10 @@ public class GameManager : MonoBehaviour
 
     public GameObject[] vcams = null;
 
-    public IRuleset Ruleset { get; private set; } = new ClassicRuleset();
+    public IRuleset Ruleset { get; private set; }
     public TurnController TurnController { get; private set; }
+    public BoardSetup Board { get; private set; }
+    public PlacementPhase Placement { get; private set; }
 
     // Set by NetworkMatchBridge on a network guest: the authoritative turn
     // state machine only ever runs on the host, so a guest's local
@@ -68,8 +73,13 @@ public class GameManager : MonoBehaviour
             GamePreparation();
             return;
         }
+        if (gameState == GameState.Placement)
+        {
+            Placement.Tick(Time.deltaTime); // a guest's mirror only counts down; the host decides
+            return;
+        }
 
-        if (TurnController == null) return;
+        if (TurnController == null || !TurnController.HasStarted) return;
         if (SkipLocalTurnProcessing) return; // a network guest's state is driven by NetworkMatchBridge instead
         TurnController.Tick();
         gameState = TurnController.State;
@@ -77,6 +87,9 @@ public class GameManager : MonoBehaviour
 
     private void GamePreparation()
     {
+        var settings = MatchSettings.Current;
+        Ruleset = new ClassicRuleset(settings.BothOutRule);
+
         var playersParentOb = new GameObject("Players");
         for (var playerIndex = 0; playerIndex < totalPlayerCnt; playerIndex++)
         {
@@ -87,21 +100,65 @@ public class GameManager : MonoBehaviour
             playersList.Add(playersObComp);
         }
 
-        var gamePieceGOs = GameObject.FindGameObjectsWithTag("GamePiece_GO");
-        foreach (var gamePieceGO in gamePieceGOs)
+        // Host and guest spawn from the same settings, so both boards get the
+        // same stones with the same ids.
+        Board = FindObjectOfType<BoardSetup>();
+        foreach (var gamePieceScript in Board.Spawn(settings))
         {
-            var gamePieceScript = gamePieceGO.GetComponent<GamePieceDragAndReleaseForce>();
-            if (gamePieceScript == null) continue;
             gamePieceScripts.Add(gamePieceScript);
-
-            var pieceManager = gamePieceGO.GetComponent<GamePieceManager>();
+            var pieceManager = gamePieceScript.GetComponent<GamePieceManager>();
             var owner = playersList.Find(p => p.ID == pieceManager.playerIndex);
             if (owner != null) owner.totalPieceCnt++;
         }
 
         vcams = GameObject.FindGameObjectsWithTag("vcam");
 
-        TurnController = new TurnController(Ruleset, playersList, gamePieceScripts, new PieceSelector(gamePieceScripts));
+        TurnController = new TurnController(Ruleset, playersList, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds);
+        gameState = GameState.WaitingForPlayers;
+        // Online, NetworkMatchBridge calls BeginMatch once the guest is in.
+        if (!IsOnlineMatch) BeginMatch(hotSeat: true);
+    }
+
+    private static bool IsOnlineMatch => SteamLobbyManager.Instance != null && SteamLobbyManager.Instance.CurrentLobby.HasValue;
+
+    // Placement first if the rules ask for it, then the first turn. Runs on
+    // the authority only: the local game, or the network host.
+    public void BeginMatch(bool hotSeat)
+    {
+        if (MatchSettings.Current.SpawnMode != SpawnMode.Placement)
+        {
+            StartTurns();
+            return;
+        }
+        StartPlacement(hotSeat, authority: true);
+        Placement.OnFinished += () =>
+        {
+            Board.EndPlacement(Placement, gamePieceScripts, restorePhysics: true);
+            StartTurns();
+        };
+    }
+
+    // A network guest's copy of the host's placement phase.
+    public void BeginGuestPlacement()
+    {
+        StartPlacement(hotSeat: false, authority: false);
+        Placement.OnFinished += () =>
+        {
+            Board.EndPlacement(Placement, gamePieceScripts, restorePhysics: false);
+            gameState = GameState.WaitingForInput; // the host's opening TurnResult follows
+        };
+    }
+
+    private void StartPlacement(bool hotSeat, bool authority)
+    {
+        var pieces = gamePieceScripts.Select(p => p.GetComponent<GamePieceManager>());
+        Placement = new PlacementPhase(Board, pieces, playersList.Count, MatchSettings.Current, hotSeat, authority);
+        Board.BeginPlacement(gamePieceScripts);
+        gameState = GameState.Placement;
+    }
+
+    private void StartTurns()
+    {
         TurnController.StartMatch();
         gameState = TurnController.State;
     }
@@ -118,6 +175,8 @@ public class GameManager : MonoBehaviour
     public void EndMatch()
     {
         TurnController = null;
+        Placement = null;
+        Board = null;
         playersList.Clear();
         gamePieceScripts.Clear();
         vcams = null;

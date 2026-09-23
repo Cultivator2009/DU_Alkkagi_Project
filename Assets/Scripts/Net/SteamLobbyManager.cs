@@ -10,6 +10,7 @@ using UnityEngine.SceneManagement;
 public class SteamLobbyManager : MonoBehaviour
 {
     private const int MaxMembers = 2;
+    private const string RulePrefix = "rule."; // lobby data keys of the match rules
 
     public static SteamLobbyManager Instance { get; private set; }
 
@@ -75,22 +76,29 @@ public class SteamLobbyManager : MonoBehaviour
             return;
         }
         result.Value.SetJoinable(true);
-        // The host's own settings become the lobby's match options.
-        result.Value.SetData(MatchOptions.AimGuideLobbyKey, MatchOptions.LocalAimGuide ? "1" : "0");
+        // The host's last-used rules are where the lobby starts.
+        WriteSettings(result.Value, MatchSettings.LoadPrefs());
     }
 
-    // Match options live in lobby data: only the owner may write them,
-    // every member reads the same values.
-    public void SetLobbyOption(string key, bool value)
+    // Match rules live in lobby data: only the owner may write them, every
+    // member reads the same values. What a match actually uses is the copy
+    // the host sends with LoadGameScene, so a late data update can't split
+    // the two sides.
+    public void SetLobbySettings(MatchSettings settings)
     {
-        if (IsHost) CurrentLobby.Value.SetData(key, value ? "1" : "0");
+        if (IsHost) WriteSettings(CurrentLobby.Value, settings);
     }
 
-    public bool GetLobbyOption(string key, bool fallback)
+    public MatchSettings ReadLobbySettings()
     {
-        if (!CurrentLobby.HasValue) return fallback;
-        var value = CurrentLobby.Value.GetData(key);
-        return string.IsNullOrEmpty(value) ? fallback : value == "1";
+        if (!CurrentLobby.HasValue) return new MatchSettings();
+        var lobby = CurrentLobby.Value;
+        return MatchSettings.FromPairs(key => lobby.GetData(RulePrefix + key));
+    }
+
+    private static void WriteSettings(Lobby lobby, MatchSettings settings)
+    {
+        foreach (var pair in settings.ToPairs()) lobby.SetData(RulePrefix + pair.Key, pair.Value);
     }
 
     private void HandleLobbyDataChanged(Lobby lobby)

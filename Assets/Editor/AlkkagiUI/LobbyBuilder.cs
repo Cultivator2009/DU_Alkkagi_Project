@@ -16,7 +16,9 @@ namespace AlkkagiUIEditor
         private const string ScenePath = "Assets/Scenes/LobbyScene.unity";
         private const string OldBootstrapName = "LobbyBootstrap";
 
-        private static readonly Vector2 CardSize = new Vector2(1000, 820);
+        private static readonly Vector2 CardSize = new Vector2(1000, 740);
+        private static readonly Vector2 RulesCardSize = new Vector2(600, 740);
+        private const float CardGap = 32;
         private const float Pad = 64;
 
         [MenuItem("Tools/Alkkagi UI/4. Build lobby")]
@@ -41,6 +43,9 @@ namespace AlkkagiUIEditor
             var card = UIKit.Panel(root, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, CardSize);
             var c = card.transform;
+            ui.card = card.rectTransform;
+            // In the lobby the rules card sits to the right; shift the pair back to center.
+            ui.lobbyCardShift = -(RulesCardSize.x + CardGap) / 2;
 
             UIKit.Label(c, "Title", "lobby.title", 48, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
                 .rectTransform.Place(TopLeft, new Vector2(Pad, -52), new Vector2(360, 72));
@@ -101,21 +106,35 @@ namespace AlkkagiUIEditor
             // Toggled between Copy/Copied by LobbySceneUI, so no static binding.
             Object.DestroyImmediate(ui.copyLabel.GetComponent<LocalizedText>());
 
-            // Match option: the host sets it here, the guest sees it read-only.
-            UIKit.Label(view, "AimGuideLabel", "settings.aimGuide", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
-                .rectTransform.Place(TopLeft, new Vector2(Pad, -312), new Vector2(400, 60));
-            ui.aimGuideToggle = UIKit.OnOffToggle(view, "AimGuideToggle", 60);
-            ui.aimGuideToggle.GetComponent<RectTransform>().Place(TopRight, new Vector2(-Pad, -312), new Vector2(236, 60));
-
-            ui.hostSlot = Slot(view, "HostSlot", TopLeft, new Vector2(Pad, -396), true, "Host", "lobby.host");
-            ui.guestSlot = Slot(view, "GuestSlot", TopRight, new Vector2(-Pad, -396), false, "Guest", "lobby.guest");
+            ui.hostSlot = Slot(view, "HostSlot", TopLeft, new Vector2(Pad, -318), true, "Host", "lobby.host");
+            ui.guestSlot = Slot(view, "GuestSlot", TopRight, new Vector2(-Pad, -318), false, "Guest", "lobby.guest");
 
             ui.leaveButton = UIKit.CapsuleButton(view, "LeaveButton", "lobby.leave", new Vector2(264, 92), false, 32);
             ui.leaveButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(Pad, 56), new Vector2(264, 92));
             ui.startButton = UIKit.CapsuleButton(view, "StartButton", "lobby.start", new Vector2(312, 92), true, 32);
             ui.startButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-Pad, 56), new Vector2(312, 92));
 
+            BuildRulesCard(view, ui);
             view.gameObject.SetActive(false);
+        }
+
+        // The match rules, beside the main card: the host edits them, the
+        // guest sees them read-only.
+        private static void BuildRulesCard(Transform lobbyView, LobbySceneUI ui)
+        {
+            const float pad = 48, rowHeight = 56, gap = 8;
+            var card = UIKit.Panel(lobbyView, "RulesCard", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            card.rectTransform.Place(new Vector2(1, 0.5f), new Vector2(CardGap, 0), RulesCardSize, new Vector2(0, 0.5f));
+            var c = card.transform;
+
+            UIKit.Label(c, "Title", "match.title", 40, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(TopLeft, new Vector2(pad, -52), new Vector2(RulesCardSize.x - pad * 2, 72));
+            ui.rulesPanel = UIKit.RulesPanel(c, "Rules", RulesCardSize.x - pad * 2, rowHeight, gap, 24);
+            var rules = ui.rulesPanel.GetComponent<RectTransform>();
+            rules.Place(TopLeft, new Vector2(pad, -148), rules.sizeDelta);
+
+            ui.rulesCaption = UIKit.Text(c, "Caption", Loc.Get("lobby.rulesHost"), 22, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft);
+            ui.rulesCaption.rectTransform.Place(new Vector2(0, 0), new Vector2(pad, 44), new Vector2(RulesCardSize.x - pad * 2, 36));
         }
 
         // A seat card: filled (stone, Steam name, role) or empty (dashed

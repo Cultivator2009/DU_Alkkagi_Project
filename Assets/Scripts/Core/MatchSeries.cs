@@ -6,7 +6,8 @@ public static class MatchSeries
     private static readonly int[] wins = new int[2];
 
     public static string Key { get; private set; }
-    public static int Played => wins[0] + wins[1];
+    public static int Draws { get; private set; }
+    public static int Played => wins[0] + wins[1] + Draws;
 
     public static int Wins(int playerId) => wins[playerId];
 
@@ -15,17 +16,25 @@ public static class MatchSeries
     {
         if (key == Key) return;
         Key = key;
-        wins[0] = wins[1] = 0;
+        Clear();
     }
 
     public static void Reset()
     {
         Key = null;
-        wins[0] = wins[1] = 0;
+        Clear();
     }
 
+    // winnerId -1 records a draw.
     public static void Record(int winnerId)
     {
         if (winnerId == 0 || winnerId == 1) wins[winnerId]++;
+        else if (winnerId == -1) Draws++;
+    }
+
+    private static void Clear()
+    {
+        wins[0] = wins[1] = 0;
+        Draws = 0;
     }
 }

@@ -457,20 +457,58 @@ namespace AlkkagiUIEditor
             return (button, highlight, label);
         }
 
-        // 켜기 | 끄기 switch for a bool match option.
-        public static BoolToggle OnOffToggle(Transform parent, string name, float height)
+        // Every match rule (MatchSettings.Defs) as a "label  ◀ value ▶" row,
+        // top to bottom inside a width-wide column. Rows bind by setting id, so
+        // a new rule only needs a rebuild to show up.
+        public static MatchSettingsPanel RulesPanel(Transform parent, string name, float width, float rowHeight, float gap, float labelSize)
         {
-            var frame = Capsule(parent, name, height, Theme.Hanji, Theme.Ink);
-            frame.gameObject.AddComponent<CanvasGroup>();
-            var toggle = frame.gameObject.AddComponent<BoolToggle>();
-            toggle.selectedTextColor = Theme.Hanji;
-            toggle.idleTextColor = Theme.Ink;
-            var on = Segment(frame.transform, "On", null, "option.on", 0f, height);
-            var off = Segment(frame.transform, "Off", null, "option.off", 0.5f, height);
-            (toggle.onButton, toggle.onHighlight, toggle.onLabel) = on;
-            (toggle.offButton, toggle.offHighlight, toggle.offLabel) = off;
-            ShowSelected(on, off);
-            return toggle;
+            var root = Node(name, parent);
+            root.sizeDelta = new Vector2(width, MatchSettings.Defs.Length * (rowHeight + gap) - gap);
+            var panel = root.gameObject.AddComponent<MatchSettingsPanel>();
+            var stepperWidth = Mathf.Min(360, width * 0.55f);
+            var topLeft = new Vector2(0, 1);
+
+            var rows = new List<MatchSettingRow>();
+            for (var i = 0; i < MatchSettings.Defs.Length; i++)
+            {
+                var def = MatchSettings.Defs[i];
+                var rowRect = Node(def.Key, root).Place(topLeft, new Vector2(0, -i * (rowHeight + gap)), new Vector2(width, rowHeight));
+                var row = rowRect.gameObject.AddComponent<MatchSettingRow>();
+                row.settingId = def.Id;
+                row.canvasGroup = rowRect.gameObject.AddComponent<CanvasGroup>();
+
+                Label(rowRect, "Label", def.LabelKey, labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                    .rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(width - stepperWidth - 16, rowHeight), new Vector2(0, 0.5f));
+
+                var frame = Capsule(rowRect, "Stepper", rowHeight, Theme.HanjiField, Theme.FieldBorder);
+                frame.rectTransform.Place(new Vector2(1, 0.5f), Vector2.zero, new Vector2(stepperWidth, rowHeight), new Vector2(1, 0.5f));
+                row.valueText = Text(frame.transform, "Value", def.Format(def.Default), labelSize, true, Theme.Ink, TextAlignmentOptions.Center);
+                row.valueText.rectTransform.Stretch();
+                row.valueText.rectTransform.offsetMin = new Vector2(rowHeight, 0);
+                row.valueText.rectTransform.offsetMax = new Vector2(-rowHeight, 0);
+                row.previousButton = Arrow(frame.transform, "Previous", rowHeight, false);
+                row.nextButton = Arrow(frame.transform, "Next", rowHeight, true);
+                rows.Add(row);
+            }
+            panel.rows = rows.ToArray();
+            return panel;
+        }
+
+        // A square hit area at one end of a stepper with a small triangle
+        // pointing outward. The triangle is child 0: MatchSettingRow fades it
+        // at the end of the list.
+        private static Button Arrow(Transform frame, string name, float size, bool right)
+        {
+            var hit = Node(name, frame).Place(new Vector2(right ? 1 : 0, 0.5f), Vector2.zero, new Vector2(size, size), new Vector2(right ? 1 : 0, 0.5f));
+            var glyph = Image(hit, "Glyph", Triangle, Theme.Ink);
+            glyph.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(size * 0.34f, size * 0.3f));
+            glyph.rectTransform.localRotation = Quaternion.Euler(0, 0, right ? -90 : 90);
+            var target = hit.gameObject.AddComponent<Image>();
+            target.color = Color.clear;
+            var button = hit.gameObject.AddComponent<Button>();
+            button.targetGraphic = target;
+            button.transition = Selectable.Transition.None;
+            return button;
         }
 
         // Bakes a resting "left side selected" look into the prefab. The

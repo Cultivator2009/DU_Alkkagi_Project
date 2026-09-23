@@ -14,7 +14,11 @@ public class MainMenuUI : MonoBehaviour
     public Button quitButton;
     public GameObject settingsPanel;
     public Button settingsCloseButton;
-    public BoolToggle aimGuideToggle; // local matches; online the lobby host decides
+    // Local match setup: the same rules an online host sets in the lobby.
+    public GameObject setupPanel;
+    public MatchSettingsPanel setupRules;
+    public Button setupStartButton;
+    public Button setupCancelButton;
     public GameObject steamUserRow;
     public TMP_Text steamUserText;
 
@@ -24,16 +28,25 @@ public class MainMenuUI : MonoBehaviour
 
         localButton.onClick.AddListener(() =>
         {
-            MatchSeries.Reset(); // a fresh local session; rematches from the game-over screen keep counting
-            SceneManager.LoadScene("GameScene");
+            setupRules.Show(MatchSettings.LoadPrefs(), true);
+            setupPanel.SetActive(true);
         });
+        setupStartButton.onClick.AddListener(StartLocalMatch);
+        setupCancelButton.onClick.AddListener(() => setupPanel.SetActive(false));
         onlineButton.onClick.AddListener(() => SceneManager.LoadScene("LobbyScene"));
         settingsButton.onClick.AddListener(() => settingsPanel.SetActive(true));
         settingsCloseButton.onClick.AddListener(() => settingsPanel.SetActive(false));
         quitButton.onClick.AddListener(Quit);
-        aimGuideToggle.SetValue(MatchOptions.LocalAimGuide);
-        aimGuideToggle.OnChanged += value => MatchOptions.LocalAimGuide = value;
         settingsPanel.SetActive(false);
+        setupPanel.SetActive(false);
+    }
+
+    private void StartLocalMatch()
+    {
+        MatchSettings.Current = setupRules.Settings;
+        MatchSettings.Current.SavePrefs();
+        MatchSeries.Reset(); // a fresh local session; rematches from the game-over screen keep counting
+        SceneManager.LoadScene("GameScene");
     }
 
     private void Start()

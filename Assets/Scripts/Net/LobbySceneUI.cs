@@ -19,6 +19,9 @@ public class LobbySceneUI : MonoBehaviour
     public Button joinButton;
     public Button backButton;
 
+    public RectTransform card;
+    public float lobbyCardShift; // moves the main card left in the lobby, making room for the rules card
+
     [Header("In lobby")]
     public GameObject lobbyView;
     public TMP_Text lobbyCodeText;
@@ -26,7 +29,8 @@ public class LobbySceneUI : MonoBehaviour
     public TMP_Text copyLabel;
     public LobbyPlayerSlot hostSlot;
     public LobbyPlayerSlot guestSlot;
-    public BoolToggle aimGuideToggle; // host sets it, the guest sees it read-only
+    public MatchSettingsPanel rulesPanel; // host edits, the guest sees it read-only
+    public TMP_Text rulesCaption;
     public Button leaveButton;
     public Button startButton;
 
@@ -56,7 +60,7 @@ public class LobbySceneUI : MonoBehaviour
         guestSlot.inviteButton.onClick.AddListener(() => lobbyManager.InviteFriends());
         leaveButton.onClick.AddListener(OnClickLeave);
         startButton.onClick.AddListener(OnClickStartMatch);
-        aimGuideToggle.OnChanged += value => lobbyManager.SetLobbyOption(MatchOptions.AimGuideLobbyKey, value);
+        rulesPanel.OnChanged += OnRulesChanged;
     }
 
     private void Start()
@@ -142,9 +146,17 @@ public class LobbySceneUI : MonoBehaviour
         Render();
     }
 
+    private void OnRulesChanged(MatchSettings settings)
+    {
+        lobbyManager.SetLobbySettings(settings);
+        settings.SavePrefs(); // the next lobby this player hosts starts from these
+    }
+
+    // The rules go out with the scene change; the guest plays exactly these.
     private void OnClickStartMatch()
     {
-        SteamTransport.Instance.Broadcast(NetMessage.WriteLoadGameScene());
+        MatchSettings.Current = lobbyManager.ReadLobbySettings();
+        SteamTransport.Instance.Broadcast(NetMessage.WriteLoadGameScene(MatchSettings.Current));
         SceneManager.LoadScene("GameScene");
     }
 
@@ -169,7 +181,9 @@ public class LobbySceneUI : MonoBehaviour
 
     private void HandleNetworkMessage(ulong senderId, byte[] data)
     {
-        if (NetMessage.PeekType(data) == NetMessageType.LoadGameScene) SceneManager.LoadScene("GameScene");
+        if (NetMessage.PeekType(data) != NetMessageType.LoadGameScene) return;
+        MatchSettings.Current = NetMessage.ReadLoadGameScene(data);
+        SceneManager.LoadScene("GameScene");
     }
 
     // ---- Rendering ----
@@ -180,6 +194,7 @@ public class LobbySceneUI : MonoBehaviour
         var inLobby = lobbyManager != null && lobbyManager.CurrentLobby.HasValue;
         idleView.SetActive(!inLobby);
         lobbyView.SetActive(inLobby);
+        card.anchoredPosition = new Vector2(inLobby ? lobbyCardShift : 0, 0);
 
         if (!steamReady)
         {
@@ -211,8 +226,8 @@ public class LobbySceneUI : MonoBehaviour
         if (members.Count > 1) guestSlot.ShowPlayer(guest.Name, $"{Loc.Get("lobby.guest")} · {Loc.Get("player.white")}");
         else guestSlot.ShowEmpty(lobbyManager.IsHost);
 
-        aimGuideToggle.SetValue(lobbyManager.GetLobbyOption(MatchOptions.AimGuideLobbyKey, true));
-        aimGuideToggle.SetInteractable(lobbyManager.IsHost);
+        rulesPanel.Show(lobbyManager.ReadLobbySettings(), lobbyManager.IsHost);
+        rulesCaption.text = Loc.Get(lobbyManager.IsHost ? "lobby.rulesHost" : "lobby.rulesGuest");
 
         var full = members.Count >= 2;
         startButton.gameObject.SetActive(lobbyManager.IsHost);

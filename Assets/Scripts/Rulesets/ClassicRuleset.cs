@@ -2,6 +2,13 @@ using System.Collections.Generic;
 
 public class ClassicRuleset : IRuleset
 {
+    private readonly BothOutRule bothOutRule;
+
+    public ClassicRuleset(BothOutRule bothOutRule)
+    {
+        this.bothOutRule = bothOutRule;
+    }
+
     public void OnBeforeFlick(GamePieceManager piece)
     {
         // Classic Alkkagi has no pre-flick action. Item modes hook in here.
@@ -35,11 +42,16 @@ public class ClassicRuleset : IRuleset
         }
         if (remainingCount == 0)
         {
-            // Both last stones went out on the same flick. Without this the
-            // match had no winner and the next player had nothing to move.
-            winner = players.Find(p => p.ID != shooterId);
+            // Both last stones went out on the same flick; the lobby decides
+            // who that favours. A null winner is a draw.
             reason = MatchEndReason.BothOut;
-            return winner != null;
+            winner = bothOutRule switch
+            {
+                BothOutRule.ShooterWins => players.Find(p => p.ID == shooterId),
+                BothOutRule.Draw => null,
+                _ => players.Find(p => p.ID != shooterId),
+            };
+            return true;
         }
         return false;
     }

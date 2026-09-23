@@ -1,10 +1,11 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 // One player's side panel in the in-game HUD. Stone icons are spawned from
 // an inactive template at match start, because the per-player piece count
-// comes from the scene rather than being fixed in the prefab.
+// is a match rule rather than fixed in the prefab.
 public class PlayerHudPanel : MonoBehaviour
 {
     public TMP_Text nameText;
@@ -15,7 +16,9 @@ public class PlayerHudPanel : MonoBehaviour
     public CanvasGroup canvasGroup;
     public Transform stoneRow;
     public GameObject stoneTemplate; // children: "Fill", "Ring" (alive) and "Lost" (dashed ring)
+    public Button skipButton;        // shown on this side's own turn, on the screen that plays it
     [Range(0f, 1f)] public float idleAlpha = 0.8f;
+    public float minStoneSpacing = 4f;
 
     private readonly List<GameObject> stones = new List<GameObject>();
 
@@ -25,9 +28,23 @@ public class PlayerHudPanel : MonoBehaviour
         stones.Clear();
 
         stoneTemplate.SetActive(false);
+        // Up to 12 stones a side: shrink the icons (and the gaps) to fit the row.
+        var layout = stoneRow.GetComponent<HorizontalLayoutGroup>();
+        var width = ((RectTransform)stoneRow).rect.width;
+        var fullSize = ((RectTransform)stoneTemplate.transform).sizeDelta.x;
+        var spacing = layout.spacing;
+        var size = fullSize;
+        if (stoneCount * fullSize + (stoneCount - 1) * spacing > width)
+        {
+            spacing = minStoneSpacing;
+            size = Mathf.Min(fullSize, (width - (stoneCount - 1) * spacing) / stoneCount);
+        }
+        layout.spacing = spacing;
+
         for (var i = 0; i < stoneCount; i++)
         {
             var stone = Instantiate(stoneTemplate, stoneRow);
+            ((RectTransform)stone.transform).sizeDelta = new Vector2(size, size);
             stone.SetActive(true);
             stones.Add(stone);
         }

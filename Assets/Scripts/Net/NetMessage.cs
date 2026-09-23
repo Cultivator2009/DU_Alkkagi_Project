@@ -11,7 +11,11 @@ public enum NetMessageType : byte
     ClientReady = 5,
     LoadGameScene = 6,
     RematchRequest = 7,
-    ReturnToLobby = 8
+    ReturnToLobby = 8,
+    PassCommand = 9,     // guest -> host: skip my turn
+    PlacementState = 10, // host -> guest: the placement phase as the guest may see it
+    PlaceRequest = 11,   // guest -> host: put/move one of my stones
+    PlacementReady = 12  // guest -> host: my stones are final
 }
 
 public struct PieceOwnerEntry
@@ -110,12 +114,15 @@ public static class NetMessage
     // Carries the settled position of every piece still in play, so the
     // guest converges on the host's board every turn even if some of the
     // unreliable mid-turn snapshots were dropped.
-    public static byte[] WriteTurnResult(int nextPlayerId, bool matchOver, int winnerPlayerId, MatchEndReason reason, IReadOnlyList<RemovedPieceEntry> removed, IReadOnlyList<PieceTransform> finalTransforms)
+    // turnEnd: how the turn that just finished ended (None for the opening
+    // turn and for a resync after a rejected command).
+    public static byte[] WriteTurnResult(int nextPlayerId, TurnEnd turnEnd, bool matchOver, int winnerPlayerId, MatchEndReason reason, IReadOnlyList<RemovedPieceEntry> removed, IReadOnlyList<PieceTransform> finalTransforms)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
         writer.Write((byte)NetMessageType.TurnResult);
         writer.Write(nextPlayerId);
+        writer.Write((byte)turnEnd);
         writer.Write(matchOver);
         writer.Write(winnerPlayerId);
         writer.Write((byte)reason);
@@ -129,12 +136,13 @@ public static class NetMessage
         return stream.ToArray();
     }
 
-    public static (int nextPlayerId, bool matchOver, int winnerPlayerId, MatchEndReason reason, List<RemovedPieceEntry> removed, List<PieceTransform> finalTransforms) ReadTurnResult(byte[] data)
+    public static (int nextPlayerId, TurnEnd turnEnd, bool matchOver, int winnerPlayerId, MatchEndReason reason, List<RemovedPieceEntry> removed, List<PieceTransform> finalTransforms) ReadTurnResult(byte[] data)
     {
         using var stream = new MemoryStream(data);
         using var reader = new BinaryReader(stream);
         reader.ReadByte();
         var nextPlayerId = reader.ReadInt32();
+        var turnEnd = (TurnEnd)reader.ReadByte();
         var matchOver = reader.ReadBoolean();
         var winnerPlayerId = reader.ReadInt32();
         var reason = (MatchEndReason)reader.ReadByte();
@@ -144,7 +152,7 @@ public static class NetMessage
         {
             removed.Add(new RemovedPieceEntry { PieceId = reader.ReadChar(), ScoredForPlayerId = reader.ReadInt32() });
         }
-        return (nextPlayerId, matchOver, winnerPlayerId, reason, removed, ReadTransforms(reader));
+        return (nextPlayerId, turnEnd, matchOver, winnerPlayerId, reason, removed, ReadTransforms(reader));
     }
 
     private static void WriteTransforms(BinaryWriter writer, IReadOnlyList<PieceTransform> transforms)
@@ -177,9 +185,93 @@ public static class NetMessage
         return transforms;
     }
 
+    // The host's rules travel with the scene change, so both sides spawn and
+    // play the same match whatever state their copy of the lobby data is in.
+    public static byte[] WriteLoadGameScene(MatchSettings settings)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write((byte)NetMessageType.LoadGameScene);
+        settings.Write(writer);
+        return stream.ToArray();
+    }
+
+    public static MatchSettings ReadLoadGameScene(byte[] data)
+    {
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+        reader.ReadByte();
+        return MatchSettings.Read(reader);
+    }
+
+    public static byte[] WritePlacementState(PlacementSnapshot state)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write((byte)NetMessageType.PlacementState);
+        writer.Write(state.Placer);
+        writer.Write(state.Done);
+        writer.Write(state.Clocks.Length);
+        for (var i = 0; i < state.Clocks.Length; i++)
+        {
+            writer.Write(state.Clocks[i]);
+            writer.Write(state.Ready[i]);
+        }
+        writer.Write(state.Stones.Count);
+        foreach (var stone in state.Stones)
+        {
+            writer.Write(stone.PieceId);
+            writer.Write(stone.X);
+            writer.Write(stone.Z);
+        }
+        return stream.ToArray();
+    }
+
+    public static PlacementSnapshot ReadPlacementState(byte[] data)
+    {
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+        reader.ReadByte();
+        var state = new PlacementSnapshot { Placer = reader.ReadInt32(), Done = reader.ReadBoolean() };
+        var players = reader.ReadInt32();
+        state.Clocks = new float[players];
+        state.Ready = new bool[players];
+        for (var i = 0; i < players; i++)
+        {
+            state.Clocks[i] = reader.ReadSingle();
+            state.Ready[i] = reader.ReadBoolean();
+        }
+        var count = reader.ReadInt32();
+        state.Stones = new List<PlacedStone>(count);
+        for (var i = 0; i < count; i++)
+            state.Stones.Add(new PlacedStone { PieceId = reader.ReadChar(), X = reader.ReadSingle(), Z = reader.ReadSingle() });
+        return state;
+    }
+
+    public static byte[] WritePlaceRequest(char pieceId, Vector3 position)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write((byte)NetMessageType.PlaceRequest);
+        writer.Write(pieceId);
+        writer.Write(position.x);
+        writer.Write(position.z);
+        return stream.ToArray();
+    }
+
+    public static (char pieceId, float x, float z) ReadPlaceRequest(byte[] data)
+    {
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream);
+        reader.ReadByte();
+        return (reader.ReadChar(), reader.ReadSingle(), reader.ReadSingle());
+    }
+
     public static byte[] WriteClientReady() => new[] { (byte)NetMessageType.ClientReady };
 
-    public static byte[] WriteLoadGameScene() => new[] { (byte)NetMessageType.LoadGameScene };
+    public static byte[] WritePassCommand() => new[] { (byte)NetMessageType.PassCommand };
+
+    public static byte[] WritePlacementReady() => new[] { (byte)NetMessageType.PlacementReady };
 
     public static byte[] WriteRematchRequest() => new[] { (byte)NetMessageType.RematchRequest };
 

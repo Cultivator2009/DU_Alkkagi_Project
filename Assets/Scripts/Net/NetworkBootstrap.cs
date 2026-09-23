@@ -3,8 +3,9 @@ using UnityEngine.SceneManagement;
 
 // Auto-spawns NetworkMatchBridge when GameScene loads into an active Steam
 // lobby, so nothing needs to be hand-placed in GameScene.unity. Local
-// single-player play (no lobby) never triggers this - GameManager and the
-// rest of the local core stay completely unaware of networking.
+// single-player play (no lobby) never triggers this. The local core stays
+// unaware of networking; GameManager only checks for a lobby to leave the
+// match start to the bridge.
 public static class NetworkBootstrap
 {
     [RuntimeInitializeOnLoadMethod]
