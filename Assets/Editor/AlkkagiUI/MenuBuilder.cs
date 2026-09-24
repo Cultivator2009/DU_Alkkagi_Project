@@ -109,8 +109,8 @@ namespace AlkkagiUIEditor
             return toggle;
         }
 
-        // Language, sound and controls. SettingsPanel keeps each control and
-        // its saved value in step.
+        // Language, janggi letters, sound and controls. SettingsPanel keeps
+        // each control and its saved value in step.
         private static void BuildSettingsPanel(Transform root, MainMenuUI menu)
         {
             const float width = 780, pad = 64, rowHeight = 60;
@@ -120,7 +120,7 @@ namespace AlkkagiUIEditor
             var panel = overlay.gameObject.AddComponent<SettingsPanel>();
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
-            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 800));
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 880));
             var c = card.transform;
             var topLeft = new Vector2(0, 1);
             var topRight = new Vector2(1, 1);
@@ -142,8 +142,11 @@ namespace AlkkagiUIEditor
             RowLabel("LanguageLabel", "settings.language", -136);
             BuildLanguageToggle(c, "LanguageToggle").GetComponent<RectTransform>()
                 .Place(topRight, new Vector2(-pad, -130), new Vector2(236, 72));
+            RowLabel("LettersLabel", "settings.janggiLetters", -216);
+            panel.janggiLetters = UIKit.SegmentedToggle(c, "LettersToggle", new[] { "settings.hangul", "settings.hanja" }, 72);
+            panel.janggiLetters.GetComponent<RectTransform>().Place(topRight, new Vector2(-pad, -210), new Vector2(236, 72));
 
-            Section("Sound", "settings.sound", -232);
+            Section("Sound", "settings.sound", -312);
             (Slider, TMP_Text) VolumeRow(string name, string key, float y)
             {
                 RowLabel(name + "Label", key, y);
@@ -153,15 +156,15 @@ namespace AlkkagiUIEditor
                 value.rectTransform.Place(topRight, new Vector2(-pad, y), new Vector2(84, rowHeight));
                 return (slider, value);
             }
-            (panel.masterSlider, panel.masterValue) = VolumeRow("Master", "settings.masterVolume", -286);
-            (panel.interfaceSlider, panel.interfaceValue) = VolumeRow("Interface", "settings.interfaceVolume", -356);
+            (panel.masterSlider, panel.masterValue) = VolumeRow("Master", "settings.masterVolume", -366);
+            (panel.interfaceSlider, panel.interfaceValue) = VolumeRow("Interface", "settings.interfaceVolume", -436);
 
-            Section("Controls", "settings.controls", -444);
+            Section("Controls", "settings.controls", -524);
             var rows = new System.Collections.Generic.List<KeyBindRow>();
             var actions = (GameAction[])System.Enum.GetValues(typeof(GameAction));
             for (var i = 0; i < actions.Length; i++)
             {
-                var y = -498 - i * 76;
+                var y = -578 - i * 76;
                 RowLabel("Bind" + actions[i] + "Label", "bind." + actions[i], y);
                 var button = UIKit.CapsuleButton(c, "Bind" + actions[i], "settings.reset", new Vector2(300, rowHeight), false, 24);
                 button.GetComponent<RectTransform>().Place(topRight, new Vector2(-pad, y), new Vector2(300, rowHeight));

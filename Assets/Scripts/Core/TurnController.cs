@@ -23,6 +23,7 @@ public class TurnController
     public int CurrentPlayerID { get; private set; }
     public PieceSelector PieceSelector => pieceSelector;
     public TurnEnd LastTurnEnd { get; private set; }
+    public KillLog Kills { get; }
 
     // 0 = no turn timer. The clock runs while the side to move is choosing
     // and aiming, and stops once the stone is flicked.
@@ -49,6 +50,7 @@ public class TurnController
         this.gamePieceScripts = gamePieceScripts;
         this.pieceSelector = pieceSelector;
         TurnSeconds = turnSeconds;
+        Kills = new KillLog(players.Count);
     }
 
     public void StartMatch()
@@ -98,6 +100,7 @@ public class TurnController
         if (selGamePiece != null) selGamePiece.isCancelled = false;
         selGamePiece = piece;
         ruleset.OnBeforeFlick(pieceManager);
+        Kills.BeginShot(CurrentPlayerID, pieceManager.pieceID);
         piece.ApplyFlick(force);
         State = GameManager.GameState.ProcessingTurn;
         return true;
@@ -138,7 +141,9 @@ public class TurnController
         }
         else if (!selGamePiece.isDragging)
         {
-            ruleset.OnBeforeFlick(selGamePiece.GetComponent<GamePieceManager>());
+            var pieceManager = selGamePiece.GetComponent<GamePieceManager>();
+            ruleset.OnBeforeFlick(pieceManager);
+            Kills.BeginShot(CurrentPlayerID, pieceManager.pieceID);
             State = GameManager.GameState.ProcessingTurn;
         }
     }
@@ -163,6 +168,7 @@ public class TurnController
     {
         var finishedPlayer = players.Find(p => p.ID == CurrentPlayerID);
         LastTurnEnd = TurnEnd.Shot;
+        Kills.EndShot();
         OnTurnEnded?.Invoke(finishedPlayer);
 
         if (ruleset.TryGetMatchWinner(players, CurrentPlayerID, out var winner, out var reason))

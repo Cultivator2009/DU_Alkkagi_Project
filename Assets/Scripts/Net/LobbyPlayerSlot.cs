@@ -11,6 +11,7 @@ public class LobbyPlayerSlot : MonoBehaviour
     public TMP_Text roleText;
     public GameObject emptyView;
     public Button inviteButton;
+    public Button kickButton; // guest seat only; LobbySceneUI shows it to the host
 
     public void ShowPlayer(string playerName, string role)
     {

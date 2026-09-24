@@ -248,7 +248,8 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         var removed = ComputeRemovedSinceTurnStart();
         var turnEnd = gameManager.TurnController.LastTurnEnd;
-        transport.Broadcast(NetMessage.WriteTurnResult(player.ID, turnEnd, false, -1, MatchEndReason.Knockout, removed, CurrentTransforms()));
+        var kills = turnEnd == TurnEnd.Shot ? gameManager.TurnController.Kills.LastShot : new List<KillEvent>();
+        transport.Broadcast(NetMessage.WriteTurnResult(player.ID, turnEnd, false, -1, MatchEndReason.Knockout, removed, kills, CurrentTransforms()));
         ownerAtTurnStart = SnapshotOwners();
     }
 
@@ -257,13 +258,13 @@ public class NetworkMatchBridge : MonoBehaviour
         matchResolved = true;
         var removed = ComputeRemovedSinceTurnStart();
         var winnerId = winner != null ? winner.ID : -1; // -1: draw
-        transport.Broadcast(NetMessage.WriteTurnResult(-1, TurnEnd.Shot, true, winnerId, reason, removed, CurrentTransforms()));
+        transport.Broadcast(NetMessage.WriteTurnResult(-1, TurnEnd.Shot, true, winnerId, reason, removed, gameManager.TurnController.Kills.LastShot, CurrentTransforms()));
     }
 
     private void SendCurrentTurnTo(ulong targetId)
     {
         var controller = gameManager.TurnController;
-        transport.Send(targetId, NetMessage.WriteTurnResult(controller.CurrentPlayerID, TurnEnd.None, false, -1, MatchEndReason.Knockout, new List<RemovedPieceEntry>(), CurrentTransforms()));
+        transport.Send(targetId, NetMessage.WriteTurnResult(controller.CurrentPlayerID, TurnEnd.None, false, -1, MatchEndReason.Knockout, new List<RemovedPieceEntry>(), new List<KillEvent>(), CurrentTransforms()));
     }
 
     // The physics pose, not transform: with interpolation on, transform is
@@ -387,11 +388,12 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void HandleGuestTurnResult(byte[] data)
     {
-        var (nextPlayerId, turnEnd, matchOver, winnerPlayerId, reason, removed, finalTransforms) = NetMessage.ReadTurnResult(data);
+        var (nextPlayerId, turnEnd, matchOver, winnerPlayerId, reason, removed, kills, finalTransforms) = NetMessage.ReadTurnResult(data);
         awaitingTurnResult = false;
         var finishedPlayerId = guestKnownCurrentPlayerId;
         if (turnEnd == TurnEnd.Shot) OnGuestTurnEnded?.Invoke(finishedPlayerId);
         else if (turnEnd != TurnEnd.None) OnGuestTurnPassed?.Invoke(finishedPlayerId, turnEnd);
+        gameManager.TurnController.Kills.Record(kills);
 
         foreach (var entry in removed)
         {

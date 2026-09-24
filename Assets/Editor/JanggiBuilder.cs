@@ -105,7 +105,8 @@ internal static class JanggiBuilder
     // height: its gentle curve is what a piece meets, so a fast shot rides
     // up and over and a slow one is turned aside or stops on it. Against the
     // thin barrel itself a piece either stops dead (taller) or is flung
-    // straight up. HingeBump keeps the hop over it small.
+    // straight up. Every piece's own rise limit (GamePieceDragAndReleaseForce.
+    // maxRiseSpeed) keeps the hop over it small.
     private static void BuildHinge(Transform parent, float x, Material metal)
     {
         const float proud = 0.010f;
@@ -130,7 +131,6 @@ internal static class JanggiBuilder
         bump.height = 0.24f + 2 * bumpRadius;
         bump.center = new Vector3(0, proud - bumpRadius, 0);
         bump.sharedMaterial = HingePhysics();
-        bump.gameObject.AddComponent<HingeBump>();
 
         foreach (var side in new[] { -1, 1 })
         {

@@ -48,6 +48,7 @@ namespace AlkkagiUIEditor
                 BuildPlayerPanel(root, "WhitePanel", 1, new Vector2(1, 1), new Vector2(-Margin, -Margin), Theme.StoneWhite, Theme.InkMuted),
             };
             BuildPlacementPanel(root);
+            BuildKillFeed(root, controller);
             BuildAim(root);
             BuildGameOverPanel(root, controller);
             return canvas.gameObject;
@@ -180,6 +181,90 @@ namespace AlkkagiUIEditor
             bg.gameObject.SetActive(false);
         }
 
+        // CS2-style kill feed at the top of the left column. The placement
+        // panel shares the spot, but only before the first turn, when nothing
+        // can be knocked out yet. KillFeed copies the entry template per line.
+        private static void BuildKillFeed(Transform root, MainGameUIController controller)
+        {
+            const float height = 48;
+            var list = UIKit.Node("KillFeed", root).Place(new Vector2(0, 1), new Vector2(Margin, -Margin), new Vector2(460, 440));
+            var layout = list.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 8;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            // Each line as wide as its own contents want; set here, not by a
+            // fitter on the line, which would resize it after it was placed.
+            layout.childControlWidth = true;
+            layout.childControlHeight = false;
+            layout.childForceExpandWidth = layout.childForceExpandHeight = false;
+            var feed = list.gameObject.AddComponent<KillFeed>();
+            feed.outlineColor = Theme.Ink;
+            feed.localOutlineColor = Theme.Seal;
+            controller.killFeed = feed;
+
+            var fill = UIKit.Capsule(list, "EntryTemplate", height, new Color(Theme.Hanji.r, Theme.Hanji.g, Theme.Hanji.b, 0.94f), Theme.Ink);
+            fill.rectTransform.sizeDelta = new Vector2(320, height);
+            var entry = fill.gameObject.AddComponent<KillFeedEntry>();
+            entry.canvasGroup = fill.gameObject.AddComponent<CanvasGroup>();
+            var row = fill.gameObject.AddComponent<HorizontalLayoutGroup>();
+            row.padding = new RectOffset(20, 20, 0, 0);
+            row.spacing = 8;
+            row.childAlignment = TextAnchor.MiddleLeft;
+            row.childControlWidth = true;
+            row.childControlHeight = false;
+            row.childForceExpandWidth = row.childForceExpandHeight = false;
+            var outline = fill.transform.Find("Outline");
+            outline.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            entry.outline = outline.GetComponent<Image>();
+
+            TMP_Text Name(string name, string text)
+            {
+                var label = UIKit.Text(fill.transform, name, text, 24, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+                label.rectTransform.sizeDelta = new Vector2(40, height);
+                return label;
+            }
+            // A side's stone; for janggi pieces the letter shows on it too.
+            (SideMark, TMP_Text) Icon(string name, int playerId)
+            {
+                var stone = UIKit.Stone(fill.transform, name, 32, Theme.StoneBlack, Theme.Ink, false);
+                var size = stone.gameObject.AddComponent<LayoutElement>();
+                size.minWidth = size.preferredWidth = 32;
+                var mark = UIKit.Mark(stone, playerId);
+                var letter = UIKit.Text(stone, "Letter", "차", 19, true, SideStyle.Cho, TextAlignmentOptions.Center);
+                letter.rectTransform.Stretch();
+                letter.gameObject.SetActive(false);
+                return (mark, letter);
+            }
+
+            entry.shooterName = Name("Shooter", "흑");
+            (entry.shotIcon, entry.shotLetter) = Icon("ShotIcon", 0);
+            var arrow = UIKit.Image(fill.transform, "Arrow", UIKit.Triangle, Theme.Ink);
+            arrow.rectTransform.sizeDelta = new Vector2(16, 14);
+            arrow.rectTransform.localRotation = Quaternion.Euler(0, 0, -90); // the sprite points up
+            var arrowSize = arrow.gameObject.AddComponent<LayoutElement>();
+            arrowSize.minWidth = arrowSize.preferredWidth = 16;
+            entry.arrow = arrow.gameObject;
+            (entry.victimIcon, entry.victimLetter) = Icon("VictimIcon", 1);
+            entry.victimName = Name("Victim", "백");
+
+            // The capsule is a child: on the badge itself, the pill sprite's own
+            // preferred width (128) would win over the text's.
+            var badge = UIKit.Node("Badge", fill.transform);
+            badge.sizeDelta = new Vector2(64, 32);
+            var badgeFill = UIKit.Capsule(badge, "Fill", 32, Theme.Seal, null);
+            badgeFill.rectTransform.Stretch();
+            badgeFill.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            var badgeRow = badge.gameObject.AddComponent<HorizontalLayoutGroup>();
+            badgeRow.padding = new RectOffset(12, 12, 0, 0);
+            badgeRow.childAlignment = TextAnchor.MiddleCenter;
+            badgeRow.childControlWidth = badgeRow.childControlHeight = true;
+            badgeRow.childForceExpandWidth = badgeRow.childForceExpandHeight = false;
+            entry.badgeText = UIKit.Text(badge.transform, "Text", "논개", 20, true, Theme.SealText, TextAlignmentOptions.Center);
+            entry.badge = badge.gameObject;
+
+            fill.gameObject.SetActive(false);
+            feed.template = entry;
+        }
+
         // Option A from the aim-UI mockups: power ring around the stone, shot
         // arrow, % label, a faint pull line, and the optional first-contact
         // guide. AimIndicator positions everything each frame; sizes here are
@@ -243,7 +328,7 @@ namespace AlkkagiUIEditor
             controller.gameOverPanel = overlay.gameObject;
 
             var modal = UIKit.Panel(overlay.transform, "Modal", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
-            modal.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 760));
+            modal.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 910));
             var m = modal.transform;
             var top = new Vector2(0.5f, 1);
 
@@ -264,11 +349,11 @@ namespace AlkkagiUIEditor
             BuildScoreboard(m, controller);
 
             controller.matchTimeText = UIKit.Text(m, "MatchTime", "경기 시간 1:23", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
-            controller.matchTimeText.rectTransform.Place(new Vector2(0, 1), new Vector2(60, -548), new Vector2(320, 36));
+            controller.matchTimeText.rectTransform.Place(new Vector2(0, 1), new Vector2(60, -686), new Vector2(320, 36));
             controller.seriesText = UIKit.Text(m, "Series", "연속 전적  흑 1 : 0 백", 26, false, Theme.Ink, TextAlignmentOptions.MidlineRight);
-            controller.seriesText.rectTransform.Place(new Vector2(1, 1), new Vector2(-60, -548), new Vector2(360, 36));
+            controller.seriesText.rectTransform.Place(new Vector2(1, 1), new Vector2(-60, -686), new Vector2(360, 36));
             controller.statusText = UIKit.Text(m, "Status", "", 26, false, Theme.Seal, TextAlignmentOptions.Center);
-            controller.statusText.rectTransform.Place(top, new Vector2(0, -596), new Vector2(680, 36));
+            controller.statusText.rectTransform.Place(top, new Vector2(0, -734), new Vector2(680, 36));
 
             // Layout group so the row re-centers when Lobby is hidden locally.
             var buttons = UIKit.Node("Buttons", m).Place(new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(680, 84));
@@ -290,7 +375,7 @@ namespace AlkkagiUIEditor
         private static void BuildScoreboard(Transform modal, MainGameUIController controller)
         {
             var board = UIKit.Panel(modal, "Scoreboard", Theme.HanjiField, Theme.FieldBorder, 1.4f);
-            board.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -310), new Vector2(640, 212));
+            board.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -310), new Vector2(640, 360));
             var b = board.transform;
             var topLeft = new Vector2(0, 1);
             float[] columns = { 400, 540 }; // value column centers, from the board's left edge
@@ -320,9 +405,14 @@ namespace AlkkagiUIEditor
                 return cells;
             }
 
+            // Kills are the shooter's own work; the side panels' captured count
+            // also takes the opponent's suicides and team kills.
             controller.remainingCells = Row("Remaining", "hud.remaining", -72);
-            controller.capturedCells = Row("Captured", "stats.captured", -118);
-            controller.shotsCells = Row("Shots", "stats.shots", -164);
+            controller.killCells = Row("Kills", "stats.kills", -118);
+            controller.nongaeCells = Row("Nongae", "stats.nongae", -164);
+            controller.suicideCells = Row("Suicides", "stats.suicides", -210);
+            controller.teamKillCells = Row("TeamKills", "stats.teamKills", -256);
+            controller.shotsCells = Row("Shots", "stats.shots", -302);
         }
 
         private static void WireScene(GameObject prefab)

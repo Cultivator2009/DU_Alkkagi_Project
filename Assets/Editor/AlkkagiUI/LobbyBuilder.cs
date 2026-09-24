@@ -44,7 +44,8 @@ namespace AlkkagiUIEditor
             card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, CardSize);
             var c = card.transform;
             ui.card = card.rectTransform;
-            // In the lobby the rules card sits to the right; shift the pair back to center.
+            // A side card sits to the right in both views (lobby browser, then
+            // rules); shift the pair back to center.
             ui.lobbyCardShift = -(RulesCardSize.x + CardGap) / 2;
 
             UIKit.Label(c, "Title", "lobby.title", 48, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
@@ -73,8 +74,11 @@ namespace AlkkagiUIEditor
             var view = UIKit.Node("IdleView", card).Stretch();
             ui.idleView = view.gameObject;
 
-            ui.createButton = UIKit.CapsuleButton(view, "CreateButton", "lobby.create", new Vector2(CardSize.x - Pad * 2, 120), true, 40, "lobby.createSub");
-            ui.createButton.GetComponent<RectTransform>().Place(TopLeft, new Vector2(Pad, -170), new Vector2(CardSize.x - Pad * 2, 120));
+            var half = new Vector2((CardSize.x - Pad * 2 - 24) / 2, 120);
+            ui.createButton = UIKit.CapsuleButton(view, "CreateButton", "lobby.create", half, true, 36, "lobby.createSub");
+            ui.createButton.GetComponent<RectTransform>().Place(TopLeft, new Vector2(Pad, -170), half);
+            ui.quickButton = UIKit.CapsuleButton(view, "QuickButton", "lobby.quick", half, false, 36, "lobby.quickSub");
+            ui.quickButton.GetComponent<RectTransform>().Place(TopRight, new Vector2(-Pad, -170), half);
 
             UIKit.Image(view, "Divider", null, Theme.Divider).rectTransform.Place(TopLeft, new Vector2(Pad, -334), new Vector2(CardSize.x - Pad * 2, 2));
             UIKit.Label(view, "JoinLabel", "lobby.joinLabel", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
@@ -87,6 +91,48 @@ namespace AlkkagiUIEditor
 
             ui.backButton = UIKit.CapsuleButton(view, "BackButton", "lobby.back", new Vector2(220, 92), false, 32);
             ui.backButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(Pad, 56), new Vector2(220, 92));
+
+            BuildBrowserCard(view, ui);
+        }
+
+        // Open public lobbies, beside the main card: host, rules, Join.
+        private static void BuildBrowserCard(Transform idleView, LobbySceneUI ui)
+        {
+            const float pad = 48, rowHeight = 100, gap = 12;
+            const int rows = 5;
+            var width = RulesCardSize.x - pad * 2;
+            var card = UIKit.Panel(idleView, "BrowserCard", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            card.rectTransform.Place(new Vector2(1, 0.5f), new Vector2(CardGap, 0), RulesCardSize, new Vector2(0, 0.5f));
+            var c = card.transform;
+
+            UIKit.Label(c, "Title", "lobby.browser", 40, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(TopLeft, new Vector2(pad, -52), new Vector2(300, 72));
+            ui.refreshButton = UIKit.CapsuleButton(c, "RefreshButton", "lobby.refresh", new Vector2(176, 64), false, 26);
+            ui.refreshButton.GetComponent<RectTransform>().Place(TopRight, new Vector2(-pad, -56), new Vector2(176, 64));
+
+            ui.browserRows = new LobbyListRow[rows];
+            for (var i = 0; i < rows; i++)
+            {
+                var rowBg = UIKit.Panel(c, "Row" + i, new Color(1, 1, 1, 0.55f), Theme.FieldBorder);
+                rowBg.rectTransform.Place(TopLeft, new Vector2(pad, -148 - i * (rowHeight + gap)), new Vector2(width, rowHeight));
+                var row = rowBg.gameObject.AddComponent<LobbyListRow>();
+                // ASCII placeholder: the host's Steam name replaces it at runtime.
+                row.hostText = UIKit.Text(rowBg.transform, "Host", "Host", 30, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+                row.hostText.overflowMode = TextOverflowModes.Ellipsis;
+                row.hostText.rectTransform.Place(TopLeft, new Vector2(28, -12), new Vector2(width - 220, 42));
+                row.rulesText = UIKit.Text(rowBg.transform, "Rules", Loc.Get("lobby.rowRules", Loc.Get("board.Go"), Loc.Get("pieces.GoStones"), 6, 6), 22, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+                row.rulesText.overflowMode = TextOverflowModes.Ellipsis;
+                row.rulesText.rectTransform.Place(TopLeft, new Vector2(28, -56), new Vector2(width - 220, 32));
+                row.joinButton = UIKit.CapsuleButton(rowBg.transform, "JoinButton", "lobby.join", new Vector2(144, 64), true, 28);
+                row.joinButton.GetComponent<RectTransform>().Place(new Vector2(1, 0.5f), new Vector2(-18, 0), new Vector2(144, 64), new Vector2(1, 0.5f));
+                rowBg.gameObject.SetActive(false);
+                ui.browserRows[i] = row;
+            }
+
+            ui.browserEmptyText = UIKit.Text(c, "Empty", Loc.Get("lobby.browserEmpty"), 28, false, Theme.InkFaint, TextAlignmentOptions.Center);
+            ui.browserEmptyText.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -320), new Vector2(width, 48));
+            UIKit.Label(c, "Caption", "lobby.browserCaption", 22, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(new Vector2(0, 0), new Vector2(pad, 44), new Vector2(width, 36));
         }
 
         private static void BuildLobbyView(Transform card, LobbySceneUI ui)
@@ -108,6 +154,12 @@ namespace AlkkagiUIEditor
 
             ui.hostSlot = Slot(view, "HostSlot", TopLeft, new Vector2(Pad, -318), true, "Host", "lobby.host");
             ui.guestSlot = Slot(view, "GuestSlot", TopRight, new Vector2(-Pad, -318), false, "Guest", "lobby.guest");
+
+            // Who can join: the host picks, the guest sees it greyed out.
+            UIKit.Label(view, "VisibilityLabel", "lobby.visibility", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(TopLeft, new Vector2(Pad, -594), new Vector2(300, 72));
+            ui.visibilityToggle = UIKit.SegmentedToggle(view, "VisibilityToggle", new[] { "lobby.vis.public", "lobby.vis.friends", "lobby.vis.private" }, 72);
+            ui.visibilityToggle.GetComponent<RectTransform>().Place(TopRight, new Vector2(-Pad, -594), new Vector2(520, 72));
 
             ui.leaveButton = UIKit.CapsuleButton(view, "LeaveButton", "lobby.leave", new Vector2(264, 92), false, 32);
             ui.leaveButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(Pad, 56), new Vector2(264, 92));
@@ -158,6 +210,13 @@ namespace AlkkagiUIEditor
             slot.roleText = UIKit.Text(filled.transform, "Role", $"{Loc.Get(roleKey)} · {Loc.Get(colorKey)}", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
             slot.roleText.rectTransform.Place(TopLeft, new Vector2(116, -78), new Vector2(280, 36));
             slot.filledView = filled.gameObject;
+            if (!black)
+            {
+                // The host can send the guest away (public lobbies let anyone in).
+                slot.kickButton = UIKit.CapsuleButton(filled.transform, "KickButton", "lobby.kick", new Vector2(220, 64), false, 26);
+                slot.kickButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 28), new Vector2(220, 64), new Vector2(0.5f, 0));
+                slot.kickButton.gameObject.SetActive(false);
+            }
 
             var empty = UIKit.Panel(node, "Empty", Color.clear, Theme.InkFaint);
             empty.rectTransform.Stretch();

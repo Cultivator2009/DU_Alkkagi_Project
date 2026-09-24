@@ -62,6 +62,7 @@ public class BoardSetup : MonoBehaviour
     public float PieceHeight { get; private set; }
 
     private readonly Dictionary<Rigidbody, CollisionDetectionMode> frozenBodies = new Dictionary<Rigidbody, CollisionDetectionMode>();
+    private readonly Dictionary<char, string> letterKeys = new Dictionary<char, string>(); // janggi pieces, by id
     private SpriteRenderer[] zoneMarkers;
 
     private BoardVariant ActiveOrFirst => Active != null ? Active : boards[0];
@@ -98,6 +99,10 @@ public class BoardSetup : MonoBehaviour
     // addresses pieces by it.
     public static char PieceId(int player, int index) => (char)((player == 0 ? 'A' : 'a') + index);
 
+    // The Loc key of a janggi piece's letter, null for a go stone. Still
+    // answers once the piece is gone (the kill feed asks then).
+    public string LetterKey(char pieceId) => letterKeys.TryGetValue(pieceId, out var key) ? key : null;
+
     private void UseBoard(BoardType type)
     {
         Active = Array.Find(boards, b => b.type == type) ?? boards[0];
@@ -125,7 +130,9 @@ public class BoardSetup : MonoBehaviour
         piece.GetComponent<MeshCollider>().sharedMesh = mesh;
 
         var label = piece.GetComponentInChildren<TMP_Text>(true);
-        label.text = Loc.Get(player == 0 ? kind.choLabel : kind.hanLabel);
+        var letterKey = player == 0 ? kind.choLabel : kind.hanLabel;
+        letterKeys[PieceId(player, index)] = letterKey;
+        label.text = SideStyle.PieceLetter(letterKey);
         label.color = player == 0 ? SideStyle.Cho : SideStyle.Han;
         label.transform.localPosition = new Vector3(0, kind.height + 0.001f, 0);
         label.rectTransform.sizeDelta = Vector2.one * kind.width * 0.62f;

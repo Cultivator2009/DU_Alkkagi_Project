@@ -17,6 +17,7 @@ public class DeathTrigger : MonoBehaviour
         pieceManager.isDestroyed = true;
 
         gameManager.Ruleset.OnPieceRemoved(pieceManager, gameManager.playersList);
+        gameManager.TurnController.Kills.PieceRemoved(pieceManager.pieceID, pieceManager.playerIndex);
         gameManager.RemovePiece(other.GetComponent<GamePieceDragAndReleaseForce>());
 
         Destroy(other.gameObject);

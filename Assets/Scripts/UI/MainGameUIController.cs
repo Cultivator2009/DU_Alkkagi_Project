@@ -23,6 +23,7 @@ public class MainGameUIController : MonoBehaviour
     public GameObject notice;   // "Black ran out of time" and the like, briefly
     public TMP_Text noticeText;
     public float noticeSeconds = 2.5f;
+    public KillFeed killFeed;
 
     [Header("Game over")]
     public GameObject gameOverPanel;
@@ -30,7 +31,10 @@ public class MainGameUIController : MonoBehaviour
     public TMP_Text resultTitleText;
     public TMP_Text resultReasonText;
     public TMP_Text[] remainingCells; // scoreboard columns, by player id
-    public TMP_Text[] capturedCells;
+    public TMP_Text[] killCells;
+    public TMP_Text[] nongaeCells;
+    public TMP_Text[] suicideCells;
+    public TMP_Text[] teamKillCells;
     public TMP_Text[] shotsCells;
     public TMP_Text matchTimeText;
     public TMP_Text seriesText;
@@ -190,6 +194,7 @@ public class MainGameUIController : MonoBehaviour
         controller.OnTurnEnded += HandleTurnEnded;
         controller.OnTurnPassed += HandleTurnPassed;
         controller.OnMatchEnded += HandleMatchEnded;
+        controller.Kills.OnShotResolved += HandleKills;
     }
 
     private void Unsubscribe(TurnController controller)
@@ -198,6 +203,7 @@ public class MainGameUIController : MonoBehaviour
         controller.OnTurnEnded -= HandleTurnEnded;
         controller.OnTurnPassed -= HandleTurnPassed;
         controller.OnMatchEnded -= HandleMatchEnded;
+        controller.Kills.OnShotResolved -= HandleKills;
     }
 
     private void SubscribeNetwork(NetworkMatchBridge bridge)
@@ -233,6 +239,13 @@ public class MainGameUIController : MonoBehaviour
     {
         shots[player.ID]++;
         Render();
+    }
+
+    // A guest's KillLog records the host's events, so this fires there too.
+    private void HandleKills(IReadOnlyList<KillEvent> events)
+    {
+        int? localPlayer = networkBridge != null ? networkBridge.LocalPlayerId : (int?)null;
+        killFeed.Add(events, GameManager.manager.Board, MatchSettings.Current.PieceType, localPlayer);
     }
 
     private void HandleTurnPassed(PlayersManager player, TurnEnd why)
@@ -342,10 +355,14 @@ public class MainGameUIController : MonoBehaviour
             _ => Loc.Get("reason.knockout", ColorName(loser)),
         };
 
+        var kills = turnController.Kills;
         for (var i = 0; i < 2 && i < gameManager.playersList.Count; i++)
         {
             remainingCells[i].text = CountPieces(i).ToString();
-            capturedCells[i].text = gameManager.playersList[i].score.ToString();
+            killCells[i].text = kills.Kills(i).ToString();
+            nongaeCells[i].text = kills.Nongae(i).ToString();
+            suicideCells[i].text = kills.Suicides(i).ToString();
+            teamKillCells[i].text = kills.TeamKills(i).ToString();
             shotsCells[i].text = shots[i].ToString();
         }
         var seconds = Mathf.FloorToInt(matchEndTime - matchStartTime);

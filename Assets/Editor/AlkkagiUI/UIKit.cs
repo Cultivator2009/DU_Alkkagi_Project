@@ -52,6 +52,10 @@ namespace AlkkagiUIEditor
         private const string SpriteDir = KitDir + "/Sprites";
         private const string FontDir = KitDir + "/Fonts";
         private const string SourceFontDir = "Assets/Fonts/Pretendard";
+        // A nine-glyph subset of Noto Serif KR Bold: the janggi letters in
+        // Hanja (SideStyle.PieceLetter), which Pretendard doesn't have.
+        private const string HanjaFontPath = "Assets/Fonts/NotoSerifKR/NotoSerifKR-Bold-Janggi.otf";
+        private const string HanjaLetters = "楚漢車包馬象士卒兵";
 
         // Sprite geometry, in texture pixels (1 px = 1 canvas unit at multiplier 1).
         private const int ShapeSize = 128;
@@ -122,6 +126,13 @@ namespace AlkkagiUIEditor
         private static void GenerateFonts()
         {
             var charset = BuildCharset();
+            var hanja = CreateFontAsset(AssetDatabase.LoadAssetAtPath<Font>(HanjaFontPath), "NotoSerifKR-Janggi SDF", AtlasPopulationMode.Dynamic, 256);
+            if (!hanja.TryAddCharacters(HanjaLetters, out var missingHanja))
+                Debug.LogWarning($"[Alkkagi UI] The Hanja font is missing glyphs: {missingHanja}");
+            hanja.atlasPopulationMode = AtlasPopulationMode.Static;
+            AttachSubAssets(hanja);
+            EditorUtility.SetDirty(hanja);
+
             foreach (var weight in new[] { "Regular", "Bold" })
             {
                 var source = AssetDatabase.LoadAssetAtPath<Font>($"{SourceFontDir}/Pretendard-{weight}.otf");
@@ -131,7 +142,9 @@ namespace AlkkagiUIEditor
                 if (!primary.TryAddCharacters(charset, out var missing))
                     Debug.LogWarning($"[Alkkagi UI] Pretendard-{weight} is missing glyphs: {missing}");
                 primary.atlasPopulationMode = AtlasPopulationMode.Static;
-                primary.fallbackFontAssetTable = new List<TMP_FontAsset> { fallback };
+                // Hanja ahead of the dynamic fallback, which is Pretendard again
+                // and has none of them.
+                primary.fallbackFontAssetTable = new List<TMP_FontAsset> { hanja, fallback };
                 AttachSubAssets(primary);
                 EditorUtility.SetDirty(primary);
             }
@@ -147,13 +160,13 @@ namespace AlkkagiUIEditor
             EditorUtility.SetDirty(TMP_Settings.instance);
         }
 
-        private static TMP_FontAsset CreateFontAsset(Font source, string name, AtlasPopulationMode mode)
+        private static TMP_FontAsset CreateFontAsset(Font source, string name, AtlasPopulationMode mode, int atlasSize = FontAtlasSize)
         {
             var path = $"{FontDir}/{name}.asset";
             var asset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(path);
             if (asset == null)
             {
-                asset = TMP_FontAsset.CreateFontAsset(source, FontSampling, FontPadding, GlyphRenderMode.SDFAA, FontAtlasSize, FontAtlasSize, mode, true);
+                asset = TMP_FontAsset.CreateFontAsset(source, FontSampling, FontPadding, GlyphRenderMode.SDFAA, atlasSize, atlasSize, mode, true);
                 asset.name = name;
                 AssetDatabase.CreateAsset(asset, path);
             }
@@ -456,14 +469,15 @@ namespace AlkkagiUIEditor
             return mark;
         }
 
-        // One half of a two-segment capsule switch: an ink highlight under the
-        // selected half, and a transparent raycast target so the whole half
-        // is clickable. locKey null = literal text (e.g. 한 / EN).
-        public static (Button button, Graphic highlight, TMP_Text label) Segment(Transform frame, string name, string text, string locKey, float anchorX, float height)
+        // One segment of a capsule switch (half of it unless span says
+        // otherwise): an ink highlight under the selected one, and a
+        // transparent raycast target so the whole segment is clickable.
+        // locKey null = literal text (e.g. 한 / EN).
+        public static (Button button, Graphic highlight, TMP_Text label) Segment(Transform frame, string name, string text, string locKey, float anchorX, float height, float span = 0.5f)
         {
             var hit = Node(name, frame);
             hit.anchorMin = new Vector2(anchorX, 0);
-            hit.anchorMax = new Vector2(anchorX + 0.5f, 1);
+            hit.anchorMax = new Vector2(anchorX + span, 1);
             hit.offsetMin = hit.offsetMax = Vector2.zero;
             var highlight = Capsule(hit, "Highlight", height - 16, Theme.Ink, null);
             highlight.rectTransform.Stretch(8);
@@ -579,6 +593,27 @@ namespace AlkkagiUIEditor
             colors.pressedColor = new Color(0.84f, 0.84f, 0.84f);
             slider.colors = colors;
             return slider;
+        }
+
+        // A capsule of equal segments, one per Loc key, driven by a
+        // SegmentedToggle. The first one shows as selected in the prefab.
+        public static SegmentedToggle SegmentedToggle(Transform parent, string name, string[] keys, float height)
+        {
+            var frame = Capsule(parent, name, height, Theme.Hanji, Theme.Ink);
+            var toggle = frame.gameObject.AddComponent<SegmentedToggle>();
+            toggle.selectedTextColor = Theme.Hanji;
+            toggle.idleTextColor = Theme.Ink;
+            var span = 1f / keys.Length;
+            var segments = keys.Select((key, i) => Segment(frame.transform, key, null, key, i * span, height, span)).ToArray();
+            toggle.buttons = segments.Select(s => s.button).ToArray();
+            toggle.highlights = segments.Select(s => s.highlight).ToArray();
+            toggle.labels = segments.Select(s => s.label).ToArray();
+            for (var i = 0; i < segments.Length; i++)
+            {
+                segments[i].highlight.enabled = i == 0;
+                segments[i].label.color = i == 0 ? Theme.Hanji : Theme.Ink;
+            }
+            return toggle;
         }
 
         // Bakes a resting "left side selected" look into the prefab. The

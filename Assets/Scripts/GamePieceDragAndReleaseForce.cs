@@ -15,6 +15,18 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     public float minShotPower = 0.03f;
     public float settleVelocityThreshold = 0.05f;
     public int settleFrameThreshold = 5;
+    // A flick is the impulse a go stone of referenceMass gets. Other masses
+    // leave at speed / (mass / referenceMass)^massExponent: 1 would give every
+    // piece the same momentum (the janggi general left so slowly it hardly
+    // moved what it hit), 0 the same speed. Between, like a real finger: a
+    // heavy piece goes a little slower but hits harder.
+    public float referenceMass = 3f;
+    [Range(0f, 1f)] public float massExponent = 0.25f;
+    // Upward speed limit (m/s). The flick itself is level, but a piece that
+    // leans - on another piece, or over a board hinge - is pushed up by
+    // whatever it rests on, and a hard shot launched it up to 2 units high.
+    // Capped, the hop stays under a piece's height.
+    public float maxRiseSpeed = 0.4f;
 
     private int lowVelocityFrameCount = 0;
 
@@ -106,7 +118,16 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             }
             AimPower = 0;
         }
+        LimitRise();
         UpdateSettleState();
+    }
+
+    // Kinematic pieces (network guest, placement) are moved, not simulated.
+    private void LimitRise()
+    {
+        if (rb.isKinematic) return;
+        var velocity = rb.linearVelocity;
+        if (velocity.y > maxRiseSpeed) rb.linearVelocity = new Vector3(velocity.x, maxRiseSpeed, velocity.z);
     }
 
     // Back to choosing a piece; TurnController sees isCancelled and waits
@@ -124,7 +145,8 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     public void ApplyFlick(Vector3 flickForce)
     {
         if (flickForce.magnitude > maxForce) flickForce = flickForce.normalized * maxForce;
-        rb.AddForce(flickForce, ForceMode.Impulse);
+        var launch = flickForce / referenceMass * Mathf.Pow(referenceMass / rb.mass, massExponent);
+        rb.AddForce(launch, ForceMode.VelocityChange);
 
         // The impulse only shows up in linearVelocity after the next physics
         // step, so a resting piece would still read as settled for a frame

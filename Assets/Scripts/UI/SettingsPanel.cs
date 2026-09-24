@@ -4,11 +4,13 @@ using UnityEngine;
 using UnityEngine.UI;
 
 // The Settings card (built by Tools > Alkkagi UI > 3. Build main menu):
-// language (its own LanguageToggle), the two volumes, and key bindings.
+// language (its own LanguageToggle), janggi letters, the two volumes, and
+// key bindings.
 // Everything saves as it changes. A key row, once clicked, takes the next
 // key pressed; Escape backs out.
 public class SettingsPanel : MonoBehaviour
 {
+    public SegmentedToggle janggiLetters; // 0 Hangul, 1 Hanja
     public Slider masterSlider;
     public TMP_Text masterValue;
     public Slider interfaceSlider;
@@ -21,6 +23,11 @@ public class SettingsPanel : MonoBehaviour
 
     private void Awake()
     {
+        janggiLetters.OnSelected += index =>
+        {
+            GameSettings.JanggiHanja = index == 1;
+            Render();
+        };
         masterSlider.onValueChanged.AddListener(value =>
         {
             GameSettings.MasterVolume = value;
@@ -84,6 +91,7 @@ public class SettingsPanel : MonoBehaviour
 
     private void Render()
     {
+        janggiLetters.Show(GameSettings.JanggiHanja ? 1 : 0);
         masterSlider.SetValueWithoutNotify(GameSettings.MasterVolume);
         interfaceSlider.SetValueWithoutNotify(GameSettings.InterfaceVolume);
         masterValue.text = Percent(GameSettings.MasterVolume);

@@ -1,8 +1,17 @@
 using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Steamworks;
 using Steamworks.Data;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+
+public enum LobbyVisibility : byte
+{
+    Public,      // listed in the lobby browser and quick match, and friends see it
+    FriendsOnly, // friends can join from Steam; anyone with the code
+    Private      // the code or an invite only
+}
 
 // Wraps Steam's Lobby (matchmaking) API. This is the only "server" involved
 // in a match - Valve's own lobby/relay infrastructure - the match itself
@@ -11,18 +20,42 @@ public class SteamLobbyManager : MonoBehaviour
 {
     private const int MaxMembers = 2;
     private const string RulePrefix = "rule."; // lobby data keys of the match rules
+    // Lobby data every lobby of ours carries. The Spacewar test app (480) is
+    // shared by every Steamworks developer, so searches filter on GameKey;
+    // ProtocolKey keeps players on different builds apart.
+    private const string GameKey = "game";
+    private const string GameId = "du-alkkagi";
+    private const string ProtocolKey = "proto";
+    private const string StateKey = "state"; // Open while in the lobby, Playing during a match
+    private const string Open = "open";
+    private const string Playing = "playing";
+    private const string HostNameKey = "host";
+    private const string VisibilityKey = "vis";
+    private const string VisibilityPref = "lobby.visibility";
 
     public static SteamLobbyManager Instance { get; private set; }
 
     public Lobby? CurrentLobby { get; private set; }
     public bool IsHost => CurrentLobby.HasValue && CurrentLobby.Value.Owner.Id.Value == SteamClient.SteamId.Value;
     public bool IsJoining { get; private set; }
+    public bool IsSearching { get; private set; } // quick match looking for a lobby
 
     public event Action<Lobby> OnLobbyReady;
     public event Action<Friend> OnMemberJoined;
     public event Action<Friend> OnMemberLeft;
-    public event Action OnLobbyFailed;
+    public event Action<string> OnLobbyFailed; // the Loc key of the status to show
     public event Action OnLobbyDataChanged;
+
+    // Players this host has removed from its current lobby: sent away again
+    // if they rejoin.
+    private readonly HashSet<ulong> kicked = new HashSet<ulong>();
+
+    // What the lobbies this player creates start as.
+    public static LobbyVisibility PreferredVisibility
+    {
+        get => (LobbyVisibility)PlayerPrefs.GetInt(VisibilityPref, (int)LobbyVisibility.FriendsOnly);
+        set => PlayerPrefs.SetInt(VisibilityPref, (int)value);
+    }
 
     private void Awake()
     {
@@ -66,18 +99,102 @@ public class SteamLobbyManager : MonoBehaviour
         LeaveLobby();
     }
 
-    public async void CreateLobby()
+    public async void CreateLobby(LobbyVisibility visibility)
     {
         var result = await SteamMatchmaking.CreateLobbyAsync(MaxMembers);
         if (!result.HasValue)
         {
             Debug.LogError("Failed to create Steam lobby.");
-            OnLobbyFailed?.Invoke();
+            OnLobbyFailed?.Invoke("lobby.status.failed");
             return;
         }
-        result.Value.SetJoinable(true);
+        var lobby = result.Value;
+        kicked.Clear();
+        lobby.SetJoinable(true);
+        lobby.SetData(GameKey, GameId);
+        lobby.SetData(ProtocolKey, NetMessage.ProtocolVersion.ToString());
+        lobby.SetData(StateKey, Open);
+        lobby.SetData(HostNameKey, SteamClient.Name);
+        ApplyVisibility(lobby, visibility);
         // The host's last-used rules are where the lobby starts.
-        WriteSettings(result.Value, MatchSettings.LoadPrefs());
+        WriteSettings(lobby, MatchSettings.LoadPrefs());
+    }
+
+    // Steam has no getter for a lobby's type, so it's mirrored in lobby data.
+    public LobbyVisibility Visibility =>
+        CurrentLobby.HasValue && byte.TryParse(CurrentLobby.Value.GetData(VisibilityKey), out var value) ? (LobbyVisibility)value : LobbyVisibility.FriendsOnly;
+
+    public void SetVisibility(LobbyVisibility visibility)
+    {
+        if (!IsHost) return;
+        ApplyVisibility(CurrentLobby.Value, visibility);
+        PreferredVisibility = visibility;
+    }
+
+    private static void ApplyVisibility(Lobby lobby, LobbyVisibility visibility)
+    {
+        switch (visibility)
+        {
+            case LobbyVisibility.Public: lobby.SetPublic(); break;
+            case LobbyVisibility.FriendsOnly: lobby.SetFriendsOnly(); break;
+            default: lobby.SetPrivate(); break;
+        }
+        lobby.SetData(VisibilityKey, ((byte)visibility).ToString());
+    }
+
+    // During a match the lobby takes no one new and drops out of searches;
+    // back in the lobby it opens again.
+    public void SetMatchInProgress(bool playing)
+    {
+        if (!IsHost) return;
+        CurrentLobby.Value.SetJoinable(!playing);
+        CurrentLobby.Value.SetData(StateKey, playing ? Playing : Open);
+    }
+
+    // Public lobbies of this game, on this protocol, waiting for a player.
+    // Steam sorts them nearest first.
+    public async Task<Lobby[]> FindOpenLobbies()
+    {
+        var lobbies = await SteamMatchmaking.LobbyList
+            .WithKeyValue(GameKey, GameId)
+            .WithKeyValue(ProtocolKey, NetMessage.ProtocolVersion.ToString())
+            .WithKeyValue(StateKey, Open)
+            .WithSlotsAvailable(1)
+            .FilterDistanceWorldwide()
+            .WithMaxResults(20)
+            .RequestAsync();
+        return lobbies ?? Array.Empty<Lobby>();
+    }
+
+    // The nearest open public lobby, or failing that a new public one to
+    // wait in. A lobby can fill between the search and the join, so each is
+    // tried in turn.
+    public async void QuickMatch()
+    {
+        IsSearching = true;
+        var lobbies = await FindOpenLobbies();
+        IsSearching = false;
+        IsJoining = true;
+        foreach (var lobby in lobbies)
+        {
+            if ((await SteamMatchmaking.JoinLobbyAsync(lobby.Id)).HasValue) return; // HandleLobbyEntered finishes the join
+        }
+        IsJoining = false;
+        CreateLobby(LobbyVisibility.Public);
+    }
+
+    public static string HostName(Lobby lobby) => lobby.GetData(HostNameKey);
+
+    // The rules a lobby advertises, e.g. for a lobby browser row.
+    public static MatchSettings RulesOf(Lobby lobby) => MatchSettings.FromPairs(key => lobby.GetData(RulePrefix + key));
+
+    // Steam lobbies can't eject anyone, so the host asks the guest's game to
+    // leave (NetMessage.Kick), and asks again if they come back.
+    public void Kick(ulong memberId)
+    {
+        if (!IsHost) return;
+        kicked.Add(memberId);
+        SteamTransport.Instance?.Send(memberId, NetMessage.WriteKick());
     }
 
     // Match rules live in lobby data: only the owner may write them, every
@@ -91,9 +208,7 @@ public class SteamLobbyManager : MonoBehaviour
 
     public MatchSettings ReadLobbySettings()
     {
-        if (!CurrentLobby.HasValue) return new MatchSettings();
-        var lobby = CurrentLobby.Value;
-        return MatchSettings.FromPairs(key => lobby.GetData(RulePrefix + key));
+        return CurrentLobby.HasValue ? RulesOf(CurrentLobby.Value) : new MatchSettings();
     }
 
     private static void WriteSettings(Lobby lobby, MatchSettings settings)
@@ -114,7 +229,7 @@ public class SteamLobbyManager : MonoBehaviour
 
         IsJoining = false;
         Debug.LogError($"Failed to join Steam lobby {lobbyId}.");
-        OnLobbyFailed?.Invoke();
+        OnLobbyFailed?.Invoke("lobby.status.failed");
     }
 
     // Opens the Steam overlay's invite dialog for the current lobby. Needs
@@ -164,6 +279,16 @@ public class SteamLobbyManager : MonoBehaviour
     private void HandleLobbyEntered(Lobby lobby)
     {
         IsJoining = false;
+        // A code or an invite can lead to a lobby from another build (or
+        // another game on the shared test app): its messages wouldn't read.
+        var version = lobby.GetData(ProtocolKey);
+        if (!lobby.IsOwnedBy(SteamClient.SteamId) && version != NetMessage.ProtocolVersion.ToString())
+        {
+            Debug.LogWarning($"Leaving lobby {lobby.Id}: protocol '{version}', this build speaks {NetMessage.ProtocolVersion}.");
+            lobby.Leave();
+            OnLobbyFailed?.Invoke("lobby.status.version");
+            return;
+        }
         CurrentLobby = lobby;
         foreach (var member in lobby.Members)
         {
@@ -176,11 +301,15 @@ public class SteamLobbyManager : MonoBehaviour
     private void HandleMemberJoined(Lobby lobby, Friend friend)
     {
         SteamTransport.Instance?.ConnectPeer(friend.Id.Value);
+        if (IsHost && kicked.Contains(friend.Id.Value)) SteamTransport.Instance?.Send(friend.Id.Value, NetMessage.WriteKick());
         OnMemberJoined?.Invoke(friend);
     }
 
     private void HandleMemberLeft(Lobby lobby, Friend friend)
     {
+        // When the host leaves, Steam hands the lobby to whoever is left: the
+        // browser should show the new host's name.
+        if (IsHost) lobby.SetData(HostNameKey, SteamClient.Name);
         OnMemberLeft?.Invoke(friend);
     }
 }

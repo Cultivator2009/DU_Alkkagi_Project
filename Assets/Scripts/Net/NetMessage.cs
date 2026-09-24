@@ -15,7 +15,8 @@ public enum NetMessageType : byte
     PassCommand = 9,     // guest -> host: skip my turn
     PlacementState = 10, // host -> guest: the placement phase as the guest may see it
     PlaceRequest = 11,   // guest -> host: put/move one of my stones
-    PlacementReady = 12  // guest -> host: my stones are final
+    PlacementReady = 12, // guest -> host: my stones are final
+    Kick = 13            // host -> guest: leave my lobby
 }
 
 public struct PieceOwnerEntry
@@ -42,6 +43,11 @@ public struct RemovedPieceEntry
 // separate framing layer.
 public static class NetMessage
 {
+    // Bump whenever a message changes shape. Lobbies advertise it, and a
+    // build only lists and joins lobbies on its own version: two builds that
+    // disagree here would misread each other's messages mid-match.
+    public const int ProtocolVersion = 1;
+
     public static byte[] WriteStartMatch(int localPlayerId, IReadOnlyList<PieceOwnerEntry> pieceOwners)
     {
         using var stream = new MemoryStream();
@@ -115,8 +121,9 @@ public static class NetMessage
     // guest converges on the host's board every turn even if some of the
     // unreliable mid-turn snapshots were dropped.
     // turnEnd: how the turn that just finished ended (None for the opening
-    // turn and for a resync after a rejected command).
-    public static byte[] WriteTurnResult(int nextPlayerId, TurnEnd turnEnd, bool matchOver, int winnerPlayerId, MatchEndReason reason, IReadOnlyList<RemovedPieceEntry> removed, IReadOnlyList<PieceTransform> finalTransforms)
+    // turn and for a resync after a rejected command). kills: the kill feed
+    // of the shot that just resolved, empty for anything else.
+    public static byte[] WriteTurnResult(int nextPlayerId, TurnEnd turnEnd, bool matchOver, int winnerPlayerId, MatchEndReason reason, IReadOnlyList<RemovedPieceEntry> removed, IReadOnlyList<KillEvent> kills, IReadOnlyList<PieceTransform> finalTransforms)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
@@ -132,11 +139,20 @@ public static class NetMessage
             writer.Write(entry.PieceId);
             writer.Write(entry.ScoredForPlayerId);
         }
+        writer.Write(kills.Count);
+        foreach (var kill in kills)
+        {
+            writer.Write(kill.ShooterId);
+            writer.Write(kill.ShotPieceId);
+            writer.Write(kill.VictimId);
+            writer.Write(kill.VictimOwnerId);
+            writer.Write((byte)kill.Kind);
+        }
         WriteTransforms(writer, finalTransforms);
         return stream.ToArray();
     }
 
-    public static (int nextPlayerId, TurnEnd turnEnd, bool matchOver, int winnerPlayerId, MatchEndReason reason, List<RemovedPieceEntry> removed, List<PieceTransform> finalTransforms) ReadTurnResult(byte[] data)
+    public static (int nextPlayerId, TurnEnd turnEnd, bool matchOver, int winnerPlayerId, MatchEndReason reason, List<RemovedPieceEntry> removed, List<KillEvent> kills, List<PieceTransform> finalTransforms) ReadTurnResult(byte[] data)
     {
         using var stream = new MemoryStream(data);
         using var reader = new BinaryReader(stream);
@@ -152,7 +168,20 @@ public static class NetMessage
         {
             removed.Add(new RemovedPieceEntry { PieceId = reader.ReadChar(), ScoredForPlayerId = reader.ReadInt32() });
         }
-        return (nextPlayerId, turnEnd, matchOver, winnerPlayerId, reason, removed, ReadTransforms(reader));
+        var killCount = reader.ReadInt32();
+        var kills = new List<KillEvent>(killCount);
+        for (var i = 0; i < killCount; i++)
+        {
+            kills.Add(new KillEvent
+            {
+                ShooterId = reader.ReadInt32(),
+                ShotPieceId = reader.ReadChar(),
+                VictimId = reader.ReadChar(),
+                VictimOwnerId = reader.ReadInt32(),
+                Kind = (KillKind)reader.ReadByte(),
+            });
+        }
+        return (nextPlayerId, turnEnd, matchOver, winnerPlayerId, reason, removed, kills, ReadTransforms(reader));
     }
 
     private static void WriteTransforms(BinaryWriter writer, IReadOnlyList<PieceTransform> transforms)
@@ -276,6 +305,8 @@ public static class NetMessage
     public static byte[] WriteRematchRequest() => new[] { (byte)NetMessageType.RematchRequest };
 
     public static byte[] WriteReturnToLobby() => new[] { (byte)NetMessageType.ReturnToLobby };
+
+    public static byte[] WriteKick() => new[] { (byte)NetMessageType.Kick };
 
     public static NetMessageType PeekType(byte[] data) => (NetMessageType)data[0];
 }

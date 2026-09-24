@@ -6,6 +6,7 @@ public static class GameSettings
 {
     private const string MasterKey = "settings.masterVolume";
     private const string InterfaceKey = "settings.interfaceVolume";
+    private const string JanggiHanjaKey = "settings.janggiHanja";
     public const float DefaultVolume = 0.8f;
 
     // 0..1. Scales everything through the AudioListener.
@@ -25,6 +26,14 @@ public static class GameSettings
     {
         get => PlayerPrefs.GetFloat(InterfaceKey, DefaultVolume);
         set => PlayerPrefs.SetFloat(InterfaceKey, Mathf.Clamp01(value));
+    }
+
+    // Janggi piece letters in Hanja (楚 車 包...) rather than Hangul. Display
+    // only, and each player's own: both sides play the same pieces.
+    public static bool JanggiHanja
+    {
+        get => PlayerPrefs.GetInt(JanggiHanjaKey, 0) == 1;
+        set => PlayerPrefs.SetInt(JanggiHanjaKey, value ? 1 : 0);
     }
 
     public static void ResetVolumes()

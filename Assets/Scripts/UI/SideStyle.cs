@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // How each side is named and drawn, which depends on the pieces in play:
@@ -13,6 +14,13 @@ public static class SideStyle
     public static readonly Color Cho = new Color32(0x2F, 0x7A, 0x4B, 0xFF);
     public static readonly Color Han = new Color32(0xB3, 0x31, 0x2A, 0xFF);
 
+    // Only these nine are in the Hanja font (Assets/Fonts/NotoSerifKR).
+    private static readonly Dictionary<string, string> Hanja = new Dictionary<string, string>
+    {
+        { "piece.cho", "楚" }, { "piece.han", "漢" }, { "piece.cha", "車" }, { "piece.po", "包" }, { "piece.ma", "馬" },
+        { "piece.sang", "象" }, { "piece.sa", "士" }, { "piece.jol", "卒" }, { "piece.byeong", "兵" },
+    };
+
     public static string Name(int playerId) => Name(playerId, MatchSettings.Current.PieceType);
 
     public static string Name(int playerId, PieceType pieces)
@@ -20,6 +28,10 @@ public static class SideStyle
         if (pieces == PieceType.JanggiPieces) return Loc.Get(playerId == 0 ? "player.cho" : "player.han");
         return Loc.Get(playerId == 0 ? "player.black" : "player.white");
     }
+
+    // A janggi piece's letter (a piece.* Loc key) in the script this player
+    // picked in Settings.
+    public static string PieceLetter(string key) => GameSettings.JanggiHanja ? Hanja[key] : Loc.Get(key);
 
     public static Color Fill(int playerId, PieceType pieces)
     {
