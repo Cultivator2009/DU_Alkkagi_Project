@@ -103,6 +103,7 @@ public class NetworkMatchBridge : MonoBehaviour
             transport.OnPeerDisconnected -= HandlePeerDisconnected;
         }
         if (lobby != null) lobby.OnMemberLeft -= HandleMemberLeft;
+        BoardSounds.OnEmitted -= ForwardBoardSound;
     }
 
     // ---- Opponent leaving, rematch, back to lobby ----
@@ -199,6 +200,7 @@ public class NetworkMatchBridge : MonoBehaviour
         gameManager.TurnController.RemoteGraceSeconds = GuestFlickGraceSeconds;
         gameManager.TurnController.OnTurnStarted += HandleHostTurnStarted;
         gameManager.TurnController.OnMatchEnded += HandleHostMatchEnded;
+        BoardSounds.OnEmitted += ForwardBoardSound;
         ownerAtTurnStart = SnapshotOwners();
         hostInitialized = true;
         if (pendingGuestReady.HasValue) BeginWithGuest(pendingGuestReady.Value);
@@ -223,6 +225,14 @@ public class NetworkMatchBridge : MonoBehaviour
     private void SendPlacementState()
     {
         transport.Send(opponentId, NetMessage.WritePlacementState(gameManager.Placement.SnapshotFor(remotePlayerId)));
+    }
+
+    // The guest's pieces never collide, so it hears the host's. Not its own
+    // flicks: it played those when it let go.
+    private void ForwardBoardSound(BoardSoundEvent sound)
+    {
+        if (sound.Kind == BoardSound.Flick && sound.Owner == remotePlayerId) return;
+        transport.Send(opponentId, NetMessage.WriteBoardSound(sound), reliable: false);
     }
 
     private Dictionary<char, int> SnapshotOwners()
@@ -471,6 +481,12 @@ public class NetworkMatchBridge : MonoBehaviour
         transport.Send(hostId, NetMessage.WritePlaceRequest(pieceId, position));
     }
 
+    // The host ends the match and its TurnResult brings the result here.
+    public void RequestConcede()
+    {
+        if (!isHost && !matchResolved) transport.Send(hostId, NetMessage.WriteConcede());
+    }
+
     public void RequestPlacementReady()
     {
         if (!isHost) transport.Send(hostId, NetMessage.WritePlacementReady());
@@ -534,6 +550,9 @@ public class NetworkMatchBridge : MonoBehaviour
                     // Rejected: resend, so the guest's optimistic stone goes back.
                     if (phase != null && !phase.TryPlace(remotePlayerId, placeId, new Vector3(x, 0, z))) SendPlacementState();
                     break;
+                case NetMessageType.Concede:
+                    gameManager.TurnController.Concede(remotePlayerId);
+                    break;
                 case NetMessageType.PlacementReady:
                     if (gameManager.Placement != null && !gameManager.Placement.TryReady(remotePlayerId)) SendPlacementState();
                     break;
@@ -552,6 +571,9 @@ public class NetworkMatchBridge : MonoBehaviour
                 break;
             case NetMessageType.PieceSnapshot:
                 HandleGuestSnapshot(data);
+                break;
+            case NetMessageType.BoardSound:
+                if (BoardSounds.Instance != null) BoardSounds.Instance.PlayRemote(NetMessage.ReadBoardSound(data));
                 break;
             case NetMessageType.TurnResult:
                 HandleGuestTurnResult(data);

@@ -64,6 +64,7 @@ public class MainGameUIController : MonoBehaviour
     private bool opponentReturnedToLobby;
     private bool turnsStarted;
     private float noticeUntil;
+    private int lastTickSecond = -1; // the countdown second last ticked
 
     private void Awake()
     {
@@ -114,7 +115,7 @@ public class MainGameUIController : MonoBehaviour
         lobbyButton.gameObject.SetActive(online);
         // The series runs for as long as the same two players keep rematching:
         // the lobby online, the session since the main menu locally.
-        MatchSeries.Begin(online ? $"lobby:{SteamLobbyManager.Instance.CurrentLobby.Value.Id.Value}" : "local");
+        MatchSeries.Begin(online ? $"lobby:{SteamLobbyManager.Instance.CurrentLobby.Value.Id.Value}" : VersusAI ? $"ai:{LocalOpponent.Current}" : "local");
 
         for (var i = 0; i < playerPanels.Length; i++) playerPanels[i].Build(CountPieces(i));
         // Every icon and side name: black/white, or Cho/Han with janggi pieces.
@@ -147,6 +148,26 @@ public class MainGameUIController : MonoBehaviour
         if (turnsStarted && !winnerPlayerId.HasValue) RenderTurn();
     }
 
+    public bool IsOnline => networkBridge != null;
+    private static bool VersusAI => GameManager.manager.VersusAI;
+    // The side this screen plays, when it plays just one: online, or against the AI.
+    private int? OwnSide => networkBridge != null ? networkBridge.LocalPlayerId : VersusAI ? 1 - GameManager.manager.AIPlayerId : (int?)null;
+    // From the match's start (placement included) until its result.
+    public bool MatchInProgress => turnController != null && !winnerPlayerId.HasValue;
+    public bool CanConcede => turnsStarted && !winnerPlayerId.HasValue;
+    // Whose concession the menu offers when it isn't obvious: in a hot-seat
+    // game, the side to move. Null when this screen plays one side.
+    public int? ConcedingSide => OwnSide.HasValue ? (int?)null : currentPlayerId;
+
+    // The in-game menu's Concede. Online the host decides, as for everything.
+    public void Concede()
+    {
+        if (!CanConcede) return;
+        if (networkBridge == null) turnController.Concede(OwnSide ?? currentPlayerId);
+        else if (networkBridge.IsHost) turnController.Concede(networkBridge.LocalPlayerId);
+        else networkBridge.RequestConcede();
+    }
+
     private static bool IsTurnState(GameManager.GameState state)
     {
         return state == GameManager.GameState.WaitingForInput || state == GameManager.GameState.WaitingForEndTurn
@@ -163,6 +184,10 @@ public class MainGameUIController : MonoBehaviour
             ? Loc.Get("hud.turnTimed", ColorName(currentPlayerId), Mathf.CeilToInt(remaining.Value))
             : Loc.Get("hud.turn", ColorName(currentPlayerId));
         turnText.color = remaining.HasValue && remaining.Value <= clockWarningSeconds ? clockWarningColor : turnTextColor;
+        // The last seconds tick, on both screens.
+        var second = remaining.HasValue ? Mathf.CeilToInt(remaining.Value) : -1;
+        if (second > 0 && second <= clockWarningSeconds && second != lastTickSecond) GameAudio.PlayInterface(GameAudio.Bank.tick);
+        lastTickSecond = second;
 
         for (var i = 0; i < playerPanels.Length; i++)
             playerPanels[i].skipButton.gameObject.SetActive(i == currentPlayerId && CanSkip(i));
@@ -177,7 +202,7 @@ public class MainGameUIController : MonoBehaviour
 
     private bool CanSkip(int playerId)
     {
-        if (networkBridge == null) return turnController.IsAwaitingShot; // hot seat: whoever's turn it is
+        if (networkBridge == null) return turnController.IsAwaitingShot && playerId != GameManager.manager.AIPlayerId; // hot seat: whoever's turn it is
         if (playerId != networkBridge.LocalPlayerId) return false;
         return networkBridge.IsHost ? turnController.IsAwaitingShot : networkBridge.GuestCanPass;
     }
@@ -231,7 +256,15 @@ public class MainGameUIController : MonoBehaviour
     private void HandleTurnStarted(PlayersManager player)
     {
         currentPlayerId = player.ID;
+        PlayTurnChime();
         Render();
+    }
+
+    // Only for this screen's own turns (online, against the AI); in a
+    // hot-seat game every turn is somebody's here.
+    private void PlayTurnChime()
+    {
+        if (!OwnSide.HasValue || currentPlayerId == OwnSide.Value) GameAudio.PlayInterface(GameAudio.Bank.turn, 0.7f);
     }
 
     // Host and local only; a guest counts through HandleGuestTurnEnded.
@@ -246,6 +279,7 @@ public class MainGameUIController : MonoBehaviour
     {
         int? localPlayer = networkBridge != null ? networkBridge.LocalPlayerId : (int?)null;
         killFeed.Add(events, GameManager.manager.Board, MatchSettings.Current.PieceType, localPlayer);
+        if (events.Any(e => e.Kind == KillKind.Kill || e.Kind == KillKind.Nongae)) GameAudio.PlayInterface(GameAudio.Bank.kill, 0.8f);
     }
 
     private void HandleTurnPassed(PlayersManager player, TurnEnd why)
@@ -268,6 +302,7 @@ public class MainGameUIController : MonoBehaviour
     private void HandleGuestTurnChanged(int playerId)
     {
         currentPlayerId = playerId;
+        PlayTurnChime();
         Render();
     }
 
@@ -296,6 +331,9 @@ public class MainGameUIController : MonoBehaviour
         endReason = reason;
         matchEndTime = Time.time;
         MatchSeries.Record(winnerId);
+        var bank = GameAudio.Bank;
+        var lost = OwnSide.HasValue && winnerId >= 0 && winnerId != OwnSide.Value;
+        GameAudio.PlayInterface(winnerId < 0 ? bank.draw : lost ? bank.lose : bank.win);
         gameOverPanel.SetActive(true);
         Render();
     }
@@ -333,10 +371,10 @@ public class MainGameUIController : MonoBehaviour
             stampText.text = Loc.Get("result.stampDraw");
             resultTitleText.text = Loc.Get("result.draw");
         }
-        else if (online)
+        else if (OwnSide.HasValue)
         {
-            // Online the result reads from this player's side of the board.
-            var won = winner == networkBridge.LocalPlayerId;
+            // Online and against the AI the result reads from this player's side.
+            var won = winner == OwnSide.Value;
             stampText.text = Loc.Get(won ? "win.stamp" : "result.stampLose");
             resultTitleText.text = Loc.Get(won ? "result.win" : "result.lose");
         }
@@ -352,6 +390,7 @@ public class MainGameUIController : MonoBehaviour
             MatchEndReason.BothOut when MatchSettings.Current.BothOutRule == BothOutRule.ShooterWins => Loc.Get("reason.bothOutWin", ColorName(winner)),
             MatchEndReason.BothOut => Loc.Get("reason.bothOut", ColorName(loser)),
             MatchEndReason.OpponentLeft => Loc.Get("reason.opponentLeft"),
+            MatchEndReason.Surrender => Loc.Get("reason.surrender", ColorName(loser)),
             _ => Loc.Get("reason.knockout", ColorName(loser)),
         };
 
@@ -394,7 +433,7 @@ public class MainGameUIController : MonoBehaviour
 
     private static string PlayerLabel(int playerId)
     {
-        var number = Loc.Get("player.number", playerId + 1);
+        var number = playerId == GameManager.manager.AIPlayerId ? LocalOpponent.Name : Loc.Get("player.number", playerId + 1);
         return MatchSeries.Played > 0 ? Loc.Get("series.panel", number, MatchSeries.Wins(playerId)) : number;
     }
 
@@ -431,7 +470,7 @@ public class MainGameUIController : MonoBehaviour
         SceneManager.LoadScene("GameScene");
     }
 
-    private void ReturnToMainMenu()
+    public void ReturnToMainMenu()
     {
         // Leaving the lobby matters: NetworkBootstrap treats any GameScene load
         // with a live lobby as an online match, local games included.

@@ -30,6 +30,9 @@ public class GameManager : MonoBehaviour
     public TurnController TurnController { get; private set; }
     public BoardSetup Board { get; private set; }
     public PlacementPhase Placement { get; private set; }
+    // The side the AI plays in a local game against it (LocalOpponent), or -1.
+    public int AIPlayerId { get; private set; } = -1;
+    public bool VersusAI => AIPlayerId >= 0;
 
     // Set by NetworkMatchBridge on a network guest: the authoritative turn
     // state machine only ever runs on the host, so a guest's local
@@ -113,11 +116,24 @@ public class GameManager : MonoBehaviour
         }
 
         vcams = GameObject.FindGameObjectsWithTag("vcam");
+        // Lives in GameScene, so it goes with the match.
+        new GameObject("BoardSounds").AddComponent<BoardSounds>().Init(settings.PieceType == PieceType.JanggiPieces);
+        foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>();
 
         TurnController = new TurnController(Ruleset, playersList, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds);
         gameState = GameState.WaitingForPlayers;
+        if (!IsOnlineMatch && LocalOpponent.IsAI)
+        {
+            // White; this screen's mouse only ever moves black.
+            AIPlayerId = 1;
+            TurnController.PieceSelector.LocalPlayerId = 0;
+            var ai = new GameObject("AI").AddComponent<AIOpponent>();
+            ai.playerId = AIPlayerId;
+            ai.level = LocalOpponent.Level;
+        }
         // Online, NetworkMatchBridge calls BeginMatch once the guest is in.
-        if (!IsOnlineMatch) BeginMatch(hotSeat: true);
+        // Against the AI both sides can place at once, as online.
+        if (!IsOnlineMatch) BeginMatch(hotSeat: !VersusAI);
     }
 
     private static bool IsOnlineMatch => SteamLobbyManager.Instance != null && SteamLobbyManager.Instance.CurrentLobby.HasValue;
@@ -181,6 +197,7 @@ public class GameManager : MonoBehaviour
         playersList.Clear();
         gamePieceScripts.Clear();
         vcams = null;
+        AIPlayerId = -1;
         SkipLocalTurnProcessing = false;
         gameState = GameState.Mainmenu;
     }

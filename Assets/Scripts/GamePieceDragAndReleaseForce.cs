@@ -112,7 +112,11 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             {
                 force = AimDirection * (AimPower * maxForce);
                 if (isAuthority) ApplyFlick(force);
-                else OnFlickRequested?.Invoke(force);
+                else
+                {
+                    if (BoardSounds.Instance != null) BoardSounds.Instance.PlayLocalFlick(transform.position, AimPower);
+                    OnFlickRequested?.Invoke(force);
+                }
                 isSelected = false;
                 isDragging = false;
             }
@@ -132,7 +136,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
 
     // Back to choosing a piece; TurnController sees isCancelled and waits
     // for input again.
-    private void Cancel()
+    public void Cancel()
     {
         isSelected = false;
         isDragging = false;
@@ -147,6 +151,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         if (flickForce.magnitude > maxForce) flickForce = flickForce.normalized * maxForce;
         var launch = flickForce / referenceMass * Mathf.Pow(referenceMass / rb.mass, massExponent);
         rb.AddForce(launch, ForceMode.VelocityChange);
+        if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Flick, launch.magnitude, rb.position, GetComponent<GamePieceManager>().playerIndex);
 
         // The impulse only shows up in linearVelocity after the next physics
         // step, so a resting piece would still read as settled for a frame
@@ -174,6 +179,9 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
 
     private void OnMouseDown()
     {
+        // Physics picking ignores the UI: a click on a menu or button over
+        // the board would otherwise also pick up the piece under it.
+        if (UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
         isSelected = true;
     }
 

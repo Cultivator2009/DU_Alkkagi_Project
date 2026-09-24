@@ -64,7 +64,7 @@ namespace AlkkagiUIEditor
             menu.steamUserText.rectTransform.offsetMin = new Vector2(32, 0);
             menu.steamUserRow = steamRow.gameObject;
 
-            BuildSettingsPanel(root, menu);
+            menu.settingsPanel = BuildSettingsPanel(root, out menu.settingsCloseButton).gameObject;
             BuildSetupPanel(root, menu);
             return canvas.gameObject;
         }
@@ -110,13 +110,13 @@ namespace AlkkagiUIEditor
         }
 
         // Language, janggi letters, sound and controls. SettingsPanel keeps
-        // each control and its saved value in step.
-        private static void BuildSettingsPanel(Transform root, MainMenuUI menu)
+        // each control and its saved value in step. The in-game menu (HUD)
+        // uses the same card.
+        internal static SettingsPanel BuildSettingsPanel(Transform root, out Button closeButton)
         {
             const float width = 780, pad = 64, rowHeight = 60;
             var overlay = UIKit.Image(root, "SettingsPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
-            menu.settingsPanel = overlay.gameObject;
             var panel = overlay.gameObject.AddComponent<SettingsPanel>();
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
@@ -182,29 +182,36 @@ namespace AlkkagiUIEditor
 
             panel.resetButton = UIKit.CapsuleButton(c, "ResetButton", "settings.reset", new Vector2(240, 84), false, 30);
             panel.resetButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(pad, 48), new Vector2(240, 84));
-            menu.settingsCloseButton = UIKit.CapsuleButton(c, "CloseButton", "settings.close", new Vector2(240, 84), true, 32);
-            menu.settingsCloseButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 48), new Vector2(240, 84));
+            closeButton = UIKit.CapsuleButton(c, "CloseButton", "settings.close", new Vector2(240, 84), true, 32);
+            closeButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 48), new Vector2(240, 84));
             overlay.gameObject.SetActive(false);
+            return panel;
         }
 
-        // Local match setup: the same rules card the online lobby shows, with
-        // Start / Cancel. MainMenuUI fills it from the last-used rules.
+        // Local match setup: who plays white (someone at this screen, or the
+        // AI), then the same rules card the online lobby shows, with Start /
+        // Cancel. MainMenuUI fills it from the last-used choices.
         private static void BuildSetupPanel(Transform root, MainMenuUI menu)
         {
-            const float width = 840, pad = 64, rowHeight = 52, gap = 8;
+            const float width = 840, pad = 64, rowHeight = 52, gap = 8, opponentRow = 80;
             var rulesHeight = MatchSettings.Defs.Length * (rowHeight + gap) - gap;
             var overlay = UIKit.Image(root, "SetupPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             menu.setupPanel = overlay.gameObject;
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
-            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 148 + rulesHeight + 40 + 84 + 48));
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 148 + opponentRow + rulesHeight + 40 + 84 + 48));
             var top = new Vector2(0.5f, 1);
 
             UIKit.Label(card.transform, "Title", "match.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
                 .rectTransform.Place(top, new Vector2(0, -44), new Vector2(width - pad * 2, 64));
+            UIKit.Label(card.transform, "OpponentLabel", "setup.opponent", 28, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(new Vector2(0, 1), new Vector2(pad, -144), new Vector2(160, 60));
+            menu.opponentToggle = UIKit.SegmentedToggle(card.transform, "OpponentToggle",
+                new[] { "opponent.Human", "opponent.AIEasy", "opponent.AINormal", "opponent.AIHard" }, 60);
+            menu.opponentToggle.GetComponent<RectTransform>().Place(new Vector2(1, 1), new Vector2(-pad, -144), new Vector2(width - pad * 2 - 150, 60));
             menu.setupRules = UIKit.RulesPanel(card.transform, "Rules", width - pad * 2, rowHeight, gap, 28);
-            menu.setupRules.GetComponent<RectTransform>().Place(new Vector2(0, 1), new Vector2(pad, -148), menu.setupRules.GetComponent<RectTransform>().sizeDelta);
+            menu.setupRules.GetComponent<RectTransform>().Place(new Vector2(0, 1), new Vector2(pad, -148 - opponentRow), menu.setupRules.GetComponent<RectTransform>().sizeDelta);
 
             menu.setupCancelButton = UIKit.CapsuleButton(card.transform, "CancelButton", "setup.cancel", new Vector2(240, 84), false, 32);
             menu.setupCancelButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(pad, 48), new Vector2(240, 84));

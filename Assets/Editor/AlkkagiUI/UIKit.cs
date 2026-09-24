@@ -406,6 +406,7 @@ namespace AlkkagiUIEditor
             fill.gameObject.AddComponent<CanvasGroup>();
 
             var button = fill.gameObject.AddComponent<Button>();
+            fill.gameObject.AddComponent<ClickSound>();
             button.targetGraphic = fill;
             var colors = button.colors;
             colors.highlightedColor = new Color(0.94f, 0.94f, 0.94f);
@@ -488,6 +489,7 @@ namespace AlkkagiUIEditor
             var target = hit.gameObject.AddComponent<Image>();
             target.color = Color.clear;
             var button = hit.gameObject.AddComponent<Button>();
+            hit.gameObject.AddComponent<ClickSound>();
             button.targetGraphic = target;
             button.transition = Selectable.Transition.None;
             return (button, highlight, label);
@@ -542,6 +544,7 @@ namespace AlkkagiUIEditor
             var target = hit.gameObject.AddComponent<Image>();
             target.color = Color.clear;
             var button = hit.gameObject.AddComponent<Button>();
+            hit.gameObject.AddComponent<ClickSound>();
             button.targetGraphic = target;
             button.transition = Selectable.Transition.None;
             return button;

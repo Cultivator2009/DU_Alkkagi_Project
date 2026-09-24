@@ -16,7 +16,9 @@ public enum NetMessageType : byte
     PlacementState = 10, // host -> guest: the placement phase as the guest may see it
     PlaceRequest = 11,   // guest -> host: put/move one of my stones
     PlacementReady = 12, // guest -> host: my stones are final
-    Kick = 13            // host -> guest: leave my lobby
+    Kick = 13,           // host -> guest: leave my lobby
+    BoardSound = 14,     // host -> guest: a knock, hinge, flick or fall to play (unreliable)
+    Concede = 15         // guest -> host: I give up
 }
 
 public struct PieceOwnerEntry
@@ -46,7 +48,7 @@ public static class NetMessage
     // Bump whenever a message changes shape. Lobbies advertise it, and a
     // build only lists and joins lobbies on its own version: two builds that
     // disagree here would misread each other's messages mid-match.
-    public const int ProtocolVersion = 1;
+    public const int ProtocolVersion = 2;
 
     public static byte[] WriteStartMatch(int localPlayerId, IReadOnlyList<PieceOwnerEntry> pieceOwners)
     {
@@ -307,6 +309,24 @@ public static class NetMessage
     public static byte[] WriteReturnToLobby() => new[] { (byte)NetMessageType.ReturnToLobby };
 
     public static byte[] WriteKick() => new[] { (byte)NetMessageType.Kick };
+
+    public static byte[] WriteConcede() => new[] { (byte)NetMessageType.Concede };
+
+    public static byte[] WriteBoardSound(BoardSoundEvent sound)
+    {
+        return new[]
+        {
+            (byte)NetMessageType.BoardSound,
+            (byte)sound.Kind,
+            (byte)Mathf.RoundToInt(Mathf.Clamp01(sound.Volume) * 255),
+            (byte)(sbyte)Mathf.RoundToInt(Mathf.Clamp(sound.Pan, -1f, 1f) * 127),
+        };
+    }
+
+    public static BoardSoundEvent ReadBoardSound(byte[] data)
+    {
+        return new BoardSoundEvent { Kind = (BoardSound)data[1], Volume = data[2] / 255f, Pan = (sbyte)data[3] / 127f, Owner = -1 };
+    }
 
     public static NetMessageType PeekType(byte[] data) => (NetMessageType)data[0];
 }

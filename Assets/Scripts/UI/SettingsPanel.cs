@@ -21,6 +21,10 @@ public class SettingsPanel : MonoBehaviour
     private static readonly KeyCode[] AllKeys = (KeyCode[])Enum.GetValues(typeof(KeyCode));
     private KeyBindRow capturing;
 
+    // The frame this card last used Esc (to cancel a rebind), so whatever
+    // else listens for Esc on that frame can leave it be.
+    public int EscapeUsedFrame { get; private set; } = -1;
+
     private void Awake()
     {
         janggiLetters.OnSelected += index =>
@@ -75,6 +79,7 @@ public class SettingsPanel : MonoBehaviour
         if (capturing == null || !Input.anyKeyDown) return;
         if (Input.GetKeyDown(KeyCode.Escape))
         {
+            EscapeUsedFrame = Time.frameCount;
             capturing = null;
             Render();
             return;

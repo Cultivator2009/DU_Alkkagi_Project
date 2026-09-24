@@ -131,6 +131,15 @@ public class TurnController
         return true;
     }
 
+    // playerId gives up during the turns (the in-game menu, or the guest's
+    // Concede on the host): the other side wins.
+    public void Concede(int playerId)
+    {
+        if (State == GameManager.GameState.MatchOver) return;
+        State = GameManager.GameState.MatchOver;
+        OnMatchEnded?.Invoke(players.Find(p => p.ID != playerId), MatchEndReason.Surrender);
+    }
+
     // Stops the match without a ruleset result, e.g. when the online
     // opponent leaves. Whoever called it reports the outcome.
     public void Abort()

@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3a891abdb2eb4772a713da66b82c1ce, type: 3}
+  m_Name: SoundBank
+  m_EditorClassIdentifier: Assembly-CSharp::SoundBank
+  stoneHit: {fileID: 8300000, guid: 250f2fdfb4e4f49658532efa6f0126b7, type: 3}
+  woodHit: {fileID: 8300000, guid: e3b6851aeb96040ceaa447f86b8cb203, type: 3}
+  hingeHit: {fileID: 8300000, guid: 43a0df44831854c5b8750113b4eba970, type: 3}
+  flick: {fileID: 8300000, guid: f8491711fa7ff4b08befbcc3a6257633, type: 3}
+  fall: {fileID: 8300000, guid: 2c40b1e3800c34cf1965bda2b547cff9, type: 3}
+  click: {fileID: 8300000, guid: 5a2b217670a9742a1af8d0ef2367dcf6, type: 3}
+  tick: {fileID: 8300000, guid: dd9d0b1e8cf544fc7a8a5d86d0e22b7d, type: 3}
+  turn: {fileID: 8300000, guid: 223e1affce31d4a97bcfbc4dcfd05220, type: 3}
+  kill: {fileID: 8300000, guid: ced802c2b6f9c4a289b7daa8be1956c7, type: 3}
+  win: {fileID: 8300000, guid: 21432f65e565446948319d75b473b07f, type: 3}
+  lose: {fileID: 8300000, guid: afbe258cea2bb4e2187484adcb7f8b8e, type: 3}
+  draw: {fileID: 8300000, guid: b7d036940783a43a88fd4ccb7a856e42, type: 3}

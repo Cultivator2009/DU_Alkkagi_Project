@@ -17,6 +17,7 @@ public class MainMenuUI : MonoBehaviour
     // Local match setup: the same rules an online host sets in the lobby.
     public GameObject setupPanel;
     public MatchSettingsPanel setupRules;
+    public SegmentedToggle opponentToggle; // Opponent order
     public Button setupStartButton;
     public Button setupCancelButton;
     public GameObject steamUserRow;
@@ -29,8 +30,14 @@ public class MainMenuUI : MonoBehaviour
         localButton.onClick.AddListener(() =>
         {
             setupRules.Show(MatchSettings.LoadPrefs(), true);
+            opponentToggle.Show((int)LocalOpponent.Current);
             setupPanel.SetActive(true);
         });
+        opponentToggle.OnSelected += index =>
+        {
+            LocalOpponent.Current = (Opponent)index;
+            opponentToggle.Show(index);
+        };
         setupStartButton.onClick.AddListener(StartLocalMatch);
         setupCancelButton.onClick.AddListener(() => setupPanel.SetActive(false));
         onlineButton.onClick.AddListener(() => SceneManager.LoadScene("LobbyScene"));

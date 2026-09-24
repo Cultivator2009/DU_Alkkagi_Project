@@ -51,6 +51,7 @@ namespace AlkkagiUIEditor
             BuildKillFeed(root, controller);
             BuildAim(root);
             BuildGameOverPanel(root, controller);
+            BuildPauseMenu(root, controller);
             return canvas.gameObject;
         }
 
@@ -370,6 +371,51 @@ namespace AlkkagiUIEditor
             controller.mainMenuButton = UIKit.CapsuleButton(buttons, "MainMenuButton", "win.menu", new Vector2(210, 84), false, 30);
 
             overlay.gameObject.SetActive(false);
+        }
+
+        // Esc or the Menu button (bottom right, the corner no panel uses):
+        // resume, settings (the main menu's card), concede, main menu.
+        private static void BuildPauseMenu(Transform root, MainGameUIController controller)
+        {
+            const float width = 560, pad = 64, buttonHeight = 88, gap = 20;
+            var menu = root.gameObject.AddComponent<PauseMenu>();
+            menu.game = controller;
+
+            menu.openButton = UIKit.CapsuleButton(root, "MenuButton", "hud.menu", new Vector2(180, 64), false, 26);
+            menu.openButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-Margin, Margin), new Vector2(180, 64));
+
+            var overlay = UIKit.Image(root, "PauseMenu", null, Theme.Overlay, raycast: true);
+            overlay.rectTransform.Stretch();
+            menu.overlay = overlay.gameObject;
+            var height = 148 + 4 * buttonHeight + 3 * gap + 40 + 36 + 48;
+            var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, height));
+            var top = new Vector2(0.5f, 1);
+            UIKit.Label(card.transform, "Title", "pause.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
+                .rectTransform.Place(top, new Vector2(0, -44), new Vector2(width - pad * 2, 64));
+
+            Button Row(string name, string key, int index, bool primary)
+            {
+                var button = UIKit.CapsuleButton(card.transform, name, key, new Vector2(width - pad * 2, buttonHeight), primary, 32);
+                button.GetComponent<RectTransform>().Place(top, new Vector2(0, -148 - index * (buttonHeight + gap)), new Vector2(width - pad * 2, buttonHeight));
+                return button;
+            }
+            menu.resumeButton = Row("ResumeButton", "pause.resume", 0, true);
+            menu.settingsButton = Row("SettingsButton", "menu.settings", 1, false);
+            menu.concedeButton = Row("ConcedeButton", "pause.concede", 2, false);
+            menu.mainMenuButton = Row("MainMenuButton", "pause.mainMenu", 3, false);
+            // Set by PauseMenu (the side conceding, or "press again").
+            menu.concedeLabel = menu.concedeButton.GetComponentInChildren<TMP_Text>();
+            Object.DestroyImmediate(menu.concedeLabel.GetComponent<LocalizedText>());
+            menu.mainMenuLabel = menu.mainMenuButton.GetComponentInChildren<TMP_Text>();
+            Object.DestroyImmediate(menu.mainMenuLabel.GetComponent<LocalizedText>());
+
+            menu.caption = UIKit.Text(card.transform, "Caption", Loc.Get("pause.captionLocal"), 22, false, Theme.InkFaint, TextAlignmentOptions.Center);
+            menu.caption.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0, 48), new Vector2(width - pad * 2, 36), new Vector2(0.5f, 0));
+            overlay.gameObject.SetActive(false);
+
+            // Above the menu, as it's opened from it.
+            menu.settings = MenuBuilder.BuildSettingsPanel(root, out menu.settingsCloseButton);
         }
 
         private static void BuildScoreboard(Transform modal, MainGameUIController controller)

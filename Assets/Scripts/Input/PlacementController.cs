@@ -18,9 +18,11 @@ public class PlacementController : MonoBehaviour
     {
         get
         {
-            var phase = GameManager.manager != null ? GameManager.manager.Placement : null;
+            var gameManager = GameManager.manager;
+            var phase = gameManager != null ? gameManager.Placement : null;
             if (phase == null) return -1;
             if (Bridge != null) return Bridge.LocalPlayerId;
+            if (gameManager.VersusAI) return 1 - gameManager.AIPlayerId; // the AI places its own
             return phase.Placer;
         }
     }
