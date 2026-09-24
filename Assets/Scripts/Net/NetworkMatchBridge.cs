@@ -16,6 +16,9 @@ using UnityEngine.SceneManagement;
 public class NetworkMatchBridge : MonoBehaviour
 {
     private const int SnapshotIntervalFixedFrames = 3;
+    // How long past zero the guest's turn runs on the host's clock (see
+    // TurnController.RemoteGraceSeconds): a round trip on a slow relay.
+    private const float GuestFlickGraceSeconds = 0.5f;
 
     // On the guest, TurnController.Tick() never runs (see GameManager.
     // SkipLocalTurnProcessing), so TurnController's own events never fire
@@ -192,6 +195,8 @@ public class NetworkMatchBridge : MonoBehaviour
         localPlayerId = gameManager.playersList[0].ID;
         if (gameManager.playersList.Count > 1) remotePlayerId = gameManager.playersList[1].ID;
         gameManager.TurnController.PieceSelector.LocalPlayerId = localPlayerId;
+        gameManager.TurnController.RemotePlayerId = remotePlayerId;
+        gameManager.TurnController.RemoteGraceSeconds = GuestFlickGraceSeconds;
         gameManager.TurnController.OnTurnStarted += HandleHostTurnStarted;
         gameManager.TurnController.OnMatchEnded += HandleHostMatchEnded;
         ownerAtTurnStart = SnapshotOwners();

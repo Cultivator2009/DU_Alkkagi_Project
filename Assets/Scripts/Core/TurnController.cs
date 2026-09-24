@@ -31,6 +31,21 @@ public class TurnController
     public float TurnTimeRemaining { get; private set; }
     public bool IsAwaitingShot => State == GameManager.GameState.WaitingForInput || State == GameManager.GameState.WaitingForEndTurn;
 
+    // Online the host's clock also times the guest's turns, but a guest's
+    // flick reaches the host a network trip after it was let go. The guest's
+    // turn runs this long past zero before it's passed, so a flick released
+    // just in time still counts. Set by NetworkMatchBridge on the host.
+    public int RemotePlayerId { get; set; } = -1;
+    public float RemoteGraceSeconds { get; set; }
+
+    // The pull has been let go: the flick lands on the next physics step, or
+    // already has on this frame's, but the state only catches up in
+    // EndTurnReady. The shot is taken from here on - timing out now would
+    // pass the turn while the stone flies, and online the guest would get
+    // none of that movement (snapshots only go out while a shot is processed).
+    private bool ShotReleased => State == GameManager.GameState.WaitingForEndTurn && selGamePiece != null
+                                 && (selGamePiece.isOnfire || (!selGamePiece.isDragging && !selGamePiece.isCancelled));
+
     private readonly IRuleset ruleset;
     private readonly List<PlayersManager> players;
     private readonly List<GamePieceDragAndReleaseForce> gamePieceScripts;
@@ -61,10 +76,11 @@ public class TurnController
 
     public void Tick()
     {
-        if (TurnSeconds > 0 && IsAwaitingShot)
+        if (TurnSeconds > 0 && IsAwaitingShot && !ShotReleased)
         {
             TurnTimeRemaining -= Time.deltaTime;
-            if (TurnTimeRemaining <= 0)
+            var grace = CurrentPlayerID == RemotePlayerId ? RemoteGraceSeconds : 0;
+            if (TurnTimeRemaining <= -grace)
             {
                 PassTurn(TurnEnd.Timeout);
                 return;
@@ -110,7 +126,7 @@ public class TurnController
     // the side to move, before its stone is flicked.
     public bool TryPassTurn(int playerId)
     {
-        if (!IsAwaitingShot || playerId != CurrentPlayerID) return false;
+        if (!IsAwaitingShot || ShotReleased || playerId != CurrentPlayerID) return false;
         PassTurn(TurnEnd.Skipped);
         return true;
     }
