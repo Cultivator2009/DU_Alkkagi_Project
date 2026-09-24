@@ -404,7 +404,8 @@ public class MainGameUIController : MonoBehaviour
             teamKillCells[i].text = kills.TeamKills(i).ToString();
             shotsCells[i].text = shots[i].ToString();
         }
-        var seconds = Mathf.FloorToInt(matchEndTime - matchStartTime);
+        // Time.time runs at the game's pace (and stands still while paused).
+        var seconds = Mathf.FloorToInt((matchEndTime - matchStartTime) / GamePace.Speed);
         matchTimeText.text = Loc.Get("stats.time", $"{seconds / 60}:{seconds % 60:00}");
         seriesText.text = Loc.Get("series.score", ColorName(0), MatchSeries.Wins(0), MatchSeries.Wins(1), ColorName(1))
                           + (MatchSeries.Draws > 0 ? Loc.Get("series.draws", MatchSeries.Draws) : string.Empty);

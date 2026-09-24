@@ -157,6 +157,7 @@ public static class Loc
         { "settings.hanja", ("한자", "Hanja") },
         { "bind.CameraView", ("시점 전환 (누르고 있기)", "Camera view (hold)") },
         { "bind.CancelAim", ("조준 취소", "Cancel aim") },
+        { "bind.LookAround", ("시점 돌리기 (누르고 끌기)", "Look around (hold and drag)") },
         { "bind.press", ("키를 누르세요 · Esc 취소", "Press a key · Esc cancels") },
         { "key.mouseRight", ("마우스 오른쪽", "Right mouse") },
         { "key.mouseMiddle", ("마우스 가운데", "Middle mouse") },

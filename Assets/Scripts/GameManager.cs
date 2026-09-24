@@ -39,6 +39,9 @@ public class GameManager : MonoBehaviour
     // TurnController must not process input on its own.
     public bool SkipLocalTurnProcessing;
 
+    private bool lookingAround;
+    private bool otherView;
+
     private void Awake()
     {
         if (manager == null)
@@ -64,13 +67,7 @@ public class GameManager : MonoBehaviour
 
     private void Update()
     {
-        // Held: the other camera angle (Settings > Controls, Left Ctrl by default).
-        if (KeyBindings.Down(GameAction.CameraView))
-            if (vcams != null)
-                vcams[0].SetActive(false);
-        if (KeyBindings.Up(GameAction.CameraView))
-            if (vcams != null)
-                vcams[0].SetActive(true);
+        UpdateCameraView();
 
         if (gameState == GameState.GameReadyProcess)
         {
@@ -79,7 +76,7 @@ public class GameManager : MonoBehaviour
         }
         if (gameState == GameState.Placement)
         {
-            Placement.Tick(Time.deltaTime); // a guest's mirror only counts down; the host decides
+            Placement.Tick(GamePace.ClockDelta); // a guest's mirror only counts down; the host decides
             return;
         }
 
@@ -89,10 +86,37 @@ public class GameManager : MonoBehaviour
         gameState = TurnController.State;
     }
 
+    // Held: the other camera angle (Settings > Controls, Left Ctrl by
+    // default). Look around (the middle button) gives the same angle with the
+    // cursor locked and hidden while it's held, so turning the view all the
+    // way round never runs the cursor off the window. It waits for a pull or
+    // a stone being placed to end first (locking moves the cursor), and a
+    // press over a menu is the menu's.
+    private void UpdateCameraView()
+    {
+        var overUI = UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
+        if (!lookingAround && vcams != null && Time.timeScale > 0 && KeyBindings.Down(GameAction.LookAround) && !Input.GetMouseButton(0) && !overUI)
+            SetLookingAround(true);
+        else if (lookingAround && (vcams == null || Time.timeScale == 0 || !KeyBindings.Held(GameAction.LookAround)))
+            SetLookingAround(false);
+
+        var other = lookingAround || KeyBindings.Held(GameAction.CameraView);
+        if (other != otherView && vcams != null) vcams[0].SetActive(!other);
+        otherView = other;
+    }
+
+    private void SetLookingAround(bool on)
+    {
+        lookingAround = on;
+        Cursor.lockState = on ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !on;
+    }
+
     private void GamePreparation()
     {
         var settings = MatchSettings.Current;
         Ruleset = new ClassicRuleset(settings.BothOutRule);
+        Time.timeScale = GamePace.Speed;
 
         var playersParentOb = new GameObject("Players");
         for (var playerIndex = 0; playerIndex < totalPlayerCnt; playerIndex++)
@@ -118,6 +142,7 @@ public class GameManager : MonoBehaviour
         vcams = GameObject.FindGameObjectsWithTag("vcam");
         // Lives in GameScene, so it goes with the match.
         new GameObject("BoardSounds").AddComponent<BoardSounds>().Init(settings.PieceType == PieceType.JanggiPieces);
+        new GameObject("HitEffects").AddComponent<HitEffects>();
         foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>();
 
         TurnController = new TurnController(Ruleset, playersList, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds);
@@ -200,5 +225,6 @@ public class GameManager : MonoBehaviour
         AIPlayerId = -1;
         SkipLocalTurnProcessing = false;
         gameState = GameState.Mainmenu;
+        Time.timeScale = 1f; // menus run at full speed
     }
 }

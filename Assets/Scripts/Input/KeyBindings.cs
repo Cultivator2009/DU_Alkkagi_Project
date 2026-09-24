@@ -5,7 +5,8 @@ using UnityEngine;
 public enum GameAction
 {
     CameraView, // hold for the other camera angle
-    CancelAim
+    CancelAim,
+    LookAround  // hold and move the mouse: the same angle, the cursor locked
 }
 
 // Rebindable keys (Settings > Controls), saved on this machine. Any KeyCode
@@ -19,6 +20,7 @@ public static class KeyBindings
     {
         { GameAction.CameraView, KeyCode.LeftControl },
         { GameAction.CancelAim, KeyCode.Mouse1 },
+        { GameAction.LookAround, KeyCode.Mouse2 },
     };
 
     public static event Action OnChanged;
@@ -27,6 +29,7 @@ public static class KeyBindings
 
     public static bool Down(GameAction action) => Input.GetKeyDown(Get(action));
     public static bool Up(GameAction action) => Input.GetKeyUp(Get(action));
+    public static bool Held(GameAction action) => Input.GetKey(Get(action));
 
     public static bool IsBindable(KeyCode key) => key != KeyCode.None && key != KeyCode.Mouse0 && key != KeyCode.Escape;
 

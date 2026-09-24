@@ -16,13 +16,15 @@ public struct BoardSoundEvent
     public float Volume; // 0..1
     public float Pan;    // -1 left .. 1 right
     public int Owner;    // whose piece flicked, -1 for the rest
+    public Vector3 Position;
 }
 
 // The board's sounds for one match. The physics authority (a local game, or
 // the network host) hears its own collisions through each piece's
 // PieceSounds. A guest's pieces are kinematic and never collide, so
 // NetworkMatchBridge forwards the host's sounds, and the guest plays each a
-// moment late to line up with its eased view of the board.
+// moment late to line up with its eased view of the board. A knock's burst
+// (HitEffects) goes off with its sound.
 public class BoardSounds : MonoBehaviour
 {
     public static BoardSounds Instance { get; private set; }
@@ -58,7 +60,7 @@ public class BoardSounds : MonoBehaviour
     {
         if (soundsThisStep >= maxSoundsPerStep) return;
         soundsThisStep++;
-        var sound = new BoardSoundEvent { Kind = kind, Volume = Loudness(kind, speed), Pan = Pan(at), Owner = owner };
+        var sound = new BoardSoundEvent { Kind = kind, Volume = Loudness(kind, speed), Pan = Pan(at), Owner = owner, Position = at };
         Play(sound);
         OnEmitted?.Invoke(sound);
     }
@@ -72,7 +74,7 @@ public class BoardSounds : MonoBehaviour
     // starts moving when the host's snapshots come back.
     public void PlayLocalFlick(Vector3 at, float power)
     {
-        Play(new BoardSoundEvent { Kind = BoardSound.Flick, Volume = 0.35f + 0.65f * power, Pan = Pan(at), Owner = -1 });
+        Play(new BoardSoundEvent { Kind = BoardSound.Flick, Volume = 0.35f + 0.65f * power, Pan = Pan(at), Owner = -1, Position = at });
     }
 
     private IEnumerator PlayLater(BoardSoundEvent sound)
@@ -93,6 +95,7 @@ public class BoardSounds : MonoBehaviour
 
     private void Play(BoardSoundEvent sound)
     {
+        if (sound.Kind == BoardSound.Hit && HitEffects.Instance != null) HitEffects.Instance.Play(sound.Position, sound.Volume);
         var bank = GameAudio.Bank;
         var clip = sound.Kind switch
         {

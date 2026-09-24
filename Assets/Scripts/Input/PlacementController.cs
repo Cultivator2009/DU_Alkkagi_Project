@@ -64,7 +64,7 @@ public class PlacementController : MonoBehaviour
         var board = gameManager.Board;
         if (!TryGetBoardPoint(board, player, out var point)) return;
 
-        if (Input.GetMouseButtonDown(0) && !IsPointerOverUI())
+        if (Input.GetMouseButtonDown(0) && !IsPointerOverUI() && Cursor.lockState != CursorLockMode.Locked)
         {
             var hit = StoneUnderCursor();
             if (hit != null)

@@ -115,12 +115,13 @@ namespace AlkkagiUIEditor
         internal static SettingsPanel BuildSettingsPanel(Transform root, out Button closeButton)
         {
             const float width = 780, pad = 64, rowHeight = 60;
+            var actions = (GameAction[])System.Enum.GetValues(typeof(GameAction));
             var overlay = UIKit.Image(root, "SettingsPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             var panel = overlay.gameObject.AddComponent<SettingsPanel>();
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
-            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 880));
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 728 + actions.Length * 76));
             var c = card.transform;
             var topLeft = new Vector2(0, 1);
             var topRight = new Vector2(1, 1);
@@ -161,7 +162,6 @@ namespace AlkkagiUIEditor
 
             Section("Controls", "settings.controls", -524);
             var rows = new System.Collections.Generic.List<KeyBindRow>();
-            var actions = (GameAction[])System.Enum.GetValues(typeof(GameAction));
             for (var i = 0; i < actions.Length; i++)
             {
                 var y = -578 - i * 76;

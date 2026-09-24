@@ -182,6 +182,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         // Physics picking ignores the UI: a click on a menu or button over
         // the board would otherwise also pick up the piece under it.
         if (UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
+        if (Cursor.lockState == CursorLockMode.Locked) return; // looking around: the cursor is hidden
         isSelected = true;
     }
 

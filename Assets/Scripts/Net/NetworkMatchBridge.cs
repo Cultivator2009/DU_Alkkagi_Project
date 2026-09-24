@@ -363,7 +363,7 @@ public class NetworkMatchBridge : MonoBehaviour
     private void Update()
     {
         if (isHost || pieceLookup == null || guestSelector == null || !guestSelector.LocalPlayerId.HasValue) return;
-        if (guestClockRunning) guestClockRemaining = Mathf.Max(0, guestClockRemaining - Time.deltaTime);
+        if (guestClockRunning) guestClockRemaining = Mathf.Max(0, guestClockRemaining - GamePace.ClockDelta);
 
         // Turns only; not while placing stones or after the result.
         if (gameManager.gameState != GameManager.GameState.WaitingForInput) return;

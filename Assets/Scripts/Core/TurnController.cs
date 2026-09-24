@@ -78,7 +78,7 @@ public class TurnController
     {
         if (TurnSeconds > 0 && IsAwaitingShot && !ShotReleased)
         {
-            TurnTimeRemaining -= Time.deltaTime;
+            TurnTimeRemaining -= GamePace.ClockDelta;
             var grace = CurrentPlayerID == RemotePlayerId ? RemoteGraceSeconds : 0;
             if (TurnTimeRemaining <= -grace)
             {
