@@ -104,10 +104,14 @@ public class SteamLobbyManager : MonoBehaviour
         LeaveLobby();
     }
 
-    public async void CreateLobby(LobbyVisibility visibility)
+    // mode: what the lobby plays for; left out, the host's last pick.
+    public async void CreateLobby(LobbyVisibility visibility, MatchMode? mode = null)
     {
-        // The host's last-used rules are where the lobby starts, seats included.
+        // The host's last-used rules are where the lobby starts, seats
+        // included, within what the mode allows.
         var settings = MatchSettings.LoadPrefs();
+        if (mode.HasValue) settings.Set(MatchSettingId.Mode, (int)mode.Value);
+        settings.ApplyMode();
         var result = await SteamMatchmaking.CreateLobbyAsync(settings.Seats);
         if (!result.HasValue)
         {
@@ -157,28 +161,29 @@ public class SteamLobbyManager : MonoBehaviour
         CurrentLobby.Value.SetData(StateKey, playing ? Playing : Open);
     }
 
-    // Public lobbies of this game, on this protocol, waiting for a player.
-    // Steam sorts them nearest first.
-    public async Task<Lobby[]> FindOpenLobbies()
+    // Public lobbies of this game, on this protocol, waiting for a player,
+    // of one mode or any. Steam sorts them nearest first.
+    public async Task<Lobby[]> FindOpenLobbies(MatchMode? mode = null)
     {
-        var lobbies = await SteamMatchmaking.LobbyList
+        var query = SteamMatchmaking.LobbyList
             .WithKeyValue(GameKey, GameId)
             .WithKeyValue(ProtocolKey, NetMessage.ProtocolVersion.ToString())
             .WithKeyValue(StateKey, Open)
             .WithSlotsAvailable(1)
             .FilterDistanceWorldwide()
-            .WithMaxResults(20)
-            .RequestAsync();
+            .WithMaxResults(20);
+        if (mode.HasValue) query = query.WithKeyValue(RulePrefix + MatchSettings.Defs[(int)MatchSettingId.Mode].Key, ((int)mode.Value).ToString());
+        var lobbies = await query.RequestAsync();
         return lobbies ?? Array.Empty<Lobby>();
     }
 
-    // The nearest open public lobby, or failing that a new public one to
-    // wait in. A lobby can fill between the search and the join, so each is
-    // tried in turn.
+    // The nearest open public Normal lobby, or failing that a new one to wait
+    // in: quick match is ranked. A lobby can fill between the search and the
+    // join, so each is tried in turn.
     public async void QuickMatch()
     {
         IsSearching = true;
-        var lobbies = await FindOpenLobbies();
+        var lobbies = await FindOpenLobbies(MatchMode.Normal);
         IsSearching = false;
         IsJoining = true;
         foreach (var lobby in lobbies)
@@ -186,7 +191,7 @@ public class SteamLobbyManager : MonoBehaviour
             if ((await SteamMatchmaking.JoinLobbyAsync(lobby.Id)).HasValue) return; // HandleLobbyEntered finishes the join
         }
         IsJoining = false;
-        CreateLobby(LobbyVisibility.Public);
+        CreateLobby(LobbyVisibility.Public, MatchMode.Normal);
     }
 
     public static string HostName(Lobby lobby) => lobby.GetData(HostNameKey);

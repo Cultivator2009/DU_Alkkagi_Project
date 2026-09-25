@@ -216,15 +216,16 @@ public class LobbySceneUI : MonoBehaviour
             rulesPanel.Show(settings, true);
         }
         lobbyManager.SetLobbySettings(settings);
-        settings.SavePrefs(); // the next lobby this player hosts starts from these
+        settings.SavePrefs(lobby: true); // the next lobby this player hosts starts from these
     }
 
-    // The rules and seats go out with the scene change; everyone plays
-    // exactly these.
+    // The rules and seats go out with the scene change, Random rolled;
+    // everyone plays exactly these.
     private void OnClickStartMatch()
     {
         lobbyManager.SetMatchInProgress(true);
-        MatchSettings.Current = lobbyManager.ReadLobbySettings();
+        MatchSettings.Picked = lobbyManager.ReadLobbySettings();
+        MatchSettings.Current = MatchSettings.Picked.Resolve();
         MatchRoster.Current = lobbyManager.BuildRoster();
         SteamTransport.Instance.Broadcast(NetMessage.WriteLoadGameScene(MatchSettings.Current, MatchRoster.Current));
         SceneManager.LoadScene("GameScene");
@@ -332,7 +333,7 @@ public class LobbySceneUI : MonoBehaviour
         SideMark.ShowAll(lobbyView.transform, rules.PieceType);
 
         rulesPanel.Show(rules, lobbyManager.IsHost);
-        rulesCaption.text = Loc.Get(lobbyManager.IsHost ? "lobby.rulesHost" : "lobby.rulesGuest");
+        rulesCaption.text = Loc.Get(rules.RankedMode ? "lobby.rulesRanked" : "lobby.rulesCustom");
         visibilityToggle.Show((int)lobbyManager.Visibility, lobbyManager.IsHost);
 
         var canStart = members.Count >= 2;
@@ -359,9 +360,10 @@ public class LobbySceneUI : MonoBehaviour
             var lobby = openLobbies[i];
             var rules = SteamLobbyManager.RulesOf(lobby);
             var summary = Loc.Get("lobby.rowRules",
+                MatchSettings.Defs[(int)MatchSettingId.Mode].Format((int)rules.Mode),
                 MatchSettings.Defs[(int)MatchSettingId.BoardType].Format((int)rules.BoardType),
                 MatchSettings.Defs[(int)MatchSettingId.PieceType].Format((int)rules.PieceType),
-                lobby.MemberCount, lobby.MaxMembers) + (rules.Rated ? Loc.Get("lobby.rowRated") : string.Empty);
+                lobby.MemberCount, lobby.MaxMembers);
             row.Show(lobby.Id.Value, SteamLobbyManager.HostName(lobby), summary);
             SetInteractable(row.joinButton, canJoin);
         }

@@ -179,6 +179,7 @@ public class NetworkMatchBridge : MonoBehaviour
         var present = roster.SteamIds.Where(id => !gone.Contains(id)).ToList();
         if (present.Count < 2 || !present.All(wantsRematch.Contains)) return;
         MatchRoster.Current = lobby.RosterOf(present); // their ratings after this match
+        MatchSettings.Current = MatchSettings.Picked.Resolve(); // Random rolls again
         transport.Broadcast(NetMessage.WriteLoadGameScene(MatchSettings.Current, MatchRoster.Current));
         gameManager.EndMatch();
         SceneManager.LoadScene("GameScene");

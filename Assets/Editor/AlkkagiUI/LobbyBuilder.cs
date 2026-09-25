@@ -121,7 +121,7 @@ namespace AlkkagiUIEditor
                 row.hostText = UIKit.Text(rowBg.transform, "Host", "Host", 30, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
                 row.hostText.overflowMode = TextOverflowModes.Ellipsis;
                 row.hostText.rectTransform.Place(TopLeft, new Vector2(28, -12), new Vector2(width - 220, 42));
-                row.rulesText = UIKit.Text(rowBg.transform, "Rules", Loc.Get("lobby.rowRules", Loc.Get("board.Go"), Loc.Get("pieces.GoStones"), 6, 6), 22, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+                row.rulesText = UIKit.Text(rowBg.transform, "Rules", Loc.Get("lobby.rowRules", Loc.Get("mode.Normal"), Loc.Get("board.Go"), Loc.Get("pieces.GoStones"), 2, 4), 22, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
                 row.rulesText.overflowMode = TextOverflowModes.Ellipsis;
                 row.rulesText.rectTransform.Place(TopLeft, new Vector2(28, -56), new Vector2(width - 220, 32));
                 row.joinButton = UIKit.CapsuleButton(rowBg.transform, "JoinButton", "lobby.join", new Vector2(144, 64), true, 28);
@@ -190,7 +190,7 @@ namespace AlkkagiUIEditor
             var rules = ui.rulesPanel.GetComponent<RectTransform>();
             rules.Place(TopLeft, new Vector2(pad, -148), rules.sizeDelta);
 
-            ui.rulesCaption = UIKit.Text(c, "Caption", Loc.Get("lobby.rulesHost"), 22, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft);
+            ui.rulesCaption = UIKit.Text(c, "Caption", Loc.Get("lobby.rulesRanked"), 22, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft);
             ui.rulesCaption.rectTransform.Place(new Vector2(0, 0), new Vector2(pad, 44), new Vector2(RulesCardSize.x - pad * 2, 36));
         }
 

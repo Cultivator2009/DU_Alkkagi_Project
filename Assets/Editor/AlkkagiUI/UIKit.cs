@@ -507,6 +507,7 @@ namespace AlkkagiUIEditor
             var root = Node(name, parent);
             root.sizeDelta = new Vector2(width, RuleRows(online) * (rowHeight + gap) - gap);
             var panel = root.gameObject.AddComponent<MatchSettingsPanel>();
+            panel.modes = online;
             var stepperWidth = Mathf.Min(360, width * 0.55f);
             var topLeft = new Vector2(0, 1);
 

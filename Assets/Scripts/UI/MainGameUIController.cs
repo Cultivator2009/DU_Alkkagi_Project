@@ -600,9 +600,10 @@ public class MainGameUIController : MonoBehaviour
         SetInteractable(rematchButton, !networkBridge.OpponentGone && !networkBridge.HostGone && !networkBridge.LocalWantsRematch);
     }
 
-    // Rated: online under the host's rules, rated from the roster's numbers -
-    // but this player's own from their own record. It counts from here:
-    // leaving is held as a loss until the result is in.
+    // Rated: online in a ranked mode (Normal, or Item later) played by its
+    // rules, rated from the roster's numbers - but this player's own from
+    // their own record. It counts from here: leaving is held as a loss until
+    // the result is in.
     private void BeginRating()
     {
         if (!MatchSettings.Current.Rated || MatchRoster.Current == null || MatchRoster.Current.Count != PlayerCount) return;
@@ -664,6 +665,7 @@ public class MainGameUIController : MonoBehaviour
             networkBridge.RequestRematch();
             return;
         }
+        MatchSettings.Current = MatchSettings.Picked.Resolve(); // Random rolls again
         GameManager.manager.EndMatch();
         SceneManager.LoadScene("GameScene");
     }
