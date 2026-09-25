@@ -6,7 +6,8 @@ public enum GameAction
 {
     CameraView, // hold for the other camera angle
     CancelAim,
-    LookAround  // hold and move the mouse: the same angle, the cursor locked
+    PanView,    // hold and drag: move the main view across the board
+    ResetView
 }
 
 // Rebindable keys (Settings > Controls), saved on this machine. Any KeyCode
@@ -20,7 +21,8 @@ public static class KeyBindings
     {
         { GameAction.CameraView, KeyCode.LeftControl },
         { GameAction.CancelAim, KeyCode.Mouse1 },
-        { GameAction.LookAround, KeyCode.Mouse2 },
+        { GameAction.PanView, KeyCode.Mouse2 },
+        { GameAction.ResetView, KeyCode.R },
     };
 
     public static event Action OnChanged;

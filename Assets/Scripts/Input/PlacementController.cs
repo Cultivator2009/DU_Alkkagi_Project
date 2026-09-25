@@ -64,7 +64,7 @@ public class PlacementController : MonoBehaviour
         var board = gameManager.Board;
         if (!TryGetBoardPoint(board, player, out var point)) return;
 
-        if (Input.GetMouseButtonDown(0) && !IsPointerOverUI() && Cursor.lockState != CursorLockMode.Locked)
+        if (Input.GetMouseButtonDown(0) && !IsPointerOverUI() && !CameraRig.Busy)
         {
             var hit = StoneUnderCursor();
             if (hit != null)
@@ -80,7 +80,8 @@ public class PlacementController : MonoBehaviour
         }
 
         if (dragging == null) return;
-        if (Input.GetMouseButton(0))
+        // A pan or the free look drops the stone where it is.
+        if (Input.GetMouseButton(0) && !CameraRig.Busy)
         {
             dragging.transform.position = board.ClampToZone(player, point, dragging.GetComponent<GamePieceManager>().radius);
             return;

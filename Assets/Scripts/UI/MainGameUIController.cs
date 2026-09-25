@@ -43,6 +43,7 @@ public class MainGameUIController : MonoBehaviour
     public TMP_Text rematchLabel;
     public Button lobbyButton;
     public Button mainMenuButton;
+    public Button resetViewButton; // shown once the view is panned away
 
     // Item-mode placeholder: reserves a slot for a future item bar without
     // building any real item logic yet (Phase 1's ITurnAction is still a
@@ -71,6 +72,10 @@ public class MainGameUIController : MonoBehaviour
         rematchButton.onClick.AddListener(OnClickRematch);
         lobbyButton.onClick.AddListener(() => networkBridge.ReturnToLobby());
         mainMenuButton.onClick.AddListener(ReturnToMainMenu);
+        resetViewButton.onClick.AddListener(() =>
+        {
+            if (CameraRig.Instance != null) CameraRig.Instance.ResetView();
+        });
         for (var i = 0; i < playerPanels.Length; i++)
         {
             var playerId = i;
@@ -129,6 +134,7 @@ public class MainGameUIController : MonoBehaviour
 
     private void Update()
     {
+        resetViewButton.gameObject.SetActive(CameraRig.Instance != null && CameraRig.Instance.IsMoved);
         if (turnController == null) return;
         var gameManager = GameManager.manager;
 
