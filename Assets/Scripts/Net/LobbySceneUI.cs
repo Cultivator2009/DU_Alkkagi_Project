@@ -8,8 +8,8 @@ using UnityEngine.UI;
 
 // Drives the Lobby_UI prefab (built by Tools > Alkkagi UI > 4. Build lobby).
 // Two views: idle (create a lobby, quick match, join by code, or pick one
-// from the public lobby browser) and in-lobby (code to share, both seats,
-// who can join, invite, start). Everything renders from SteamLobbyManager's
+// from the public lobby browser) and in-lobby (code to share, up to four
+// seats, who can join, invite, start). Everything renders from SteamLobbyManager's
 // state, so arriving here mid-join - e.g. from an accepted Steam invite -
 // shows the right view without extra wiring.
 public class LobbySceneUI : MonoBehaviour
@@ -33,8 +33,7 @@ public class LobbySceneUI : MonoBehaviour
     public TMP_Text lobbyCodeText;
     public Button copyButton;
     public TMP_Text copyLabel;
-    public LobbyPlayerSlot hostSlot;
-    public LobbyPlayerSlot guestSlot;
+    public LobbyPlayerSlot[] seats; // SteamLobbyManager.SeatOrder: the host first
     public MatchSettingsPanel rulesPanel; // host edits, the guest sees it read-only
     public TMP_Text rulesCaption;
     public SegmentedToggle visibilityToggle; // LobbyVisibility order; the host's to change
@@ -73,7 +72,12 @@ public class LobbySceneUI : MonoBehaviour
         joinCodeInput.onSubmit.AddListener(_ => OnClickJoin());
         backButton.onClick.AddListener(() => SceneManager.LoadScene("MainMenuScene"));
         copyButton.onClick.AddListener(OnClickCopy);
-        guestSlot.inviteButton.onClick.AddListener(() => lobbyManager.InviteFriends());
+        for (var i = 0; i < seats.Length; i++)
+        {
+            var seat = i;
+            seats[i].inviteButton.onClick.AddListener(() => lobbyManager.InviteFriends());
+            if (seats[i].kickButton != null) seats[i].kickButton.onClick.AddListener(() => OnClickKick(seat));
+        }
         leaveButton.onClick.AddListener(OnClickLeave);
         startButton.onClick.AddListener(OnClickStartMatch);
         rulesPanel.OnChanged += OnRulesChanged;
@@ -82,7 +86,6 @@ public class LobbySceneUI : MonoBehaviour
             lobbyManager.SetVisibility((LobbyVisibility)index);
             Render();
         };
-        guestSlot.kickButton.onClick.AddListener(OnClickKick);
     }
 
     private void Start()
@@ -180,11 +183,10 @@ public class LobbySceneUI : MonoBehaviour
         Render();
     }
 
-    private void OnClickKick()
+    private void OnClickKick(int seat)
     {
-        var lobby = lobbyManager.CurrentLobby.Value;
-        var guest = lobby.Members.FirstOrDefault(m => m.Id.Value != lobby.Owner.Id.Value);
-        if (guest.Id.Value != 0) lobbyManager.Kick(guest.Id.Value);
+        var members = SteamLobbyManager.SeatOrder(lobbyManager.CurrentLobby.Value);
+        if (seat > 0 && seat < members.Count) lobbyManager.Kick(members[seat].Id.Value);
     }
 
     private void OnClickCopy()
@@ -205,16 +207,25 @@ public class LobbySceneUI : MonoBehaviour
 
     private void OnRulesChanged(MatchSettings settings)
     {
+        // Seats can't go below the players already in.
+        var members = lobbyManager.CurrentLobby.Value.MemberCount;
+        if (settings.Seats < members)
+        {
+            settings.Set(MatchSettingId.Seats, members);
+            rulesPanel.Show(settings, true);
+        }
         lobbyManager.SetLobbySettings(settings);
         settings.SavePrefs(); // the next lobby this player hosts starts from these
     }
 
-    // The rules go out with the scene change; the guest plays exactly these.
+    // The rules and seats go out with the scene change; everyone plays
+    // exactly these.
     private void OnClickStartMatch()
     {
         lobbyManager.SetMatchInProgress(true);
         MatchSettings.Current = lobbyManager.ReadLobbySettings();
-        SteamTransport.Instance.Broadcast(NetMessage.WriteLoadGameScene(MatchSettings.Current));
+        MatchRoster.Current = lobbyManager.BuildRoster();
+        SteamTransport.Instance.Broadcast(NetMessage.WriteLoadGameScene(MatchSettings.Current, MatchRoster.Current));
         SceneManager.LoadScene("GameScene");
     }
 
@@ -245,7 +256,10 @@ public class LobbySceneUI : MonoBehaviour
         switch (NetMessage.PeekType(data))
         {
             case NetMessageType.LoadGameScene:
-                MatchSettings.Current = NetMessage.ReadLoadGameScene(data);
+                var (settings, roster) = NetMessage.ReadLoadGameScene(data);
+                if (roster.PlayerOf(SteamTransport.Instance.LocalId) < 0) break; // joined too late for this one
+                MatchSettings.Current = settings;
+                MatchRoster.Current = roster;
                 SceneManager.LoadScene("GameScene");
                 break;
             case NetMessageType.Kick:
@@ -297,27 +311,35 @@ public class LobbySceneUI : MonoBehaviour
         lobbyCodeText.text = lobby.Id.Value.ToString();
         if (copiedUntil == 0) copyLabel.text = Loc.Get("lobby.copy");
 
-        var members = lobby.Members.ToList();
-        var host = members.FirstOrDefault(m => m.Id.Value == lobby.Owner.Id.Value);
-        var guest = members.FirstOrDefault(m => m.Id.Value != lobby.Owner.Id.Value);
-        // Seats read black/white or Cho/Han, whichever pieces the rules pick.
+        var members = SteamLobbyManager.SeatOrder(lobby);
+        // Seats read black/white/blue/red or Cho/Han/..., whichever pieces
+        // the rules pick. As many seats as the rules allow; the host's
+        // invite on the first open one.
         var rules = lobbyManager.ReadLobbySettings();
-        hostSlot.ShowPlayer(host.Name, $"{Loc.Get("lobby.host")} · {SideStyle.Name(0, rules.PieceType)}");
-        if (members.Count > 1) guestSlot.ShowPlayer(guest.Name, $"{Loc.Get("lobby.guest")} · {SideStyle.Name(1, rules.PieceType)}");
-        else guestSlot.ShowEmpty(lobbyManager.IsHost);
+        var seatCount = Mathf.Clamp(Mathf.Max(rules.Seats, members.Count), 2, seats.Length);
+        for (var i = 0; i < seats.Length; i++)
+        {
+            var slot = seats[i];
+            slot.gameObject.SetActive(i < seatCount);
+            if (i < members.Count)
+                slot.ShowPlayer(members[i].Name, $"{Loc.Get(i == 0 ? "lobby.host" : "lobby.guest")} · {SideStyle.Name(i, rules.PieceType)}");
+            else
+                slot.ShowEmpty(lobbyManager.IsHost && i == members.Count);
+            if (slot.kickButton != null) slot.kickButton.gameObject.SetActive(lobbyManager.IsHost && i > 0 && i < members.Count);
+        }
         SideMark.ShowAll(lobbyView.transform, rules.PieceType);
 
         rulesPanel.Show(rules, lobbyManager.IsHost);
         rulesCaption.text = Loc.Get(lobbyManager.IsHost ? "lobby.rulesHost" : "lobby.rulesGuest");
         visibilityToggle.Show((int)lobbyManager.Visibility, lobbyManager.IsHost);
-        guestSlot.kickButton.gameObject.SetActive(lobbyManager.IsHost && members.Count > 1);
 
-        var full = members.Count >= 2;
+        var canStart = members.Count >= 2;
         startButton.gameObject.SetActive(lobbyManager.IsHost);
-        SetInteractable(startButton, full);
+        SetInteractable(startButton, canStart);
         if (!lobbyManager.IsHost) SetStatus("lobby.status.waitingHost", busyColor);
-        else if (full) SetStatus("lobby.status.ready", okColor);
-        else SetStatus("lobby.status.waitingOpponent", busyColor);
+        else if (!canStart) SetStatus("lobby.status.waitingOpponent", busyColor);
+        else if (seatCount > 2) SetStatusText(Loc.Get("lobby.status.readyCount", members.Count, seatCount), okColor);
+        else SetStatus("lobby.status.ready", okColor);
     }
 
     // Rows for what the last search found; Join greys out while another
@@ -337,7 +359,7 @@ public class LobbySceneUI : MonoBehaviour
             var summary = Loc.Get("lobby.rowRules",
                 MatchSettings.Defs[(int)MatchSettingId.BoardType].Format((int)rules.BoardType),
                 MatchSettings.Defs[(int)MatchSettingId.PieceType].Format((int)rules.PieceType),
-                rules.StonesFor(0), rules.StonesFor(1));
+                lobby.MemberCount, lobby.MaxMembers);
             row.Show(lobby.Id.Value, SteamLobbyManager.HostName(lobby), summary);
             SetInteractable(row.joinButton, canJoin);
         }
@@ -345,9 +367,11 @@ public class LobbySceneUI : MonoBehaviour
         browserEmptyText.text = Loc.Get(browsing ? "lobby.browserSearching" : "lobby.browserEmpty");
     }
 
-    private void SetStatus(string key, Color dot)
+    private void SetStatus(string key, Color dot) => SetStatusText(Loc.Get(key), dot);
+
+    private void SetStatusText(string text, Color dot)
     {
-        statusText.text = Loc.Get(key);
+        statusText.text = text;
         statusDot.color = dot;
     }
 

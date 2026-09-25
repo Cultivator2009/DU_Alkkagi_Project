@@ -2,8 +2,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// One of the two lobby seats: the host always sits in the black seat,
-// the guest in the white one.
+// One lobby seat. The host always has the first (black); the others follow
+// in the order Steam lists the members (SteamLobbyManager.SeatOrder).
 public class LobbyPlayerSlot : MonoBehaviour
 {
     public GameObject filledView;
@@ -11,7 +11,7 @@ public class LobbyPlayerSlot : MonoBehaviour
     public TMP_Text roleText;
     public GameObject emptyView;
     public Button inviteButton;
-    public Button kickButton; // guest seat only; LobbySceneUI shows it to the host
+    public Button kickButton; // guests' seats only; LobbySceneUI shows it to the host
 
     public void ShowPlayer(string playerName, string role)
     {

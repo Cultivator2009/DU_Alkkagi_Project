@@ -498,18 +498,22 @@ namespace AlkkagiUIEditor
         // Every match rule (MatchSettings.Defs) as a "label  ◀ value ▶" row,
         // top to bottom inside a width-wide column. Rows bind by setting id, so
         // a new rule only needs a rebuild to show up.
-        public static MatchSettingsPanel RulesPanel(Transform parent, string name, float width, float rowHeight, float gap, float labelSize)
+        // online: the lobby's card, with the online-only rules (seats, the
+        // third and fourth sides' pieces); the local setup card leaves them out.
+        public static int RuleRows(bool online) => MatchSettings.Defs.Count(d => online || !d.OnlineOnly);
+
+        public static MatchSettingsPanel RulesPanel(Transform parent, string name, float width, float rowHeight, float gap, float labelSize, bool online)
         {
             var root = Node(name, parent);
-            root.sizeDelta = new Vector2(width, MatchSettings.Defs.Length * (rowHeight + gap) - gap);
+            root.sizeDelta = new Vector2(width, RuleRows(online) * (rowHeight + gap) - gap);
             var panel = root.gameObject.AddComponent<MatchSettingsPanel>();
             var stepperWidth = Mathf.Min(360, width * 0.55f);
             var topLeft = new Vector2(0, 1);
 
             var rows = new List<MatchSettingRow>();
-            for (var i = 0; i < MatchSettings.Defs.Length; i++)
+            foreach (var def in MatchSettings.Defs.Where(d => online || !d.OnlineOnly))
             {
-                var def = MatchSettings.Defs[i];
+                var i = rows.Count;
                 var rowRect = Node(def.Key, root).Place(topLeft, new Vector2(0, -i * (rowHeight + gap)), new Vector2(width, rowHeight));
                 var row = rowRect.gameObject.AddComponent<MatchSettingRow>();
                 row.settingId = def.Id;

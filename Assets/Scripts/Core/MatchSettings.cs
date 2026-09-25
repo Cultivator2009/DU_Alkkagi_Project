@@ -42,8 +42,11 @@ public enum MatchSettingId : byte
     BoardType,
     PieceType,
     AimGuide,
+    Seats,
     BlackStones,
     WhiteStones,
+    BlueStones,
+    RedStones,
     SpawnMode,
     PlacementStyle,
     PlacementSeconds,
@@ -63,9 +66,10 @@ public sealed class MatchSettingDef
     public readonly int[] Values;     // allowed values, in display order
     public readonly int Default;
     public readonly Func<MatchSettings, bool> IsRelevant; // greys the row out when false; null = always
+    public readonly bool OnlineOnly; // a lobby rule: local games are always two at one screen
     private readonly Func<int, string> format;
 
-    public MatchSettingDef(MatchSettingId id, string key, string labelKey, int[] values, int defaultValue, Func<int, string> format, Func<MatchSettings, bool> isRelevant = null)
+    public MatchSettingDef(MatchSettingId id, string key, string labelKey, int[] values, int defaultValue, Func<int, string> format, Func<MatchSettings, bool> isRelevant = null, bool onlineOnly = false)
     {
         Id = id;
         Key = key;
@@ -74,6 +78,7 @@ public sealed class MatchSettingDef
         Default = defaultValue;
         this.format = format;
         IsRelevant = isRelevant;
+        OnlineOnly = onlineOnly;
     }
 
     public string Format(int value) => format(value);
@@ -96,10 +101,18 @@ public sealed class MatchSettings
             v => Loc.Get("pieces." + (global::PieceType)v)),
         new MatchSettingDef(MatchSettingId.AimGuide, "aimGuide", "match.aimGuide", new[] { 1, 0 }, 1,
             v => Loc.Get(v == 1 ? "option.on" : "option.off")),
+        // How many may join the lobby; the match is played by whoever is in
+        // it when the host starts, two at least.
+        new MatchSettingDef(MatchSettingId.Seats, "seats", "match.seats", new[] { 2, 3, 4 }, 2,
+            v => Loc.Get("option.players", v), onlineOnly: true),
         new MatchSettingDef(MatchSettingId.BlackStones, "blackStones", "match.blackStones", StoneCounts, 6,
             v => Loc.Get("option.stones", v)),
         new MatchSettingDef(MatchSettingId.WhiteStones, "whiteStones", "match.whiteStones", StoneCounts, 6,
             v => Loc.Get("option.stones", v)),
+        new MatchSettingDef(MatchSettingId.BlueStones, "blueStones", "match.blueStones", StoneCounts, 6,
+            v => Loc.Get("option.stones", v), s => s.Seats >= 3, onlineOnly: true),
+        new MatchSettingDef(MatchSettingId.RedStones, "redStones", "match.redStones", StoneCounts, 6,
+            v => Loc.Get("option.stones", v), s => s.Seats >= 4, onlineOnly: true),
         new MatchSettingDef(MatchSettingId.SpawnMode, "spawn", "match.spawn", new[] { (int)global::SpawnMode.Preset, (int)global::SpawnMode.Placement }, (int)global::SpawnMode.Preset,
             v => Loc.Get(v == (int)global::SpawnMode.Placement ? "spawn.placement" : "spawn.preset")),
         new MatchSettingDef(MatchSettingId.PlacementStyle, "placement", "match.placementStyle",
@@ -137,7 +150,14 @@ public sealed class MatchSettings
     public BoardType BoardType => (BoardType)Get(MatchSettingId.BoardType);
     public PieceType PieceType => (PieceType)Get(MatchSettingId.PieceType);
     public bool AimGuide => Get(MatchSettingId.AimGuide) == 1;
-    public int StonesFor(int playerId) => Get(playerId == 0 ? MatchSettingId.BlackStones : MatchSettingId.WhiteStones);
+    public int Seats => Get(MatchSettingId.Seats);
+    public int StonesFor(int playerId) => Get(playerId switch
+    {
+        0 => MatchSettingId.BlackStones,
+        1 => MatchSettingId.WhiteStones,
+        2 => MatchSettingId.BlueStones,
+        _ => MatchSettingId.RedStones,
+    });
     public SpawnMode SpawnMode => (SpawnMode)Get(MatchSettingId.SpawnMode);
     public PlacementStyle PlacementStyle => (PlacementStyle)Get(MatchSettingId.PlacementStyle);
     public int PlacementSeconds => Get(MatchSettingId.PlacementSeconds);

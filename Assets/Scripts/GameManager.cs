@@ -22,7 +22,7 @@ public class GameManager : MonoBehaviour
     public List<GamePieceDragAndReleaseForce> gamePieceScripts = new List<GamePieceDragAndReleaseForce>();
     public List<PlayersManager> playersList = new List<PlayersManager>();
 
-    public int totalPlayerCnt = 2; // get input from UI future TODO
+    public int totalPlayerCnt = 2; // two locally; online, whoever the host's roster lists (MatchRoster)
 
     public GameObject[] vcams = null;
 
@@ -86,6 +86,7 @@ public class GameManager : MonoBehaviour
         var settings = MatchSettings.Current;
         Ruleset = new ClassicRuleset(settings.BothOutRule);
         Time.timeScale = GamePace.Speed;
+        totalPlayerCnt = MatchRoster.Current != null ? Mathf.Clamp(MatchRoster.Current.Count, 2, MatchRoster.MaxPlayers) : 2;
 
         var playersParentOb = new GameObject("Players");
         for (var playerIndex = 0; playerIndex < totalPlayerCnt; playerIndex++)
@@ -100,7 +101,7 @@ public class GameManager : MonoBehaviour
         // Host and guest spawn from the same settings, so both boards get the
         // same stones with the same ids.
         Board = FindObjectOfType<BoardSetup>();
-        foreach (var gamePieceScript in Board.Spawn(settings))
+        foreach (var gamePieceScript in Board.Spawn(settings, totalPlayerCnt))
         {
             gamePieceScripts.Add(gamePieceScript);
             var pieceManager = gamePieceScript.GetComponent<GamePieceManager>();

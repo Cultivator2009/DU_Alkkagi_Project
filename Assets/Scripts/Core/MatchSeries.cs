@@ -1,13 +1,16 @@
-// Running score across rematches against the same opponent: one online
-// lobby, or one local session started from the main menu. Lives only for
-// the app session - nothing is saved.
+using System;
+using System.Linq;
+
+// Running score across rematches among the same players: one online lobby
+// and roster, or one local session started from the main menu. Lives only
+// for the app session - nothing is saved.
 public static class MatchSeries
 {
-    private static readonly int[] wins = new int[2];
+    private static readonly int[] wins = new int[MatchRoster.MaxPlayers];
 
     public static string Key { get; private set; }
     public static int Draws { get; private set; }
-    public static int Played => wins[0] + wins[1] + Draws;
+    public static int Played => wins.Sum() + Draws;
 
     public static int Wins(int playerId) => wins[playerId];
 
@@ -28,13 +31,13 @@ public static class MatchSeries
     // winnerId -1 records a draw.
     public static void Record(int winnerId)
     {
-        if (winnerId == 0 || winnerId == 1) wins[winnerId]++;
+        if (winnerId >= 0 && winnerId < wins.Length) wins[winnerId]++;
         else if (winnerId == -1) Draws++;
     }
 
     private static void Clear()
     {
-        wins[0] = wins[1] = 0;
+        Array.Clear(wins, 0, wins.Length);
         Draws = 0;
     }
 }

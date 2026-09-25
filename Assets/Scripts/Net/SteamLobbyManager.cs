@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Steamworks;
 using Steamworks.Data;
@@ -18,7 +19,6 @@ public enum LobbyVisibility : byte
 // stays host/guest P2P via SteamTransport.
 public class SteamLobbyManager : MonoBehaviour
 {
-    private const int MaxMembers = 2;
     private const string RulePrefix = "rule."; // lobby data keys of the match rules
     // Lobby data every lobby of ours carries. The Spacewar test app (480) is
     // shared by every Steamworks developer, so searches filter on GameKey;
@@ -101,7 +101,9 @@ public class SteamLobbyManager : MonoBehaviour
 
     public async void CreateLobby(LobbyVisibility visibility)
     {
-        var result = await SteamMatchmaking.CreateLobbyAsync(MaxMembers);
+        // The host's last-used rules are where the lobby starts, seats included.
+        var settings = MatchSettings.LoadPrefs();
+        var result = await SteamMatchmaking.CreateLobbyAsync(settings.Seats);
         if (!result.HasValue)
         {
             Debug.LogError("Failed to create Steam lobby.");
@@ -116,8 +118,7 @@ public class SteamLobbyManager : MonoBehaviour
         lobby.SetData(StateKey, Open);
         lobby.SetData(HostNameKey, SteamClient.Name);
         ApplyVisibility(lobby, visibility);
-        // The host's last-used rules are where the lobby starts.
-        WriteSettings(lobby, MatchSettings.LoadPrefs());
+        WriteSettings(lobby, settings);
     }
 
     // Steam has no getter for a lobby's type, so it's mirrored in lobby data.
@@ -203,8 +204,25 @@ public class SteamLobbyManager : MonoBehaviour
     // the two sides.
     public void SetLobbySettings(MatchSettings settings)
     {
-        if (IsHost) WriteSettings(CurrentLobby.Value, settings);
+        if (!IsHost) return;
+        WriteSettings(CurrentLobby.Value, settings);
+        // Seats is how many may be in the lobby; never fewer than are in it.
+        var lobby = CurrentLobby.Value;
+        lobby.MaxMembers = Mathf.Max(settings.Seats, lobby.MemberCount);
     }
+
+    // The lobby's seats in order: the owner first (player 0), then the
+    // others as Steam lists them, which is the same on every member's
+    // machine. The host's roster for a match is this order.
+    public static List<Friend> SeatOrder(Lobby lobby)
+    {
+        var members = lobby.Members.ToList();
+        var seats = members.Where(m => m.Id.Value == lobby.Owner.Id.Value).ToList();
+        seats.AddRange(members.Where(m => m.Id.Value != lobby.Owner.Id.Value));
+        return seats.Take(MatchRoster.MaxPlayers).ToList();
+    }
+
+    public MatchRoster BuildRoster() => new MatchRoster(SeatOrder(CurrentLobby.Value).Select(m => m.Id.Value));
 
     public MatchSettings ReadLobbySettings()
     {

@@ -111,7 +111,7 @@ public class PlacementController : MonoBehaviour
             if (visible && phase.TryGetPosition(id, out var position)) piece.transform.position = position;
         }
 
-        gameManager.Board.ShowZones(viewer == 0 && phase.CanAct(0), viewer == 1 && phase.CanAct(1));
+        gameManager.Board.ShowZones(player => viewer == player && phase.CanAct(player));
     }
 
     private void Place(PlacementPhase phase, int player, char id, Vector3 position)

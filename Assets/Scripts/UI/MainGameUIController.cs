@@ -8,7 +8,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 // Drives the MainGame_UI prefab: the turn pill, one PlayerHudPanel per
-// player and the game-over screen. Layout and styling live in the prefab
+// player (two to four) and the game-over screen. Layout and styling live in the prefab
 // (built by Tools > Alkkagi UI > 2. Build HUD); this only pushes match state
 // into it.
 public class MainGameUIController : MonoBehaviour
@@ -16,7 +16,10 @@ public class MainGameUIController : MonoBehaviour
     public GameObject turnPill;
     public TMP_Text turnText;
     public SideMark turnStone;
-    public PlayerHudPanel[] playerPanels; // index-aligned with GameManager.playersList (0 = black)
+    public PlayerHudPanel[] playerPanels; // index-aligned with GameManager.playersList (0 = black), four
+    public float hudMargin = 28;
+    [Range(0.3f, 1f)] public float compactScale = 0.58f; // the side panels when three or four play
+    public float compactGap = 16;
     public Color turnTextColor = Color.black;
     public Color clockWarningColor = Color.red;
     public float clockWarningSeconds = 5f;
@@ -30,7 +33,8 @@ public class MainGameUIController : MonoBehaviour
     public TMP_Text stampText;
     public TMP_Text resultTitleText;
     public TMP_Text resultReasonText;
-    public TMP_Text[] remainingCells; // scoreboard columns, by player id
+    public RectTransform[] scoreColumns; // one per side, header and cells
+    public TMP_Text[] remainingCells; // scoreboard cells, by player id
     public TMP_Text[] killCells;
     public TMP_Text[] nongaeCells;
     public TMP_Text[] suicideCells;
@@ -57,7 +61,9 @@ public class MainGameUIController : MonoBehaviour
     private TurnController turnController;
     private NetworkMatchBridge networkBridge;
     private int currentPlayerId;
-    private readonly int[] shots = new int[2];
+    private readonly int[] shots = new int[MatchRoster.MaxPlayers];
+    private readonly Dictionary<int, MatchEndReason> outSides = new Dictionary<int, MatchEndReason>(); // out while the match went on
+    private int lastShooterId = -1;
     private float matchStartTime;
     private float matchEndTime;
     private int? winnerPlayerId; // set once the result is in; -1 = draw
@@ -118,11 +124,14 @@ public class MainGameUIController : MonoBehaviour
 
         var online = networkBridge != null;
         lobbyButton.gameObject.SetActive(online);
-        // The series runs for as long as the same two players keep rematching:
-        // the lobby online, the session since the main menu locally.
-        MatchSeries.Begin(online ? $"lobby:{SteamLobbyManager.Instance.CurrentLobby.Value.Id.Value}" : VersusAI ? $"ai:{LocalOpponent.Current}" : "local");
+        // The series runs for as long as the same players keep rematching:
+        // the lobby and its roster online, the session since the main menu
+        // locally.
+        MatchSeries.Begin(online ? $"lobby:{SteamLobbyManager.Instance.CurrentLobby.Value.Id.Value}:{string.Join(",", MatchRoster.Current?.SteamIds ?? new ulong[0])}"
+            : VersusAI ? $"ai:{LocalOpponent.Current}" : "local");
 
-        for (var i = 0; i < playerPanels.Length; i++) playerPanels[i].Build(CountPieces(i));
+        Arrange(PlayerCount);
+        for (var i = 0; i < PlayerCount; i++) playerPanels[i].Build(CountPieces(i));
         // Every icon and side name: black/white, or Cho/Han with janggi pieces.
         SideMark.ShowAll(this, MatchSettings.Current.PieceType);
 
@@ -155,12 +164,13 @@ public class MainGameUIController : MonoBehaviour
     }
 
     public bool IsOnline => networkBridge != null;
+    private static int PlayerCount => GameManager.manager.playersList.Count;
     private static bool VersusAI => GameManager.manager.VersusAI;
     // The side this screen plays, when it plays just one: online, or against the AI.
     private int? OwnSide => networkBridge != null ? networkBridge.LocalPlayerId : VersusAI ? 1 - GameManager.manager.AIPlayerId : (int?)null;
     // From the match's start (placement included) until its result.
     public bool MatchInProgress => turnController != null && !winnerPlayerId.HasValue;
-    public bool CanConcede => turnsStarted && !winnerPlayerId.HasValue;
+    public bool CanConcede => turnsStarted && !winnerPlayerId.HasValue && !(OwnSide.HasValue && outSides.ContainsKey(OwnSide.Value));
     // Whose concession the menu offers when it isn't obvious: in a hot-seat
     // game, the side to move. Null when this screen plays one side.
     public int? ConcedingSide => OwnSide.HasValue ? (int?)null : currentPlayerId;
@@ -172,6 +182,37 @@ public class MainGameUIController : MonoBehaviour
         if (networkBridge == null) turnController.Concede(OwnSide ?? currentPlayerId);
         else if (networkBridge.IsHost) turnController.Concede(networkBridge.LocalPlayerId);
         else networkBridge.RequestConcede();
+    }
+
+    // Two sides keep the built layout. Three or four: the panels shrink and
+    // each goes next to its side's edge - south and west up the left column
+    // from the bottom, north and east down the right one from the top - and
+    // the skip button (only ever this screen's own) sits above the Menu
+    // button. The scoreboard spreads its columns.
+    private void Arrange(int players)
+    {
+        for (var i = 0; i < playerPanels.Length; i++) playerPanels[i].gameObject.SetActive(i < players);
+        for (var i = 0; i < scoreColumns.Length; i++) scoreColumns[i].gameObject.SetActive(i < players);
+        if (players <= 2) return;
+
+        var pitch = ((RectTransform)playerPanels[0].transform).rect.height * compactScale + compactGap;
+        var rightColumn = 0;
+        for (var i = 0; i < players; i++)
+        {
+            var seat = BoardSetup.Seat(i, players);
+            var left = seat == 0 || seat == 3;
+            var slot = left ? (seat == 0 ? 0 : 1) : rightColumn++;
+            var rect = (RectTransform)playerPanels[i].transform;
+            rect.localScale = Vector3.one * compactScale;
+            rect.anchorMin = rect.anchorMax = rect.pivot = left ? Vector2.zero : Vector2.one;
+            rect.anchoredPosition = left ? new Vector2(hudMargin, hudMargin + slot * pitch) : new Vector2(-hudMargin, -hudMargin - slot * pitch);
+
+            var skip = (RectTransform)playerPanels[i].skipButton.transform;
+            skip.anchorMin = skip.anchorMax = skip.pivot = new Vector2(1, 0);
+            skip.anchoredPosition = new Vector2(-hudMargin, hudMargin + 64 + compactGap); // 64: the Menu button
+        }
+        var columns = players == 3 ? new[] { 330f, 450f, 570f } : new[] { 290f, 390f, 490f, 590f };
+        for (var i = 0; i < players; i++) scoreColumns[i].anchoredPosition = new Vector2(columns[i], 0);
     }
 
     private static bool IsTurnState(GameManager.GameState state)
@@ -225,6 +266,7 @@ public class MainGameUIController : MonoBehaviour
         controller.OnTurnEnded += HandleTurnEnded;
         controller.OnTurnPassed += HandleTurnPassed;
         controller.OnMatchEnded += HandleMatchEnded;
+        controller.OnPlayerOut += HandlePlayerOut;
         controller.Kills.OnShotResolved += HandleKills;
     }
 
@@ -234,6 +276,7 @@ public class MainGameUIController : MonoBehaviour
         controller.OnTurnEnded -= HandleTurnEnded;
         controller.OnTurnPassed -= HandleTurnPassed;
         controller.OnMatchEnded -= HandleMatchEnded;
+        controller.OnPlayerOut -= HandlePlayerOut;
         controller.Kills.OnShotResolved -= HandleKills;
     }
 
@@ -243,8 +286,9 @@ public class MainGameUIController : MonoBehaviour
         bridge.OnGuestTurnEnded += HandleGuestTurnEnded;
         bridge.OnGuestTurnPassed += ShowPassNotice;
         bridge.OnGuestMatchEnded += ShowResult;
-        bridge.OnOpponentLeft += HandleOpponentLeft;
-        bridge.OnOpponentReturnedToLobby += HandleOpponentReturnedToLobby;
+        bridge.OnPlayerOut += HandlePlayerOut;
+        bridge.OnPlayerLeft += HandlePlayerLeft;
+        bridge.OnPlayerReturnedToLobby += HandlePlayerReturnedToLobby;
         bridge.OnRematchStateChanged += Render;
     }
 
@@ -254,8 +298,9 @@ public class MainGameUIController : MonoBehaviour
         bridge.OnGuestTurnEnded -= HandleGuestTurnEnded;
         bridge.OnGuestTurnPassed -= ShowPassNotice;
         bridge.OnGuestMatchEnded -= ShowResult;
-        bridge.OnOpponentLeft -= HandleOpponentLeft;
-        bridge.OnOpponentReturnedToLobby -= HandleOpponentReturnedToLobby;
+        bridge.OnPlayerOut -= HandlePlayerOut;
+        bridge.OnPlayerLeft -= HandlePlayerLeft;
+        bridge.OnPlayerReturnedToLobby -= HandlePlayerReturnedToLobby;
         bridge.OnRematchStateChanged -= Render;
     }
 
@@ -277,6 +322,7 @@ public class MainGameUIController : MonoBehaviour
     private void HandleTurnEnded(PlayersManager player)
     {
         shots[player.ID]++;
+        lastShooterId = player.ID;
         Render();
     }
 
@@ -295,9 +341,23 @@ public class MainGameUIController : MonoBehaviour
 
     private void ShowPassNotice(int playerId, TurnEnd why)
     {
-        noticeText.text = Loc.Get(why == TurnEnd.Timeout ? "hud.timeout" : "hud.skipped", ColorName(playerId));
+        ShowNotice(Loc.Get(why == TurnEnd.Timeout ? "hud.timeout" : "hud.skipped", ColorName(playerId)));
+    }
+
+    private void ShowNotice(string text)
+    {
+        noticeText.text = text;
         notice.SetActive(true);
         noticeUntil = Time.time + noticeSeconds;
+    }
+
+    // Three or four sides: knocked out, conceded or gone while the match
+    // goes on. Its panel stays, dimmed, with why.
+    private void HandlePlayerOut(int playerId, MatchEndReason reason)
+    {
+        outSides[playerId] = reason;
+        ShowNotice(Loc.Get("hud.outNotice." + reason, ColorName(playerId)));
+        Render();
     }
 
     private void HandleMatchEnded(PlayersManager winner, MatchEndReason reason)
@@ -315,16 +375,23 @@ public class MainGameUIController : MonoBehaviour
     private void HandleGuestTurnEnded(int shooterId)
     {
         shots[shooterId]++;
+        lastShooterId = shooterId;
     }
 
-    private void HandleOpponentLeft()
+    // The host rules on anyone else leaving (their side forfeits, and its
+    // result or PlayerOut follows). A guest can't go on without the host:
+    // with two that's a win by forfeit, with more the match is just over.
+    private void HandlePlayerLeft(int playerId)
     {
-        // Mid-match that's a forfeit; after the result it only ends the rematch.
-        if (!winnerPlayerId.HasValue) ShowResult(networkBridge.LocalPlayerId, MatchEndReason.OpponentLeft);
+        if (!winnerPlayerId.HasValue && !networkBridge.IsHost && playerId == 0)
+        {
+            if (PlayerCount > 2) ShowResult(-1, MatchEndReason.HostLeft);
+            else ShowResult(networkBridge.LocalPlayerId, MatchEndReason.OpponentLeft);
+        }
         else Render();
     }
 
-    private void HandleOpponentReturnedToLobby()
+    private void HandlePlayerReturnedToLobby(int playerId)
     {
         opponentReturnedToLobby = true;
         Render();
@@ -336,7 +403,7 @@ public class MainGameUIController : MonoBehaviour
         winnerPlayerId = winnerId;
         endReason = reason;
         matchEndTime = Time.time;
-        MatchSeries.Record(winnerId);
+        if (reason != MatchEndReason.HostLeft) MatchSeries.Record(winnerId);
         var bank = GameAudio.Bank;
         var lost = OwnSide.HasValue && winnerId >= 0 && winnerId != OwnSide.Value;
         GameAudio.PlayInterface(winnerId < 0 ? bank.draw : lost ? bank.lose : bank.win);
@@ -360,7 +427,8 @@ public class MainGameUIController : MonoBehaviour
         for (var i = 0; i < playerPanels.Length && i < gameManager.playersList.Count; i++)
         {
             var isTurn = playing && i == currentPlayerId;
-            playerPanels[i].Render(ColorName(i), PlayerLabel(i), CountPieces(i), gameManager.playersList[i].score, isTurn);
+            var outStatus = outSides.TryGetValue(i, out var why) ? Loc.Get("hud.out." + why) : null;
+            playerPanels[i].Render(ColorName(i), PlayerLabel(i), CountPieces(i), gameManager.playersList[i].score, isTurn, outStatus);
         }
 
         if (winnerPlayerId.HasValue) RenderGameOver(gameManager);
@@ -369,10 +437,16 @@ public class MainGameUIController : MonoBehaviour
     private void RenderGameOver(GameManager gameManager)
     {
         var winner = winnerPlayerId.Value;
-        var loser = 1 - winner;
+        var loser = 1 - winner; // two sides
         var online = networkBridge != null;
+        var multi = PlayerCount > 2;
 
-        if (winner < 0)
+        if (endReason == MatchEndReason.HostLeft)
+        {
+            stampText.text = Loc.Get("result.stampOver");
+            resultTitleText.text = Loc.Get("result.over");
+        }
+        else if (winner < 0)
         {
             stampText.text = Loc.Get("result.stampDraw");
             resultTitleText.text = Loc.Get("result.draw");
@@ -392,16 +466,19 @@ public class MainGameUIController : MonoBehaviour
 
         resultReasonText.text = endReason switch
         {
+            MatchEndReason.HostLeft => Loc.Get("reason.hostLeft"),
             MatchEndReason.BothOut when winner < 0 => Loc.Get("reason.bothOutDraw"),
             MatchEndReason.BothOut when MatchSettings.Current.BothOutRule == BothOutRule.ShooterWins => Loc.Get("reason.bothOutWin", ColorName(winner)),
-            MatchEndReason.BothOut => Loc.Get("reason.bothOut", ColorName(loser)),
+            MatchEndReason.BothOut => Loc.Get("reason.bothOut", ColorName(lastShooterId >= 0 ? lastShooterId : loser)),
+            MatchEndReason.Knockout when multi => Loc.Get("reason.lastStanding", ColorName(winner)),
+            _ when multi => Loc.Get("reason.othersGone"),
             MatchEndReason.OpponentLeft => Loc.Get("reason.opponentLeft"),
             MatchEndReason.Surrender => Loc.Get("reason.surrender", ColorName(loser)),
             _ => Loc.Get("reason.knockout", ColorName(loser)),
         };
 
         var kills = turnController.Kills;
-        for (var i = 0; i < 2 && i < gameManager.playersList.Count; i++)
+        for (var i = 0; i < PlayerCount; i++)
         {
             remainingCells[i].text = CountPieces(i).ToString();
             killCells[i].text = kills.Kills(i).ToString();
@@ -413,7 +490,9 @@ public class MainGameUIController : MonoBehaviour
         // Time.time runs at the game's pace (and stands still while paused).
         var seconds = Mathf.FloorToInt((matchEndTime - matchStartTime) / GamePace.Speed);
         matchTimeText.text = Loc.Get("stats.time", $"{seconds / 60}:{seconds % 60:00}");
-        seriesText.text = Loc.Get("series.score", ColorName(0), MatchSeries.Wins(0), MatchSeries.Wins(1), ColorName(1))
+        seriesText.text = (multi
+                              ? Loc.Get("series.multi", string.Join(" · ", Enumerable.Range(0, PlayerCount).Select(i => Loc.Get("series.side", ColorName(i), MatchSeries.Wins(i)))))
+                              : Loc.Get("series.score", ColorName(0), MatchSeries.Wins(0), MatchSeries.Wins(1), ColorName(1)))
                           + (MatchSeries.Draws > 0 ? Loc.Get("series.draws", MatchSeries.Draws) : string.Empty);
 
         if (!online)
@@ -424,23 +503,30 @@ public class MainGameUIController : MonoBehaviour
             return;
         }
 
-        string statusKey = null;
-        if (networkBridge.OpponentGone && endReason != MatchEndReason.OpponentLeft)
-            statusKey = opponentReturnedToLobby ? "rematch.opponentLobby" : "rematch.opponentLeft";
-        else if (networkBridge.RemoteWantsRematch && !networkBridge.LocalWantsRematch)
-            statusKey = "rematch.opponentWants";
-        statusText.text = statusKey == null ? string.Empty : Loc.Get(statusKey);
+        // Everyone still here has to ask for the rematch; the host starts it.
+        var wanting = networkBridge.OthersWantingRematch + (networkBridge.LocalWantsRematch ? 1 : 0);
+        var status = string.Empty;
+        if (networkBridge.HostGone) status = string.Empty; // the reason line says it
+        else if (networkBridge.OpponentGone && endReason != MatchEndReason.OpponentLeft)
+            status = multi ? Loc.Get("rematch.othersGone") : Loc.Get(opponentReturnedToLobby ? "rematch.opponentLobby" : "rematch.opponentLeft");
+        else if (multi && wanting > 0)
+            status = Loc.Get("rematch.count", wanting, networkBridge.OthersPresent + 1);
+        else if (!multi && networkBridge.OthersWantingRematch > 0 && !networkBridge.LocalWantsRematch)
+            status = Loc.Get("rematch.opponentWants");
+        statusText.text = status;
 
         rematchLabel.text = Loc.Get(networkBridge.LocalWantsRematch ? "rematch.waiting"
-            : networkBridge.RemoteWantsRematch ? "rematch.accept" : "rematch.request");
-        SetInteractable(rematchButton, !networkBridge.OpponentGone && !networkBridge.LocalWantsRematch);
+            : networkBridge.OthersWantingRematch > 0 ? "rematch.accept" : "rematch.request");
+        SetInteractable(rematchButton, !networkBridge.OpponentGone && !networkBridge.HostGone && !networkBridge.LocalWantsRematch);
     }
 
     private static string ColorName(int playerId) => SideStyle.Name(playerId);
 
-    private static string PlayerLabel(int playerId)
+    // Online, the player's Steam name; locally the AI's level or "Player N".
+    private string PlayerLabel(int playerId)
     {
-        var number = playerId == GameManager.manager.AIPlayerId ? LocalOpponent.Name : Loc.Get("player.number", playerId + 1);
+        var number = networkBridge != null ? networkBridge.PlayerName(playerId)
+            : playerId == GameManager.manager.AIPlayerId ? LocalOpponent.Name : Loc.Get("player.number", playerId + 1);
         return MatchSeries.Played > 0 ? Loc.Get("series.panel", number, MatchSeries.Wins(playerId)) : number;
     }
 

@@ -82,6 +82,6 @@ public class KillFeed : MonoBehaviour
         letter.gameObject.SetActive(key != null);
         if (key == null) return;
         letter.text = SideStyle.PieceLetter(key);
-        letter.color = playerId == 0 ? SideStyle.Cho : SideStyle.Han;
+        letter.color = SideStyle.LetterColor(playerId);
     }
 }

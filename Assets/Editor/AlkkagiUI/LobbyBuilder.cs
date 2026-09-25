@@ -16,8 +16,9 @@ namespace AlkkagiUIEditor
         private const string ScenePath = "Assets/Scenes/LobbyScene.unity";
         private const string OldBootstrapName = "LobbyBootstrap";
 
-        private static readonly Vector2 CardSize = new Vector2(1000, 860);
-        private static readonly Vector2 RulesCardSize = new Vector2(600, 860);
+        private static readonly Vector2 CardSize = new Vector2(1000, 940);
+        private static readonly Vector2 RulesCardSize = new Vector2(600, 940);
+        private const float SeatHeight = 80, SeatGap = 10;
         private const float CardGap = 32;
         private const float Pad = 64;
 
@@ -152,14 +153,18 @@ namespace AlkkagiUIEditor
             // Toggled between Copy/Copied by LobbySceneUI, so no static binding.
             Object.DestroyImmediate(ui.copyLabel.GetComponent<LocalizedText>());
 
-            ui.hostSlot = Slot(view, "HostSlot", TopLeft, new Vector2(Pad, -318), true, "Host", "lobby.host");
-            ui.guestSlot = Slot(view, "GuestSlot", TopRight, new Vector2(-Pad, -318), false, "Guest", "lobby.guest");
+            // Four seats, the host's first; LobbySceneUI shows as many as the
+            // rules allow.
+            ui.seats = new LobbyPlayerSlot[MatchRoster.MaxPlayers];
+            for (var i = 0; i < ui.seats.Length; i++)
+                ui.seats[i] = Slot(view, "Seat" + i, i, new Vector2(Pad, -318 - i * (SeatHeight + SeatGap)));
+            var belowSeats = -318 - ui.seats.Length * (SeatHeight + SeatGap) - 12;
 
             // Who can join: the host picks, the guest sees it greyed out.
             UIKit.Label(view, "VisibilityLabel", "lobby.visibility", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
-                .rectTransform.Place(TopLeft, new Vector2(Pad, -594), new Vector2(300, 72));
+                .rectTransform.Place(TopLeft, new Vector2(Pad, belowSeats), new Vector2(300, 72));
             ui.visibilityToggle = UIKit.SegmentedToggle(view, "VisibilityToggle", new[] { "lobby.vis.public", "lobby.vis.friends", "lobby.vis.private" }, 72);
-            ui.visibilityToggle.GetComponent<RectTransform>().Place(TopRight, new Vector2(-Pad, -594), new Vector2(520, 72));
+            ui.visibilityToggle.GetComponent<RectTransform>().Place(TopRight, new Vector2(-Pad, belowSeats), new Vector2(520, 72));
 
             ui.leaveButton = UIKit.CapsuleButton(view, "LeaveButton", "lobby.leave", new Vector2(264, 92), false, 32);
             ui.leaveButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(Pad, 56), new Vector2(264, 92));
@@ -174,14 +179,14 @@ namespace AlkkagiUIEditor
         // guest sees them read-only.
         private static void BuildRulesCard(Transform lobbyView, LobbySceneUI ui)
         {
-            const float pad = 48, rowHeight = 54, gap = 6;
+            const float pad = 48, rowHeight = 48, gap = 4;
             var card = UIKit.Panel(lobbyView, "RulesCard", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             card.rectTransform.Place(new Vector2(1, 0.5f), new Vector2(CardGap, 0), RulesCardSize, new Vector2(0, 0.5f));
             var c = card.transform;
 
             UIKit.Label(c, "Title", "match.title", 40, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
                 .rectTransform.Place(TopLeft, new Vector2(pad, -52), new Vector2(RulesCardSize.x - pad * 2, 72));
-            ui.rulesPanel = UIKit.RulesPanel(c, "Rules", RulesCardSize.x - pad * 2, rowHeight, gap, 24);
+            ui.rulesPanel = UIKit.RulesPanel(c, "Rules", RulesCardSize.x - pad * 2, rowHeight, gap, 24, online: true);
             var rules = ui.rulesPanel.GetComponent<RectTransform>();
             rules.Place(TopLeft, new Vector2(pad, -148), rules.sizeDelta);
 
@@ -189,45 +194,48 @@ namespace AlkkagiUIEditor
             ui.rulesCaption.rectTransform.Place(new Vector2(0, 0), new Vector2(pad, 44), new Vector2(RulesCardSize.x - pad * 2, 36));
         }
 
-        // A seat card: filled (stone, Steam name, role) or empty (dashed
-        // stone, "open slot", and the invite button for the host to use).
-        private static LobbyPlayerSlot Slot(Transform parent, string name, Vector2 corner, Vector2 position, bool black, string placeholderName, string roleKey)
+        // A seat row: filled (stone, Steam name, role, and for the host a
+        // Remove button on the guests' seats) or empty (dashed stone, "open
+        // slot", the side it would play, and the host's invite button).
+        private static LobbyPlayerSlot Slot(Transform parent, string name, int seat, Vector2 position)
         {
-            var size = new Vector2(424, 240);
-            var node = UIKit.Node(name, parent).Place(corner, position, size);
+            var size = new Vector2(CardSize.x - Pad * 2, SeatHeight);
+            var node = UIKit.Node(name, parent).Place(TopLeft, position, size);
             var slot = node.gameObject.AddComponent<LobbyPlayerSlot>();
-            var colorKey = black ? "player.black" : "player.white";
+            var colorKey = seat == 0 ? "player.black" : "player.white";
+            var right = new Vector2(1, 0.5f);
 
             var filled = UIKit.Panel(node, "Filled", new Color(1, 1, 1, 0.55f), Theme.Ink);
             filled.rectTransform.Stretch();
-            var stone = UIKit.Stone(filled.transform, "Stone", 64, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
-                .Place(TopLeft, new Vector2(32, -32), new Vector2(64, 64));
-            UIKit.Mark(stone, black ? 0 : 1);
+            var stone = UIKit.Stone(filled.transform, "Stone", 52, seat == 0 ? Theme.StoneBlack : Theme.StoneWhite, seat == 0 ? Theme.Ink : Theme.InkMuted, false)
+                .Place(new Vector2(0, 0.5f), new Vector2(24, 0), new Vector2(52, 52), new Vector2(0, 0.5f));
+            UIKit.Mark(stone, seat);
             // ASCII placeholders: the real Steam name replaces them at runtime.
-            slot.nameText = UIKit.Text(filled.transform, "Name", placeholderName, 36, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+            slot.nameText = UIKit.Text(filled.transform, "Name", seat == 0 ? "Host" : "Guest", 32, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
             slot.nameText.overflowMode = TextOverflowModes.Ellipsis;
-            slot.nameText.rectTransform.Place(TopLeft, new Vector2(116, -28), new Vector2(280, 48));
-            slot.roleText = UIKit.Text(filled.transform, "Role", $"{Loc.Get(roleKey)} · {Loc.Get(colorKey)}", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
-            slot.roleText.rectTransform.Place(TopLeft, new Vector2(116, -78), new Vector2(280, 36));
+            slot.nameText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(96, 0), new Vector2(360, 56), new Vector2(0, 0.5f));
+            slot.roleText = UIKit.Text(filled.transform, "Role", $"{Loc.Get(seat == 0 ? "lobby.host" : "lobby.guest")} · {Loc.Get(colorKey)}", 24, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+            slot.roleText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(472, 0), new Vector2(190, 56), new Vector2(0, 0.5f));
             slot.filledView = filled.gameObject;
-            if (!black)
+            if (seat > 0)
             {
-                // The host can send the guest away (public lobbies let anyone in).
-                slot.kickButton = UIKit.CapsuleButton(filled.transform, "KickButton", "lobby.kick", new Vector2(220, 64), false, 26);
-                slot.kickButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 28), new Vector2(220, 64), new Vector2(0.5f, 0));
+                // The host can send a guest away (public lobbies let anyone in).
+                slot.kickButton = UIKit.CapsuleButton(filled.transform, "KickButton", "lobby.kick", new Vector2(176, 56), false, 24);
+                slot.kickButton.GetComponent<RectTransform>().Place(right, new Vector2(-12, 0), new Vector2(176, 56), right);
                 slot.kickButton.gameObject.SetActive(false);
             }
 
             var empty = UIKit.Panel(node, "Empty", Color.clear, Theme.InkFaint);
             empty.rectTransform.Stretch();
-            UIKit.Image(empty.transform, "Stone", UIKit.CircleDashed, Theme.InkFaint).rectTransform.Place(TopLeft, new Vector2(32, -32), new Vector2(64, 64));
-            UIKit.Label(empty.transform, "Name", "lobby.emptySlot", 36, true, Theme.InkFaint, TextAlignmentOptions.MidlineLeft)
-                .rectTransform.Place(TopLeft, new Vector2(116, -28), new Vector2(280, 48));
-            var emptyRole = UIKit.Text(empty.transform, "Role", Loc.Get(colorKey), 26, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft);
-            emptyRole.rectTransform.Place(TopLeft, new Vector2(116, -78), new Vector2(280, 36));
-            UIKit.MarkLabel(emptyRole, black ? 0 : 1);
-            slot.inviteButton = UIKit.CapsuleButton(empty.transform, "InviteButton", "lobby.invite", new Vector2(340, 72), false, 26);
-            slot.inviteButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 28), new Vector2(340, 72));
+            UIKit.Image(empty.transform, "Stone", UIKit.CircleDashed, Theme.InkFaint)
+                .rectTransform.Place(new Vector2(0, 0.5f), new Vector2(24, 0), new Vector2(52, 52), new Vector2(0, 0.5f));
+            UIKit.Label(empty.transform, "Name", "lobby.emptySlot", 32, true, Theme.InkFaint, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(new Vector2(0, 0.5f), new Vector2(96, 0), new Vector2(360, 56), new Vector2(0, 0.5f));
+            var emptyRole = UIKit.Text(empty.transform, "Role", Loc.Get(colorKey), 24, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft);
+            emptyRole.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(472, 0), new Vector2(190, 56), new Vector2(0, 0.5f));
+            UIKit.MarkLabel(emptyRole, seat);
+            slot.inviteButton = UIKit.CapsuleButton(empty.transform, "InviteButton", "lobby.invite", new Vector2(236, 56), false, 22);
+            slot.inviteButton.GetComponent<RectTransform>().Place(right, new Vector2(-12, 0), new Vector2(236, 56), right);
             slot.emptyView = empty.gameObject;
             empty.gameObject.SetActive(false);
             return slot;

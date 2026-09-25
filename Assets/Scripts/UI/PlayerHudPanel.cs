@@ -18,6 +18,7 @@ public class PlayerHudPanel : MonoBehaviour
     public GameObject stoneTemplate; // children: "Fill", "Ring" (alive) and "Lost" (dashed ring)
     public Button skipButton;        // shown on this side's own turn, on the screen that plays it
     [Range(0f, 1f)] public float idleAlpha = 0.8f;
+    [Range(0f, 1f)] public float outAlpha = 0.45f;
     public float minStoneSpacing = 4f;
 
     private readonly List<GameObject> stones = new List<GameObject>();
@@ -50,14 +51,16 @@ public class PlayerHudPanel : MonoBehaviour
         }
     }
 
-    public void Render(string playerName, string playerNumber, int remaining, int captured, bool isTurn)
+    // outStatus: why this side is out of a match of three or four ("Out",
+    // "Conceded", "Left"), or null while it plays.
+    public void Render(string playerName, string playerNumber, int remaining, int captured, bool isTurn, string outStatus = null)
     {
         nameText.text = playerName;
-        numberText.text = playerNumber;
+        numberText.text = outStatus == null ? playerNumber : $"{playerNumber} · {outStatus}";
         remainingText.text = remaining.ToString();
         capturedText.text = Loc.Get("hud.captured", captured);
         turnBadge.SetActive(isTurn);
-        canvasGroup.alpha = isTurn ? 1f : idleAlpha;
+        canvasGroup.alpha = isTurn ? 1f : outStatus != null ? outAlpha : idleAlpha;
 
         for (var i = 0; i < stones.Count; i++)
         {

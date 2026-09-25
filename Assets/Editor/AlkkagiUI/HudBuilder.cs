@@ -12,7 +12,8 @@ namespace AlkkagiUIEditor
     // board (top-down CM vcam_main) fills the screen height, leaving ~490px
     // columns either side at 1080p - so the player panels live in those
     // columns, black bottom-left and white top-right, next to where each
-    // side's stones start.
+    // side's stones start. With three or four sides MainGameUIController
+    // shrinks the four panels and moves each next to its side's edge.
     internal static class HudBuilder
     {
         private const string PrefabPath = "Assets/UI/MainGame_UI.prefab";
@@ -40,12 +41,16 @@ namespace AlkkagiUIEditor
             var controller = canvas.gameObject.AddComponent<MainGameUIController>();
             controller.turnTextColor = Theme.Ink;
             controller.clockWarningColor = Theme.Seal;
+            controller.hudMargin = Margin;
 
             BuildTurnPill(root, controller);
+            // The third and fourth sides' panels are placed at match start.
             controller.playerPanels = new[]
             {
                 BuildPlayerPanel(root, "BlackPanel", 0, new Vector2(0, 0), new Vector2(Margin, Margin), Theme.StoneBlack, Theme.Ink),
                 BuildPlayerPanel(root, "WhitePanel", 1, new Vector2(1, 1), new Vector2(-Margin, -Margin), Theme.StoneWhite, Theme.InkMuted),
+                BuildPlayerPanel(root, "BluePanel", 2, new Vector2(1, 1), new Vector2(-Margin, -Margin), SideStyle.StoneBlue, Theme.Ink),
+                BuildPlayerPanel(root, "RedPanel", 3, new Vector2(0, 0), new Vector2(Margin, Margin), SideStyle.StoneRed, Theme.Ink),
             };
             BuildPlacementPanel(root);
             BuildKillFeed(root, controller);
@@ -165,16 +170,19 @@ namespace AlkkagiUIEditor
             hud.hintText.textWrappingMode = TextWrappingModes.Normal;
 
             UIKit.Image(t, "Divider", null, Theme.Divider).rectTransform.Place(topLeft, new Vector2(Pad, -196), new Vector2(width, 2));
-            hud.clockTexts = new TMP_Text[2];
-            for (var player = 0; player < 2; player++)
+            // A clock per side; PlacementHud shows as many as are playing and
+            // grows the panel to fit.
+            hud.clockTexts = new TMP_Text[4];
+            hud.clockRows = new RectTransform[4];
+            for (var player = 0; player < 4; player++)
             {
-                var black = player == 0;
-                var y = -214 - player * 48;
-                var clockStone = UIKit.Stone(t, black ? "BlackStone" : "WhiteStone", 28, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
-                    .Place(topLeft, new Vector2(Pad, y - 8), new Vector2(28, 28));
+                var row = UIKit.Node("Clock" + player, t).Place(topLeft, new Vector2(Pad, -214 - player * hud.rowSpacing), new Vector2(width, 40));
+                var clockStone = UIKit.Stone(row, "Stone", 28, player == 0 ? Theme.StoneBlack : Theme.StoneWhite, player == 0 ? Theme.Ink : Theme.InkMuted, false)
+                    .Place(topLeft, new Vector2(0, -8), new Vector2(28, 28));
                 UIKit.Mark(clockStone, player);
-                hud.clockTexts[player] = UIKit.Text(t, black ? "BlackClock" : "WhiteClock", black ? "흑 1:00" : "백 1:00", 30, true, Theme.Ink, TextAlignmentOptions.TopLeft);
-                hud.clockTexts[player].rectTransform.Place(topLeft, new Vector2(Pad + 44, y), new Vector2(width - 44, 40));
+                hud.clockTexts[player] = UIKit.Text(row, "Clock", player == 0 ? "흑 1:00" : "백 1:00", 30, true, Theme.Ink, TextAlignmentOptions.TopLeft);
+                hud.clockTexts[player].rectTransform.Place(topLeft, new Vector2(44, 0), new Vector2(width - 44, 40));
+                hud.clockRows[player] = row;
             }
 
             hud.statusText = UIKit.Text(t, "Status", "시간이 끝나면 남은 돌은 무작위로 놓여요", 22, false, Theme.InkFaint, TextAlignmentOptions.TopLeft);
@@ -428,42 +436,46 @@ namespace AlkkagiUIEditor
             board.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -310), new Vector2(640, 360));
             var b = board.transform;
             var topLeft = new Vector2(0, 1);
-            float[] columns = { 400, 540 }; // value column centers, from the board's left edge
+            const float columnWidth = 120;
 
-            for (var player = 0; player < 2; player++)
+            // Kills are the shooter's own work; with two sides the panels'
+            // captured count also takes the opponent's suicides and team kills.
+            string[] rows = { "Remaining", "Kills", "Nongae", "Suicides", "TeamKills", "Shots" };
+            string[] labels = { "hud.remaining", "stats.kills", "stats.nongae", "stats.suicides", "stats.teamKills", "stats.shots" };
+            for (var r = 0; r < rows.Length; r++)
+                UIKit.Label(b, rows[r] + "Label", labels[r], 28, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                    .rectTransform.Place(topLeft, new Vector2(32, RowY(r)), new Vector2(280, 40));
+
+            // A column per side, its header and cells together; the controller
+            // spaces the columns for the number of sides.
+            var cells = new TMP_Text[rows.Length][];
+            for (var r = 0; r < rows.Length; r++) cells[r] = new TMP_Text[4];
+            controller.scoreColumns = new RectTransform[4];
+            for (var player = 0; player < 4; player++)
             {
-                var x = columns[player];
-                var black = player == 0;
-                var header = UIKit.Stone(b, black ? "BlackHeader" : "WhiteHeader", 24, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
-                    .Place(topLeft, new Vector2(x - 34, -28), new Vector2(24, 24));
+                var column = UIKit.Node("Column" + player, b).Place(topLeft, new Vector2(player == 0 ? 400 : 540, 0), new Vector2(columnWidth, 360), new Vector2(0.5f, 1));
+                controller.scoreColumns[player] = column;
+                var header = UIKit.Stone(column, "Header", 24, player == 0 ? Theme.StoneBlack : Theme.StoneWhite, player == 0 ? Theme.Ink : Theme.InkMuted, false)
+                    .Place(topLeft, new Vector2(columnWidth / 2 - 34, -28), new Vector2(24, 24));
                 UIKit.Mark(header, player);
-                var headerLabel = UIKit.Text(b, black ? "BlackLabel" : "WhiteLabel", Loc.Get(black ? "player.black" : "player.white"), 28, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
-                headerLabel.rectTransform.Place(topLeft, new Vector2(x - 2, -20), new Vector2(80, 40));
+                var headerLabel = UIKit.Text(column, "Label", Loc.Get(player == 0 ? "player.black" : "player.white"), 28, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+                headerLabel.rectTransform.Place(topLeft, new Vector2(columnWidth / 2 - 2, -20), new Vector2(80, 40));
                 UIKit.MarkLabel(headerLabel, player);
-            }
-
-            TMP_Text[] Row(string name, string labelKey, float y)
-            {
-                UIKit.Label(b, name + "Label", labelKey, 28, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
-                    .rectTransform.Place(topLeft, new Vector2(32, y), new Vector2(280, 40));
-                var cells = new TMP_Text[2];
-                for (var player = 0; player < 2; player++)
+                for (var r = 0; r < rows.Length; r++)
                 {
-                    cells[player] = UIKit.Text(b, $"{name}{player}", "0", 32, true, Theme.Ink, TextAlignmentOptions.Center);
-                    cells[player].rectTransform.Place(topLeft, new Vector2(columns[player], y), new Vector2(120, 40), new Vector2(0.5f, 1));
+                    cells[r][player] = UIKit.Text(column, rows[r], "0", 32, true, Theme.Ink, TextAlignmentOptions.Center);
+                    cells[r][player].rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, RowY(r)), new Vector2(columnWidth, 40), new Vector2(0.5f, 1));
                 }
-                return cells;
             }
-
-            // Kills are the shooter's own work; the side panels' captured count
-            // also takes the opponent's suicides and team kills.
-            controller.remainingCells = Row("Remaining", "hud.remaining", -72);
-            controller.killCells = Row("Kills", "stats.kills", -118);
-            controller.nongaeCells = Row("Nongae", "stats.nongae", -164);
-            controller.suicideCells = Row("Suicides", "stats.suicides", -210);
-            controller.teamKillCells = Row("TeamKills", "stats.teamKills", -256);
-            controller.shotsCells = Row("Shots", "stats.shots", -302);
+            controller.remainingCells = cells[0];
+            controller.killCells = cells[1];
+            controller.nongaeCells = cells[2];
+            controller.suicideCells = cells[3];
+            controller.teamKillCells = cells[4];
+            controller.shotsCells = cells[5];
         }
+
+        private static float RowY(int row) => -72 - row * 46;
 
         private static void WireScene(GameObject prefab)
         {

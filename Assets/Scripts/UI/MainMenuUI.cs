@@ -52,6 +52,7 @@ public class MainMenuUI : MonoBehaviour
     {
         MatchSettings.Current = setupRules.Settings;
         MatchSettings.Current.SavePrefs();
+        MatchRoster.Current = null; // two at this screen
         MatchSeries.Reset(); // a fresh local session; rematches from the game-over screen keep counting
         SceneManager.LoadScene("GameScene");
     }

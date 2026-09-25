@@ -194,7 +194,7 @@ namespace AlkkagiUIEditor
         private static void BuildSetupPanel(Transform root, MainMenuUI menu)
         {
             const float width = 840, pad = 64, rowHeight = 52, gap = 8, opponentRow = 80;
-            var rulesHeight = MatchSettings.Defs.Length * (rowHeight + gap) - gap;
+            var rulesHeight = UIKit.RuleRows(false) * (rowHeight + gap) - gap;
             var overlay = UIKit.Image(root, "SetupPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             menu.setupPanel = overlay.gameObject;
@@ -210,7 +210,7 @@ namespace AlkkagiUIEditor
             menu.opponentToggle = UIKit.SegmentedToggle(card.transform, "OpponentToggle",
                 new[] { "opponent.Human", "opponent.AIEasy", "opponent.AINormal", "opponent.AIHard" }, 60);
             menu.opponentToggle.GetComponent<RectTransform>().Place(new Vector2(1, 1), new Vector2(-pad, -144), new Vector2(width - pad * 2 - 150, 60));
-            menu.setupRules = UIKit.RulesPanel(card.transform, "Rules", width - pad * 2, rowHeight, gap, 28);
+            menu.setupRules = UIKit.RulesPanel(card.transform, "Rules", width - pad * 2, rowHeight, gap, 28, online: false);
             menu.setupRules.GetComponent<RectTransform>().Place(new Vector2(0, 1), new Vector2(pad, -148 - opponentRow), menu.setupRules.GetComponent<RectTransform>().sizeDelta);
 
             menu.setupCancelButton = UIKit.CapsuleButton(card.transform, "CancelButton", "setup.cancel", new Vector2(240, 84), false, 32);

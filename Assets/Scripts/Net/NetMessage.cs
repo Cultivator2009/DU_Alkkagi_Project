@@ -18,7 +18,8 @@ public enum NetMessageType : byte
     PlacementReady = 12, // guest -> host: my stones are final
     Kick = 13,           // host -> guest: leave my lobby
     BoardSound = 14,     // host -> guest: a knock, hinge, flick or fall to play, and where (unreliable)
-    Concede = 15         // guest -> host: I give up
+    Concede = 15,        // guest -> host: I give up
+    PlayerOut = 16       // host -> guests: a side is out and the match goes on (three or four)
 }
 
 public struct PieceOwnerEntry
@@ -48,7 +49,7 @@ public static class NetMessage
     // Bump whenever a message changes shape. Lobbies advertise it, and a
     // build only lists and joins lobbies on its own version: two builds that
     // disagree here would misread each other's messages mid-match.
-    public const int ProtocolVersion = 3;
+    public const int ProtocolVersion = 4;
 
     public static byte[] WriteStartMatch(int localPlayerId, IReadOnlyList<PieceOwnerEntry> pieceOwners)
     {
@@ -216,24 +217,31 @@ public static class NetMessage
         return transforms;
     }
 
-    // The host's rules travel with the scene change, so both sides spawn and
-    // play the same match whatever state their copy of the lobby data is in.
-    public static byte[] WriteLoadGameScene(MatchSettings settings)
+    // The host's rules and roster travel with the scene change, so every
+    // side spawns and plays the same match whatever state its copy of the
+    // lobby data is in.
+    public static byte[] WriteLoadGameScene(MatchSettings settings, MatchRoster roster)
     {
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream);
         writer.Write((byte)NetMessageType.LoadGameScene);
         settings.Write(writer);
+        roster.Write(writer);
         return stream.ToArray();
     }
 
-    public static MatchSettings ReadLoadGameScene(byte[] data)
+    public static (MatchSettings settings, MatchRoster roster) ReadLoadGameScene(byte[] data)
     {
         using var stream = new MemoryStream(data);
         using var reader = new BinaryReader(stream);
         reader.ReadByte();
-        return MatchSettings.Read(reader);
+        var settings = MatchSettings.Read(reader);
+        return (settings, MatchRoster.Read(reader));
     }
+
+    public static byte[] WritePlayerOut(int playerId, MatchEndReason reason) => new[] { (byte)NetMessageType.PlayerOut, (byte)playerId, (byte)reason };
+
+    public static (int playerId, MatchEndReason reason) ReadPlayerOut(byte[] data) => (data[1], (MatchEndReason)data[2]);
 
     public static byte[] WritePlacementState(PlacementSnapshot state)
     {
