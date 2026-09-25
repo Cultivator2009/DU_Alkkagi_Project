@@ -341,7 +341,7 @@ namespace AlkkagiUIEditor
             controller.gameOverPanel = overlay.gameObject;
 
             var modal = UIKit.Panel(overlay.transform, "Modal", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
-            modal.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 910));
+            modal.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 956));
             var m = modal.transform;
             var top = new Vector2(0.5f, 1);
 
@@ -362,11 +362,11 @@ namespace AlkkagiUIEditor
             BuildScoreboard(m, controller);
 
             controller.matchTimeText = UIKit.Text(m, "MatchTime", "경기 시간 1:23", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
-            controller.matchTimeText.rectTransform.Place(new Vector2(0, 1), new Vector2(60, -686), new Vector2(320, 36));
+            controller.matchTimeText.rectTransform.Place(new Vector2(0, 1), new Vector2(60, -732), new Vector2(320, 36));
             controller.seriesText = UIKit.Text(m, "Series", "연속 전적  흑 1 : 0 백", 26, false, Theme.Ink, TextAlignmentOptions.MidlineRight);
-            controller.seriesText.rectTransform.Place(new Vector2(1, 1), new Vector2(-60, -686), new Vector2(360, 36));
+            controller.seriesText.rectTransform.Place(new Vector2(1, 1), new Vector2(-60, -732), new Vector2(360, 36));
             controller.statusText = UIKit.Text(m, "Status", "", 26, false, Theme.Seal, TextAlignmentOptions.Center);
-            controller.statusText.rectTransform.Place(top, new Vector2(0, -734), new Vector2(680, 36));
+            controller.statusText.rectTransform.Place(top, new Vector2(0, -780), new Vector2(680, 36));
 
             // Layout group so the row re-centers when Lobby is hidden locally.
             var buttons = UIKit.Node("Buttons", m).Place(new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(680, 84));
@@ -433,18 +433,23 @@ namespace AlkkagiUIEditor
         private static void BuildScoreboard(Transform modal, MainGameUIController controller)
         {
             var board = UIKit.Panel(modal, "Scoreboard", Theme.HanjiField, Theme.FieldBorder, 1.4f);
-            board.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -310), new Vector2(640, 360));
+            board.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -310), new Vector2(640, 406));
             var b = board.transform;
             var topLeft = new Vector2(0, 1);
             const float columnWidth = 120;
 
             // Kills are the shooter's own work; with two sides the panels'
             // captured count also takes the opponent's suicides and team kills.
-            string[] rows = { "Remaining", "Kills", "Nongae", "Suicides", "TeamKills", "Shots" };
-            string[] labels = { "hud.remaining", "stats.kills", "stats.nongae", "stats.suicides", "stats.teamKills", "stats.shots" };
+            // The rating row (new rating and change) only shows for a rated match.
+            string[] rows = { "Remaining", "Kills", "Nongae", "Suicides", "TeamKills", "Shots", "Rating" };
+            string[] labels = { "hud.remaining", "stats.kills", "stats.nongae", "stats.suicides", "stats.teamKills", "stats.shots", "stats.rating" };
+            var rowLabels = new GameObject[rows.Length];
             for (var r = 0; r < rows.Length; r++)
-                UIKit.Label(b, rows[r] + "Label", labels[r], 28, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
-                    .rectTransform.Place(topLeft, new Vector2(32, RowY(r)), new Vector2(280, 40));
+            {
+                var label = UIKit.Label(b, rows[r] + "Label", labels[r], 28, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+                label.rectTransform.Place(topLeft, new Vector2(32, RowY(r)), new Vector2(280, 40));
+                rowLabels[r] = label.gameObject;
+            }
 
             // A column per side, its header and cells together; the controller
             // spaces the columns for the number of sides.
@@ -453,7 +458,7 @@ namespace AlkkagiUIEditor
             controller.scoreColumns = new RectTransform[4];
             for (var player = 0; player < 4; player++)
             {
-                var column = UIKit.Node("Column" + player, b).Place(topLeft, new Vector2(player == 0 ? 400 : 540, 0), new Vector2(columnWidth, 360), new Vector2(0.5f, 1));
+                var column = UIKit.Node("Column" + player, b).Place(topLeft, new Vector2(player == 0 ? 400 : 540, 0), new Vector2(columnWidth, 406), new Vector2(0.5f, 1));
                 controller.scoreColumns[player] = column;
                 var header = UIKit.Stone(column, "Header", 24, player == 0 ? Theme.StoneBlack : Theme.StoneWhite, player == 0 ? Theme.Ink : Theme.InkMuted, false)
                     .Place(topLeft, new Vector2(columnWidth / 2 - 34, -28), new Vector2(24, 24));
@@ -463,7 +468,9 @@ namespace AlkkagiUIEditor
                 UIKit.MarkLabel(headerLabel, player);
                 for (var r = 0; r < rows.Length; r++)
                 {
-                    cells[r][player] = UIKit.Text(column, rows[r], "0", 32, true, Theme.Ink, TextAlignmentOptions.Center);
+                    var rating = rows[r] == "Rating";
+                    // The rating cell is two numbers; four columns leave it ~100 wide.
+                    cells[r][player] = UIKit.Text(column, rows[r], rating ? "1000" : "0", rating ? 26 : 32, true, Theme.Ink, TextAlignmentOptions.Center);
                     cells[r][player].rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, RowY(r)), new Vector2(columnWidth, 40), new Vector2(0.5f, 1));
                 }
             }
@@ -473,6 +480,11 @@ namespace AlkkagiUIEditor
             controller.suicideCells = cells[3];
             controller.teamKillCells = cells[4];
             controller.shotsCells = cells[5];
+            controller.ratingCells = cells[6];
+            controller.ratingLabel = rowLabels[6];
+            controller.ratingUpColor = Theme.StatusOk;
+            controller.ratingDownColor = Theme.Seal;
+            controller.ratingSameColor = Theme.InkFaint;
         }
 
         private static float RowY(int row) => -72 - row * 46;

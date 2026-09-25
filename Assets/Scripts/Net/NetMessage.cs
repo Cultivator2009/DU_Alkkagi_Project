@@ -49,7 +49,7 @@ public static class NetMessage
     // Bump whenever a message changes shape. Lobbies advertise it, and a
     // build only lists and joins lobbies on its own version: two builds that
     // disagree here would misread each other's messages mid-match.
-    public const int ProtocolVersion = 4;
+    public const int ProtocolVersion = 5;
 
     public static byte[] WriteStartMatch(int localPlayerId, IReadOnlyList<PieceOwnerEntry> pieceOwners)
     {

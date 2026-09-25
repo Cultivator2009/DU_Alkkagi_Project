@@ -178,7 +178,7 @@ public class NetworkMatchBridge : MonoBehaviour
         if (!isHost || !LocalWantsRematch) return;
         var present = roster.SteamIds.Where(id => !gone.Contains(id)).ToList();
         if (present.Count < 2 || !present.All(wantsRematch.Contains)) return;
-        MatchRoster.Current = new MatchRoster(present);
+        MatchRoster.Current = lobby.RosterOf(present); // their ratings after this match
         transport.Broadcast(NetMessage.WriteLoadGameScene(MatchSettings.Current, MatchRoster.Current));
         gameManager.EndMatch();
         SceneManager.LoadScene("GameScene");

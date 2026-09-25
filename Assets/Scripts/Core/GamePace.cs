@@ -7,7 +7,7 @@ using UnityEngine;
 // seconds through ClockDelta.
 public static class GamePace
 {
-    public const float Speed = 0.8f;
+    public const float Speed = 0.7f;
 
     // Real seconds since the last frame, and none while the game is paused.
     public static float ClockDelta => Time.timeScale > 0 ? Time.unscaledDeltaTime : 0f;

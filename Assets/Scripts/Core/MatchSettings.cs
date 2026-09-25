@@ -39,6 +39,7 @@ public enum BothOutRule : byte
 // the order the rows are shown in).
 public enum MatchSettingId : byte
 {
+    Rated,
     BoardType,
     PieceType,
     AimGuide,
@@ -95,6 +96,9 @@ public sealed class MatchSettings
 
     public static readonly MatchSettingDef[] Defs =
     {
+        // Whether the result moves everyone's rating (PlayerRating).
+        new MatchSettingDef(MatchSettingId.Rated, "rated", "match.rated", new[] { 1, 0 }, 1,
+            v => Loc.Get(v == 1 ? "option.on" : "option.off"), onlineOnly: true),
         new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board", new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi }, (int)global::BoardType.Go,
             v => Loc.Get("board." + (global::BoardType)v)),
         new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces }, (int)global::PieceType.GoStones,
@@ -147,6 +151,7 @@ public sealed class MatchSettings
         values[(int)id] = Array.IndexOf(def.Values, value) >= 0 ? value : def.Default;
     }
 
+    public bool Rated => Get(MatchSettingId.Rated) == 1;
     public BoardType BoardType => (BoardType)Get(MatchSettingId.BoardType);
     public PieceType PieceType => (PieceType)Get(MatchSettingId.PieceType);
     public bool AimGuide => Get(MatchSettingId.AimGuide) == 1;

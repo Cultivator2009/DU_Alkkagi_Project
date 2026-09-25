@@ -30,35 +30,45 @@ namespace AlkkagiUIEditor
 
         private static GameObject BuildRoot()
         {
-            var canvas = UIKit.Canvas("MainMenu_UI", 0.5f, 0);
+            var canvas = UIKit.Canvas("MainMenu_UI", null, 0);
             var root = canvas.transform;
             var menu = canvas.gameObject.AddComponent<MainMenuUI>();
 
             UIKit.Image(root, "Background", null, Theme.MenuBackground).rectTransform.Stretch();
             BuildBoardIllustration(root);
 
+            // The logo and buttons hang from the left edge's middle, as the board
+            // does from the right's: on a taller canvas (4:3, 5:4 - see
+            // UIKit.Canvas) the pair stays level instead of the buttons riding
+            // up to the top. The offsets read as from the top at 1080.
             var topLeft = new Vector2(0, 1);
+            var leftMiddle = new Vector2(0, 0.5f);
+            const float fromTop = 540;
             var seal = UIKit.Panel(root, "Seal", Theme.Seal, null, 1.4f);
-            seal.rectTransform.Place(topLeft, new Vector2(112, -146), new Vector2(130, 130));
+            seal.rectTransform.Place(leftMiddle, new Vector2(112, -146 + fromTop), new Vector2(130, 130), topLeft);
             // The seal is the logo mark, so it stays 알 in both languages.
             UIKit.Text(seal.transform, "Glyph", "알", 68, true, Theme.SealText, TextAlignmentOptions.Center).rectTransform.Stretch();
             UIKit.Label(root, "Title", "menu.title", 96, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
-                .rectTransform.Place(topLeft, new Vector2(276, -140), new Vector2(760, 150));
+                .rectTransform.Place(leftMiddle, new Vector2(276, -140 + fromTop), new Vector2(760, 150), topLeft);
 
             menu.localButton = UIKit.CapsuleButton(root, "LocalButton", "menu.local", new Vector2(600, 120), true, 40, "menu.localSub");
-            menu.localButton.GetComponent<RectTransform>().Place(topLeft, new Vector2(112, -366), new Vector2(600, 120));
+            menu.localButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(112, -366 + fromTop), new Vector2(600, 120), topLeft);
             menu.onlineButton = UIKit.CapsuleButton(root, "OnlineButton", "menu.online", new Vector2(600, 120), false, 40, "menu.onlineSub");
-            menu.onlineButton.GetComponent<RectTransform>().Place(topLeft, new Vector2(112, -518), new Vector2(600, 120));
-            menu.settingsButton = UIKit.CapsuleButton(root, "SettingsButton", "menu.settings", new Vector2(290, 104), false, 36);
-            menu.settingsButton.GetComponent<RectTransform>().Place(topLeft, new Vector2(112, -670), new Vector2(290, 104));
-            menu.quitButton = UIKit.CapsuleButton(root, "QuitButton", "menu.quit", new Vector2(290, 104), false, 36);
-            menu.quitButton.GetComponent<RectTransform>().Place(topLeft, new Vector2(422, -670), new Vector2(290, 104));
+            menu.onlineButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(112, -518 + fromTop), new Vector2(600, 120), topLeft);
+            // Settings, Rankings, Quit: three to a row under the two big buttons.
+            var small = new Vector2(190, 104);
+            menu.settingsButton = UIKit.CapsuleButton(root, "SettingsButton", "menu.settings", small, false, 36);
+            menu.settingsButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(112, -670 + fromTop), small, topLeft);
+            menu.rankingButton = UIKit.CapsuleButton(root, "RankingButton", "menu.ranking", small, false, 36);
+            menu.rankingButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(317, -670 + fromTop), small, topLeft);
+            menu.quitButton = UIKit.CapsuleButton(root, "QuitButton", "menu.quit", small, false, 36);
+            menu.quitButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(522, -670 + fromTop), small, topLeft);
 
             var steamRow = UIKit.Node("SteamUser", root).Place(new Vector2(0, 0), new Vector2(112, 56), new Vector2(760, 40));
             UIKit.Image(steamRow, "Dot", UIKit.Circle, Theme.StatusOk).rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(16, 16), new Vector2(0, 0.5f));
             // ASCII placeholder: anything outside the baked charset would land in
             // the dynamic fallback atlas the moment the editor draws it.
-            menu.steamUserText = UIKit.Text(steamRow, "Name", "Steam · Player", 28, false, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+            menu.steamUserText = UIKit.Text(steamRow, "Name", "Steam · Player · 1000", 28, false, Theme.Ink, TextAlignmentOptions.MidlineLeft);
             menu.steamUserText.overflowMode = TextOverflowModes.Ellipsis;
             menu.steamUserText.rectTransform.Stretch();
             menu.steamUserText.rectTransform.offsetMin = new Vector2(32, 0);
@@ -66,6 +76,7 @@ namespace AlkkagiUIEditor
 
             menu.settingsPanel = BuildSettingsPanel(root, out menu.settingsCloseButton).gameObject;
             BuildSetupPanel(root, menu);
+            menu.leaderboard = BuildLeaderboardPanel(root);
             return canvas.gameObject;
         }
 
@@ -218,6 +229,91 @@ namespace AlkkagiUIEditor
             menu.setupStartButton = UIKit.CapsuleButton(card.transform, "StartButton", "setup.start", new Vector2(280, 84), true, 32);
             menu.setupStartButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 48), new Vector2(280, 84));
             overlay.gameObject.SetActive(false);
+        }
+
+        // The rankings: Top / Around me / Friends, this player's own line, ten
+        // rows of place, name, rating and record. LeaderboardPanel fills it.
+        private static LeaderboardPanel BuildLeaderboardPanel(Transform root)
+        {
+            const float width = 1000, pad = 64, rowHeight = 48, rowGap = 2;
+            const int rowCount = 10;
+            var inner = width - pad * 2;
+            var overlay = UIKit.Image(root, "LeaderboardPanel", null, Theme.Overlay, raycast: true);
+            overlay.rectTransform.Stretch();
+            var panel = overlay.gameObject.AddComponent<LeaderboardPanel>();
+
+            const float rowsTop = -260;
+            var rowsBottom = rowsTop - rowCount * (rowHeight + rowGap);
+            var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, -rowsBottom + 20 + 84 + 40));
+            var c = card.transform;
+            var topLeft = new Vector2(0, 1);
+            var topRight = new Vector2(1, 1);
+
+            UIKit.Label(c, "Title", "rank.title", 48, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(topLeft, new Vector2(pad, -40), new Vector2(300, 72));
+            panel.scopeToggle = UIKit.SegmentedToggle(c, "ScopeToggle", new[] { "rank.scope.top", "rank.scope.around", "rank.scope.friends" }, 64);
+            panel.scopeToggle.GetComponent<RectTransform>().Place(topRight, new Vector2(-pad, -44), new Vector2(480, 64));
+
+            var summary = UIKit.Panel(c, "Summary", Theme.HanjiField, Theme.FieldBorder, 2f);
+            summary.rectTransform.Place(topLeft, new Vector2(pad, -136), new Vector2(inner, 64));
+            panel.summaryText = UIKit.Text(summary.transform, "Text", Loc.Get("rank.summary", 1000, Loc.Get("rank.noGames")), 28, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+            panel.summaryText.rectTransform.Stretch();
+            panel.summaryText.rectTransform.offsetMin = new Vector2(28, 0);
+            panel.summaryText.rectTransform.offsetMax = new Vector2(-28, 0);
+
+            // Columns, left to right, as x and width within a row.
+            var place = (x: 0f, w: 96f);
+            var name = (x: 112f, w: 400f);
+            var rating = (x: 520f, w: 140f);
+            var record = (x: 676f, w: inner - 676f - 24);
+            TMP_Text Cell(Transform row, string cellName, string content, (float x, float w) column, bool bold, Color color, TextAlignmentOptions align, float size = 26)
+            {
+                var text = UIKit.Text(row, cellName, content, size, bold, color, align);
+                text.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(column.x, 0), new Vector2(column.w, rowHeight), new Vector2(0, 0.5f));
+                return text;
+            }
+            TMP_Text HeaderCell(Transform row, string cellName, string key, (float x, float w) column, TextAlignmentOptions align)
+            {
+                var text = Cell(row, cellName, Loc.Get(key), column, false, Theme.InkFaint, align, 22);
+                text.gameObject.AddComponent<LocalizedText>().key = key;
+                return text;
+            }
+            var header = UIKit.Node("Header", c).Place(topLeft, new Vector2(pad, -212), new Vector2(inner, 40));
+            HeaderCell(header, "Place", "rank.place", place, TextAlignmentOptions.Center);
+            HeaderCell(header, "Name", "rank.name", name, TextAlignmentOptions.MidlineLeft);
+            HeaderCell(header, "Rating", "rank.rating", rating, TextAlignmentOptions.Center);
+            HeaderCell(header, "Record", "rank.recordHeader", record, TextAlignmentOptions.MidlineRight);
+
+            panel.rows = new LeaderboardRow[rowCount];
+            for (var i = 0; i < rowCount; i++)
+            {
+                var bg = UIKit.Panel(c, "Row" + i, new Color(1, 1, 1, 0.45f), null, 2.5f);
+                bg.rectTransform.Place(topLeft, new Vector2(pad, rowsTop - i * (rowHeight + rowGap)), new Vector2(inner, rowHeight));
+                var row = bg.gameObject.AddComponent<LeaderboardRow>();
+                var own = UIKit.Panel(bg.transform, "Own", new Color(Theme.Seal.r, Theme.Seal.g, Theme.Seal.b, 0.16f), Theme.Seal, 2.5f);
+                own.rectTransform.Stretch();
+                row.ownHighlight = own.gameObject;
+                own.gameObject.SetActive(false);
+                row.placeText = Cell(bg.transform, "Place", (i + 1).ToString(), place, true, Theme.Ink, TextAlignmentOptions.Center);
+                // ASCII placeholder: the Steam name replaces it at runtime.
+                row.nameText = Cell(bg.transform, "Name", "Player", name, false, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+                row.nameText.overflowMode = TextOverflowModes.Ellipsis;
+                row.ratingText = Cell(bg.transform, "Rating", "1000", rating, true, Theme.Ink, TextAlignmentOptions.Center);
+                row.recordText = Cell(bg.transform, "Record", Loc.Get("rank.record", 0, 0), record, false, Theme.InkSoft, TextAlignmentOptions.MidlineRight);
+                bg.gameObject.SetActive(false);
+                panel.rows[i] = row;
+            }
+
+            panel.statusText = UIKit.Text(c, "Status", Loc.Get("rank.loading"), 28, false, Theme.InkFaint, TextAlignmentOptions.Center);
+            panel.statusText.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, rowsTop - 2 * (rowHeight + rowGap)), new Vector2(inner, 48));
+
+            UIKit.Label(c, "Caption", "rank.caption", 22, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft)
+                .rectTransform.Place(new Vector2(0, 0), new Vector2(pad, 72), new Vector2(inner - 260, 36));
+            panel.closeButton = UIKit.CapsuleButton(c, "CloseButton", "settings.close", new Vector2(240, 84), true, 32);
+            panel.closeButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 40), new Vector2(240, 84));
+            overlay.gameObject.SetActive(false);
+            return panel;
         }
 
         private static void WireScene(GameObject prefab)

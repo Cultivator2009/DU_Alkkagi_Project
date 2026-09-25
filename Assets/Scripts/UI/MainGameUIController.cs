@@ -40,6 +40,11 @@ public class MainGameUIController : MonoBehaviour
     public TMP_Text[] suicideCells;
     public TMP_Text[] teamKillCells;
     public TMP_Text[] shotsCells;
+    public GameObject ratingLabel; // the scoreboard's rating row, shown for a rated match
+    public TMP_Text[] ratingCells;
+    public Color ratingUpColor = Color.green;
+    public Color ratingDownColor = Color.red;
+    public Color ratingSameColor = Color.gray;
     public TMP_Text matchTimeText;
     public TMP_Text seriesText;
     public TMP_Text statusText;
@@ -72,6 +77,9 @@ public class MainGameUIController : MonoBehaviour
     private bool turnsStarted;
     private float noticeUntil;
     private int lastTickSecond = -1; // the countdown second last ticked
+    private float arrangedWidth = -1; // the canvas width Arrange last laid out for
+    private RatedMatch rated; // null unless this is a rated online match
+    private int[] ratingChanges; // by player id, once the result is in
 
     private void Awake()
     {
@@ -124,6 +132,7 @@ public class MainGameUIController : MonoBehaviour
 
         var online = networkBridge != null;
         lobbyButton.gameObject.SetActive(online);
+        if (online) BeginRating();
         // The series runs for as long as the same players keep rematching:
         // the lobby and its roster online, the session since the main menu
         // locally.
@@ -146,6 +155,7 @@ public class MainGameUIController : MonoBehaviour
         resetViewButton.gameObject.SetActive(CameraRig.Instance != null && CameraRig.Instance.IsMoved);
         if (turnController == null) return;
         var gameManager = GameManager.manager;
+        if (!Mathf.Approximately(CanvasRect.rect.width, arrangedWidth)) Arrange(PlayerCount); // the window changed shape
 
         // Turns begin after the guest has loaded and any placement is done;
         // the match clock starts there too.
@@ -184,18 +194,57 @@ public class MainGameUIController : MonoBehaviour
         else networkBridge.RequestConcede();
     }
 
-    // Two sides keep the built layout. Three or four: the panels shrink and
-    // each goes next to its side's edge - south and west up the left column
-    // from the bottom, north and east down the right one from the top - and
-    // the skip button (only ever this screen's own) sits above the Menu
+    // Two sides keep their built corners. Three or four: the panels shrink
+    // and each goes next to its side's edge - south and west up the left
+    // column from the bottom, north and east down the right one from the top
+    // - and the skip button (only ever this screen's own) sits above the Menu
     // button. The scoreboard spreads its columns.
+    //
+    // The board fills the screen height, so on narrower screens (16:10 and
+    // below) the room beside it shrinks, and whatever lives there - panels,
+    // skip buttons, kill feed, placement card, Menu and Reset view - shrinks
+    // to fit it. Update reruns this when the window changes shape.
     private void Arrange(int players)
     {
+        arrangedWidth = CanvasRect.rect.width;
+        var room = SideRoom() - hudMargin;
+        float Fit(RectTransform rect, float most = 1) => Mathf.Min(most, room / rect.rect.width);
+        void Scale(RectTransform rect, float scale) => rect.localScale = new Vector3(scale, scale, 1);
+
         for (var i = 0; i < playerPanels.Length; i++) playerPanels[i].gameObject.SetActive(i < players);
         for (var i = 0; i < scoreColumns.Length; i++) scoreColumns[i].gameObject.SetActive(i < players);
-        if (players <= 2) return;
 
-        var pitch = ((RectTransform)playerPanels[0].transform).rect.height * compactScale + compactGap;
+        var feed = (RectTransform)killFeed.transform;
+        Scale(feed, Fit(feed));
+        var placement = GetComponentInChildren<PlacementHud>(true);
+        if (placement != null) Scale((RectTransform)placement.panel.transform, Fit((RectTransform)placement.panel.transform));
+        // Menu in the corner, Reset view to its left.
+        var menu = (RectTransform)GetComponent<PauseMenu>().openButton.transform;
+        var reset = (RectTransform)resetViewButton.transform;
+        var buttons = Mathf.Min(1, room / (menu.rect.width + ButtonGap + reset.rect.width));
+        Scale(menu, buttons);
+        Scale(reset, buttons);
+        reset.anchoredPosition = menu.anchoredPosition - new Vector2((menu.rect.width + ButtonGap) * buttons, 0);
+
+        var panelSize = ((RectTransform)playerPanels[0].transform).rect.size;
+        if (players <= 2)
+        {
+            var scale = Mathf.Min(1, room / panelSize.x);
+            for (var i = 0; i < players; i++)
+            {
+                var rect = (RectTransform)playerPanels[i].transform;
+                Scale(rect, scale);
+                // Just outside the panel, toward the middle of the column.
+                var skip = (RectTransform)playerPanels[i].skipButton.transform;
+                Scale(skip, Fit(skip));
+                var toward = rect.anchorMin.y < 0.5f ? 1 : -1;
+                skip.anchoredPosition = rect.anchoredPosition + new Vector2(0, toward * (panelSize.y * scale + ButtonGap));
+            }
+            return;
+        }
+
+        var compact = Mathf.Min(compactScale, room / panelSize.x);
+        var pitch = panelSize.y * compact + compactGap;
         var rightColumn = 0;
         for (var i = 0; i < players; i++)
         {
@@ -203,16 +252,29 @@ public class MainGameUIController : MonoBehaviour
             var left = seat == 0 || seat == 3;
             var slot = left ? (seat == 0 ? 0 : 1) : rightColumn++;
             var rect = (RectTransform)playerPanels[i].transform;
-            rect.localScale = Vector3.one * compactScale;
+            Scale(rect, compact);
             rect.anchorMin = rect.anchorMax = rect.pivot = left ? Vector2.zero : Vector2.one;
             rect.anchoredPosition = left ? new Vector2(hudMargin, hudMargin + slot * pitch) : new Vector2(-hudMargin, -hudMargin - slot * pitch);
 
             var skip = (RectTransform)playerPanels[i].skipButton.transform;
+            Scale(skip, Fit(skip));
             skip.anchorMin = skip.anchorMax = skip.pivot = new Vector2(1, 0);
-            skip.anchoredPosition = new Vector2(-hudMargin, hudMargin + 64 + compactGap); // 64: the Menu button
+            skip.anchoredPosition = new Vector2(-hudMargin, hudMargin + (menu.rect.height + compactGap) * buttons);
         }
         var columns = players == 3 ? new[] { 330f, 450f, 570f } : new[] { 290f, 390f, 490f, 590f };
         for (var i = 0; i < players; i++) scoreColumns[i].anchoredPosition = new Vector2(columns[i], 0);
+    }
+
+    private const float ButtonGap = 16; // between the Menu and Reset view buttons, and a panel and its skip button
+    private RectTransform CanvasRect => (RectTransform)transform;
+
+    // Canvas units between the screen's side and the board's, in the home view.
+    private float SideRoom()
+    {
+        var canvas = CanvasRect.rect;
+        var board = GameManager.manager.Board;
+        if (CameraRig.Instance == null || board == null) return canvas.width;
+        return canvas.width / 2 - CameraRig.Instance.HomeHalfWidth(board.SurfaceBounds) * canvas.height;
     }
 
     private static bool IsTurnState(GameManager.GameState state)
@@ -307,6 +369,7 @@ public class MainGameUIController : MonoBehaviour
     private void HandleTurnStarted(PlayersManager player)
     {
         currentPlayerId = player.ID;
+        rated?.TurnStarted();
         PlayTurnChime();
         Render();
     }
@@ -356,6 +419,13 @@ public class MainGameUIController : MonoBehaviour
     private void HandlePlayerOut(int playerId, MatchEndReason reason)
     {
         outSides[playerId] = reason;
+        if (rated != null)
+        {
+            rated.PlayerOut(playerId, reason);
+            // Out: leaving now costs only the place this side finished in
+            // (and a side out on the same flick may still tie it).
+            if (rated.IsOut(rated.Self)) HoldRating();
+        }
         ShowNotice(Loc.Get("hud.outNotice." + reason, ColorName(playerId)));
         Render();
     }
@@ -368,6 +438,7 @@ public class MainGameUIController : MonoBehaviour
     private void HandleGuestTurnChanged(int playerId)
     {
         currentPlayerId = playerId;
+        rated?.TurnStarted();
         PlayTurnChime();
         Render();
     }
@@ -404,6 +475,12 @@ public class MainGameUIController : MonoBehaviour
         endReason = reason;
         matchEndTime = Time.time;
         if (reason != MatchEndReason.HostLeft) MatchSeries.Record(winnerId);
+        if (rated != null)
+        {
+            var (changes, result) = rated.Finish(winnerId, reason);
+            ratingChanges = changes;
+            PlayerRating.Apply(changes[rated.Self], result);
+        }
         var bank = GameAudio.Bank;
         var lost = OwnSide.HasValue && winnerId >= 0 && winnerId != OwnSide.Value;
         GameAudio.PlayInterface(winnerId < 0 ? bank.draw : lost ? bank.lose : bank.win);
@@ -486,7 +563,10 @@ public class MainGameUIController : MonoBehaviour
             suicideCells[i].text = kills.Suicides(i).ToString();
             teamKillCells[i].text = kills.TeamKills(i).ToString();
             shotsCells[i].text = shots[i].ToString();
+            ratingCells[i].gameObject.SetActive(ratingChanges != null);
+            if (ratingChanges != null) ratingCells[i].text = RatingCell(rated.Rating(i), ratingChanges[i]);
         }
+        ratingLabel.SetActive(ratingChanges != null);
         // Time.time runs at the game's pace (and stands still while paused).
         var seconds = Mathf.FloorToInt((matchEndTime - matchStartTime) / GamePace.Speed);
         matchTimeText.text = Loc.Get("stats.time", $"{seconds / 60}:{seconds % 60:00}");
@@ -518,6 +598,31 @@ public class MainGameUIController : MonoBehaviour
         rematchLabel.text = Loc.Get(networkBridge.LocalWantsRematch ? "rematch.waiting"
             : networkBridge.OthersWantingRematch > 0 ? "rematch.accept" : "rematch.request");
         SetInteractable(rematchButton, !networkBridge.OpponentGone && !networkBridge.HostGone && !networkBridge.LocalWantsRematch);
+    }
+
+    // Rated: online under the host's rules, rated from the roster's numbers -
+    // but this player's own from their own record. It counts from here:
+    // leaving is held as a loss until the result is in.
+    private void BeginRating()
+    {
+        if (!MatchSettings.Current.Rated || MatchRoster.Current == null || MatchRoster.Current.Count != PlayerCount) return;
+        var ratings = MatchRoster.Current.Ratings.ToArray();
+        ratings[networkBridge.LocalPlayerId] = PlayerRating.Current.Rating;
+        rated = new RatedMatch(ratings, networkBridge.LocalPlayerId);
+        HoldRating();
+    }
+
+    private void HoldRating()
+    {
+        var (change, result) = rated.IfLeftNow();
+        PlayerRating.Hold(change, result);
+    }
+
+    // The new rating, and smaller beside it the change.
+    private string RatingCell(int rating, int change)
+    {
+        var color = change > 0 ? ratingUpColor : change < 0 ? ratingDownColor : ratingSameColor;
+        return $"{rating + change}<size=62%><color=#{ColorUtility.ToHtmlStringRGB(color)}> {(change < 0 ? "-" : "+")}{Mathf.Abs(change)}</color></size>";
     }
 
     private static string ColorName(int playerId) => SideStyle.Name(playerId);

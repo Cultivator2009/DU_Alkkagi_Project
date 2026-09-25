@@ -33,7 +33,7 @@ namespace AlkkagiUIEditor
 
         private static GameObject BuildRoot()
         {
-            var canvas = UIKit.Canvas("Lobby_UI", 0.5f, 0);
+            var canvas = UIKit.Canvas("Lobby_UI", null, 0);
             var root = canvas.transform;
             var ui = canvas.gameObject.AddComponent<LobbySceneUI>();
             ui.okColor = Theme.StatusOk;
@@ -179,7 +179,7 @@ namespace AlkkagiUIEditor
         // guest sees them read-only.
         private static void BuildRulesCard(Transform lobbyView, LobbySceneUI ui)
         {
-            const float pad = 48, rowHeight = 48, gap = 4;
+            const float pad = 48, rowHeight = 46, gap = 4;
             var card = UIKit.Panel(lobbyView, "RulesCard", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             card.rectTransform.Place(new Vector2(1, 0.5f), new Vector2(CardGap, 0), RulesCardSize, new Vector2(0, 0.5f));
             var c = card.transform;
@@ -213,7 +213,13 @@ namespace AlkkagiUIEditor
             // ASCII placeholders: the real Steam name replaces them at runtime.
             slot.nameText = UIKit.Text(filled.transform, "Name", seat == 0 ? "Host" : "Guest", 32, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
             slot.nameText.overflowMode = TextOverflowModes.Ellipsis;
-            slot.nameText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(96, 0), new Vector2(360, 56), new Vector2(0, 0.5f));
+            slot.nameText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(96, 0), new Vector2(250, 56), new Vector2(0, 0.5f));
+            // Their rating, once their game has shared it.
+            var chip = UIKit.Capsule(filled.transform, "Rating", 44, Theme.HanjiField, Theme.FieldBorder);
+            chip.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(358, 0), new Vector2(98, 44), new Vector2(0, 0.5f));
+            slot.ratingText = UIKit.Text(chip.transform, "Text", "1000", 24, true, Theme.Ink, TextAlignmentOptions.Center);
+            slot.ratingText.rectTransform.Stretch();
+            slot.ratingChip = chip.gameObject;
             slot.roleText = UIKit.Text(filled.transform, "Role", $"{Loc.Get(seat == 0 ? "lobby.host" : "lobby.guest")} · {Loc.Get(colorKey)}", 24, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
             slot.roleText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(472, 0), new Vector2(190, 56), new Vector2(0, 0.5f));
             slot.filledView = filled.gameObject;

@@ -3,19 +3,23 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 // The cartoon burst where two pieces knock together: an ink-outlined star
-// that pops and shrinks, ink strokes flying out of it and a ring spreading
-// over the board. A harder knock makes it bigger, with more strokes. It goes
-// off with the knock's sound (BoardSounds), so a network guest sees it where
-// and when it hears it. Like a comic effect it's drawn over everything, all
-// bursts in one mesh rebuilt each frame.
+// that pops out, ink strokes flying off it and a ring spreading over the
+// board. How hard the knock was sets all of it: a tap is a small star gone
+// in a blink, a full-power hit a big one that holds for a moment and then
+// fades out, with more strokes and a wider ring. It goes off with the
+// knock's sound (BoardSounds), so a network guest sees it where and when it
+// hears it. Like a comic effect it's drawn over everything, all bursts in
+// one mesh rebuilt each frame.
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 public class HitEffects : MonoBehaviour
 {
     public static HitEffects Instance { get; private set; }
 
-    public float smallSize = 0.07f; // star radius of the softest knock, in world units (a go stone is 0.1)
-    public float largeSize = 0.18f; // and of a full-strength one
-    public float starFrom = 0.3f;   // knocks softer than this get only the ring
+    public float smallSize = 0.05f; // star radius of the softest knock, in world units (a go stone is 0.1)
+    public float largeSize = 0.2f;  // and of a full-strength one
+    public float shortLife = 0.12f; // how long the star stays for the softest knock, in game seconds
+    public float longLife = 0.75f;  // and for a full-strength one, its fade included
+    public float starFrom = 0.1f;   // knocks softer than this get only the ring
     public int maxBursts = 24;
 
     // The HUD's ink, a warm yellow and hanji white (sRGB).
@@ -26,7 +30,7 @@ public class HitEffects : MonoBehaviour
     private struct Burst
     {
         public Vector3 At;
-        public float Strength; // 0..1
+        public float Strength; // 0..1, with the knock's speed
         public float Age;
         public float Spin;     // radians
         public int Seed;       // the star's own spike lengths and stroke angles
@@ -66,15 +70,19 @@ public class HitEffects : MonoBehaviour
         bursts.Add(new Burst
         {
             At = at,
-            Strength = Mathf.InverseLerp(0.15f, 1f, volume),
+            // Loudness goes as speed^0.6 (BoardSounds.Loudness); undone here
+            // so a knock twice as fast makes a burst twice as strong.
+            Strength = Mathf.Pow(Mathf.InverseLerp(0.15f, 1f, volume), 1.6f),
             Spin = Random.value * Mathf.PI * 2,
             Seed = Random.Range(0, 1 << 20),
         });
     }
 
-    private static float RingLife(float strength) => 0.28f + 0.08f * strength;
-    private static float StrokeLife(float strength) => 0.2f + 0.06f * strength;
-    private static float StarLife(float strength) => 0.16f + 0.06f * strength;
+    private float StarLife(float strength) => Mathf.Lerp(shortLife, longLife, strength);
+    private static float StarFade(float strength) => Mathf.Lerp(0.07f, 0.35f, strength); // the end of StarLife
+    private static float StrokeLife(float strength) => Mathf.Lerp(0.1f, 0.45f, strength);
+    private static float RingLife(float strength) => Mathf.Lerp(0.16f, 0.6f, strength);
+    private float Life(float strength) => Mathf.Max(StarLife(strength), RingLife(strength));
 
     // Game time: the bursts keep the match's pace and hold still while it's paused.
     private void LateUpdate()
@@ -83,7 +91,7 @@ public class HitEffects : MonoBehaviour
         {
             var burst = bursts[i];
             burst.Age += Time.deltaTime;
-            if (burst.Age >= RingLife(burst.Strength)) bursts.RemoveAt(i);
+            if (burst.Age >= Life(burst.Strength)) bursts.RemoveAt(i);
             else bursts[i] = burst;
         }
         meshRenderer.enabled = bursts.Count > 0;
@@ -96,7 +104,9 @@ public class HitEffects : MonoBehaviour
         triangles.Clear();
         var right = view.transform.right;
         var up = view.transform.up;
-        foreach (var burst in bursts) Draw(burst, right, up);
+        // Front to back: the shader draws each pixel once (stencil), so what
+        // goes in first is on top. The newest burst over older ones.
+        for (var i = bursts.Count - 1; i >= 0; i--) Draw(bursts[i], right, up);
         mesh.Clear();
         mesh.SetVertices(vertices);
         mesh.SetColors(colors);
@@ -104,43 +114,51 @@ public class HitEffects : MonoBehaviour
         mesh.bounds = new Bounds(Vector3.zero, Vector3.one * 1000); // never culled
     }
 
-    // Ring first, then the strokes, then the star over them. The star and
-    // strokes face the camera; the ring lies on the board.
+    // The star, then the strokes under it, then the ring under those (see
+    // LateUpdate). The star and strokes face the camera; the ring lies on
+    // the board. Everything fades out rather than just vanishing.
     private void Draw(Burst burst, Vector3 right, Vector3 up)
     {
         var k = burst.Strength;
+        var age = burst.Age;
         var size = Mathf.Lerp(smallSize, largeSize, k);
 
-        var u = burst.Age / RingLife(k);
-        Ring(burst.At, size * (0.8f + 1.2f * EaseOut(u)), size * 0.1f * (1 - u) + 0.003f, WithAlpha(Ink, 0.5f * (1 - u)));
-        if (k < starFrom) return;
-
-        u = burst.Age / StrokeLife(k);
-        if (u < 1)
+        var life = StarLife(k);
+        if (k >= starFrom && age < life)
         {
-            var count = 5 + Mathf.RoundToInt(3 * k);
-            var head = size * (1.3f + 1.3f * EaseOut(u));
-            var length = size * 0.8f * (1 - u);
-            var width = size * 0.16f * (1 - 0.8f * u);
+            // Pops out past full size and settles, holds, then fades while it
+            // shrinks - a soft knock most of the way to nothing, a hard one
+            // only a little.
+            const float pop = 0.06f;
+            var scale = age < pop ? Mathf.Lerp(0.5f, 1.12f, age / pop) : Mathf.Lerp(1.12f, 1f, Mathf.Clamp01((age - pop) / pop));
+            var fade = StarFade(k);
+            var f = Mathf.Clamp01((age - (life - fade)) / fade);
+            var radius = size * scale * Mathf.Lerp(1f, Mathf.Lerp(0.35f, 0.9f, k), f);
+            var alpha = 1 - f;
+            Star(burst.At, right, up, radius * 0.52f, 0.55f, burst.Spin, burst.Seed, WithAlpha(Core, alpha));
+            Star(burst.At, right, up, radius, 0.5f, burst.Spin, burst.Seed, WithAlpha(Fill, alpha));
+            Star(burst.At, right, up, radius * 1.25f, 0.5f, burst.Spin, burst.Seed, WithAlpha(Ink, alpha));
+        }
+
+        var u = age / StrokeLife(k);
+        if (k >= starFrom && u < 1)
+        {
+            var count = 4 + Mathf.RoundToInt(4 * k);
+            var head = size * (1.3f + 1.5f * EaseOut(u));
+            var length = size * 0.8f * (1 - 0.7f * u);
+            var width = size * 0.16f * (1 - 0.6f * u);
+            var ink = WithAlpha(Ink, 1 - Square(u));
             for (var i = 0; i < count; i++)
             {
                 var angle = burst.Spin + (i + 0.5f + (Hash(burst.Seed, 100 + i) - 0.5f) * 0.5f) * Mathf.PI * 2 / count;
                 var direction = right * Mathf.Cos(angle) + up * Mathf.Sin(angle);
                 var across = up * Mathf.Cos(angle) - right * Mathf.Sin(angle);
-                Stroke(burst.At + direction * (head - length), burst.At + direction * head, across, width, width * 0.3f, Ink);
+                Stroke(burst.At + direction * (head - length), burst.At + direction * head, across, width, width * 0.3f, ink);
             }
         }
 
-        u = burst.Age / StarLife(k);
-        if (u < 1)
-        {
-            // Pops out past full size, then shrinks away.
-            var pop = u < 0.2f ? Mathf.Lerp(0.55f, 1.1f, u / 0.2f) : 1.1f * (1 - Square((u - 0.2f) / 0.8f));
-            var radius = size * pop;
-            Star(burst.At, right, up, radius * 1.25f, 0.5f, burst.Spin, burst.Seed, Ink);
-            Star(burst.At, right, up, radius, 0.5f, burst.Spin, burst.Seed, Fill);
-            Star(burst.At, right, up, radius * 0.52f, 0.55f, burst.Spin, burst.Seed, Core);
-        }
+        u = age / RingLife(k);
+        if (u < 1) Ring(burst.At, size * (0.8f + 1.4f * EaseOut(u)), size * 0.1f * (1 - u) + 0.003f, WithAlpha(Ink, 0.5f * (1 - u)));
     }
 
     // Eight spikes of radius (each a little longer or shorter) and notches

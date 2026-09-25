@@ -63,6 +63,24 @@ public class CameraRig : MonoBehaviour
         resetting = IsMoved;
     }
 
+    // How far the board reaches either side of the screen's middle in the
+    // home view, in screen heights. The view keeps its vertical field of
+    // view, so this is the same on every aspect ratio; the HUD fits its side
+    // columns to what's left.
+    public float HomeHalfWidth(Bounds board)
+    {
+        var tan = Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad);
+        var toView = Quaternion.Inverse(mainView.rotation);
+        var widest = 0f;
+        for (var i = 0; i < 8; i++)
+        {
+            var corner = new Vector3((i & 1) == 0 ? board.min.x : board.max.x, (i & 2) == 0 ? board.min.y : board.max.y, (i & 4) == 0 ? board.min.z : board.max.z);
+            var local = toView * (corner - mainHome);
+            widest = Mathf.Max(widest, Mathf.Abs(local.x) / (local.z * 2 * tan));
+        }
+        return widest;
+    }
+
     private void Update()
     {
         var look = KeyBindings.Held(GameAction.CameraView);

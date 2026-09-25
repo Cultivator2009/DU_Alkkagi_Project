@@ -635,7 +635,12 @@ namespace AlkkagiUIEditor
             other.label.color = Theme.Ink;
         }
 
-        public static Canvas Canvas(string name, float matchWidthOrHeight, int sortingOrder)
+        // matchWidthOrHeight null: Expand, so the canvas is never smaller than
+        // 1920x1080 and the whole layout is on screen whatever the aspect
+        // ratio - the spare room goes to the longer side (4:3 gets height,
+        // 21:9 width). The menus and lobby use it; the HUD matches height, as
+        // the board does.
+        public static Canvas Canvas(string name, float? matchWidthOrHeight, int sortingOrder)
         {
             var go = new GameObject(name, typeof(RectTransform));
             go.layer = LayerMask.NameToLayer("UI");
@@ -645,8 +650,8 @@ namespace AlkkagiUIEditor
             var scaler = go.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = matchWidthOrHeight;
+            scaler.screenMatchMode = matchWidthOrHeight.HasValue ? CanvasScaler.ScreenMatchMode.MatchWidthOrHeight : CanvasScaler.ScreenMatchMode.Expand;
+            scaler.matchWidthOrHeight = matchWidthOrHeight ?? 0;
             go.AddComponent<GraphicRaycaster>();
             return canvas;
         }

@@ -100,6 +100,7 @@ public class LobbySceneUI : MonoBehaviour
         Loc.OnLanguageChanged += Render;
         // Back from a match: open the lobby to new players again.
         if (lobbyManager.IsHost) lobbyManager.SetMatchInProgress(false);
+        PlayerRating.SettlePending(); // a rated match left before its result
         Render();
         if (!lobbyManager.CurrentLobby.HasValue) RefreshBrowser();
     }
@@ -322,7 +323,8 @@ public class LobbySceneUI : MonoBehaviour
             var slot = seats[i];
             slot.gameObject.SetActive(i < seatCount);
             if (i < members.Count)
-                slot.ShowPlayer(members[i].Name, $"{Loc.Get(i == 0 ? "lobby.host" : "lobby.guest")} · {SideStyle.Name(i, rules.PieceType)}");
+                slot.ShowPlayer(members[i].Name, $"{Loc.Get(i == 0 ? "lobby.host" : "lobby.guest")} · {SideStyle.Name(i, rules.PieceType)}",
+                    lobbyManager.RatingOf(members[i].Id.Value));
             else
                 slot.ShowEmpty(lobbyManager.IsHost && i == members.Count);
             if (slot.kickButton != null) slot.kickButton.gameObject.SetActive(lobbyManager.IsHost && i > 0 && i < members.Count);
@@ -359,7 +361,7 @@ public class LobbySceneUI : MonoBehaviour
             var summary = Loc.Get("lobby.rowRules",
                 MatchSettings.Defs[(int)MatchSettingId.BoardType].Format((int)rules.BoardType),
                 MatchSettings.Defs[(int)MatchSettingId.PieceType].Format((int)rules.PieceType),
-                lobby.MemberCount, lobby.MaxMembers);
+                lobby.MemberCount, lobby.MaxMembers) + (rules.Rated ? Loc.Get("lobby.rowRated") : string.Empty);
             row.Show(lobby.Id.Value, SteamLobbyManager.HostName(lobby), summary);
             SetInteractable(row.joinButton, canJoin);
         }

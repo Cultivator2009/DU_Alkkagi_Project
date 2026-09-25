@@ -11,6 +11,7 @@ public class MainMenuUI : MonoBehaviour
     public Button localButton;
     public Button onlineButton;
     public Button settingsButton;
+    public Button rankingButton;
     public Button quitButton;
     public GameObject settingsPanel;
     public Button settingsCloseButton;
@@ -21,7 +22,8 @@ public class MainMenuUI : MonoBehaviour
     public Button setupStartButton;
     public Button setupCancelButton;
     public GameObject steamUserRow;
-    public TMP_Text steamUserText;
+    public TMP_Text steamUserText; // name and rating
+    public LeaderboardPanel leaderboard;
 
     private void Awake()
     {
@@ -42,6 +44,7 @@ public class MainMenuUI : MonoBehaviour
         setupCancelButton.onClick.AddListener(() => setupPanel.SetActive(false));
         onlineButton.onClick.AddListener(() => SceneManager.LoadScene("LobbyScene"));
         settingsButton.onClick.AddListener(() => settingsPanel.SetActive(true));
+        rankingButton.onClick.AddListener(leaderboard.Open);
         settingsCloseButton.onClick.AddListener(() => settingsPanel.SetActive(false));
         quitButton.onClick.AddListener(Quit);
         settingsPanel.SetActive(false);
@@ -59,9 +62,23 @@ public class MainMenuUI : MonoBehaviour
 
     private void Start()
     {
+        PlayerRating.SettlePending(); // a rated match left before its result
+        PlayerRating.OnChanged += RenderSteamUser;
+        Loc.OnLanguageChanged += RenderSteamUser;
+        RenderSteamUser();
+    }
+
+    private void OnDestroy()
+    {
+        PlayerRating.OnChanged -= RenderSteamUser;
+        Loc.OnLanguageChanged -= RenderSteamUser;
+    }
+
+    private void RenderSteamUser()
+    {
         var steamReady = SteamTransport.Instance != null && SteamTransport.Instance.IsReady;
         steamUserRow.SetActive(steamReady);
-        if (steamReady) steamUserText.text = $"Steam · {Steamworks.SteamClient.Name}";
+        if (steamReady) steamUserText.text = Loc.Get("menu.steamUser", Steamworks.SteamClient.Name, PlayerRating.Current.Rating);
     }
 
     private static void Quit()

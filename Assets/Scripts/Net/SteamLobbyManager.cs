@@ -32,6 +32,7 @@ public class SteamLobbyManager : MonoBehaviour
     private const string HostNameKey = "host";
     private const string VisibilityKey = "vis";
     private const string VisibilityPref = "lobby.visibility";
+    private const string RatingKey = "rating"; // member data: each member's own rating, for the seats and the roster
 
     public static SteamLobbyManager Instance { get; private set; }
 
@@ -74,7 +75,9 @@ public class SteamLobbyManager : MonoBehaviour
         // disconnect rather than a leave; to the game both mean they're gone.
         SteamMatchmaking.OnLobbyMemberDisconnected += HandleMemberLeft;
         SteamMatchmaking.OnLobbyDataChanged += HandleLobbyDataChanged;
+        SteamMatchmaking.OnLobbyMemberDataChanged += HandleMemberDataChanged;
         SteamFriends.OnGameLobbyJoinRequested += HandleJoinRequested;
+        PlayerRating.OnChanged += ShareRating;
     }
 
     private void Start()
@@ -89,7 +92,9 @@ public class SteamLobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyMemberLeave -= HandleMemberLeft;
         SteamMatchmaking.OnLobbyMemberDisconnected -= HandleMemberLeft;
         SteamMatchmaking.OnLobbyDataChanged -= HandleLobbyDataChanged;
+        SteamMatchmaking.OnLobbyMemberDataChanged -= HandleMemberDataChanged;
         SteamFriends.OnGameLobbyJoinRequested -= HandleJoinRequested;
+        PlayerRating.OnChanged -= ShareRating;
     }
 
     // Leave explicitly on quit so the other player is told right away;
@@ -222,7 +227,26 @@ public class SteamLobbyManager : MonoBehaviour
         return seats.Take(MatchRoster.MaxPlayers).ToList();
     }
 
-    public MatchRoster BuildRoster() => new MatchRoster(SeatOrder(CurrentLobby.Value).Select(m => m.Id.Value));
+    public MatchRoster BuildRoster() => RosterOf(SeatOrder(CurrentLobby.Value).Select(m => m.Id.Value));
+
+    // These players, in this order, with the ratings they show in the lobby.
+    public MatchRoster RosterOf(IEnumerable<ulong> steamIds)
+    {
+        var ids = steamIds.ToList();
+        return new MatchRoster(ids, ids.Select(id => RatingOf(id) ?? Elo.Start));
+    }
+
+    // A member's rating as their own game shares it; null until it has.
+    public int? RatingOf(ulong steamId)
+    {
+        if (!CurrentLobby.HasValue) return null;
+        return int.TryParse(CurrentLobby.Value.GetMemberData(new Friend(steamId), RatingKey), out var rating) ? rating : (int?)null;
+    }
+
+    private void ShareRating()
+    {
+        if (CurrentLobby.HasValue) CurrentLobby.Value.SetMemberData(RatingKey, PlayerRating.Current.Rating.ToString());
+    }
 
     public MatchSettings ReadLobbySettings()
     {
@@ -238,6 +262,8 @@ public class SteamLobbyManager : MonoBehaviour
     {
         if (CurrentLobby.HasValue && lobby.Id == CurrentLobby.Value.Id) OnLobbyDataChanged?.Invoke();
     }
+
+    private void HandleMemberDataChanged(Lobby lobby, Friend member) => HandleLobbyDataChanged(lobby);
 
     public async void JoinLobby(ulong lobbyId)
     {
@@ -308,6 +334,7 @@ public class SteamLobbyManager : MonoBehaviour
             return;
         }
         CurrentLobby = lobby;
+        ShareRating();
         foreach (var member in lobby.Members)
         {
             if (member.Id.Value == SteamClient.SteamId.Value) continue;
