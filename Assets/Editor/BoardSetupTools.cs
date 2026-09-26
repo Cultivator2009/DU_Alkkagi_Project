@@ -10,7 +10,7 @@ internal static class BoardSetupTools
     [MenuItem("Tools/Alkkagi/Reset spawn layouts")]
     private static void ResetSpawnLayouts()
     {
-        var board = Object.FindObjectOfType<BoardSetup>();
+        var board = Object.FindAnyObjectByType<BoardSetup>();
         if (board == null)
         {
             Debug.LogError("[Alkkagi] No BoardSetup in the open scene - open GameScene first.");

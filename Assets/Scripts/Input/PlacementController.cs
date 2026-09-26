@@ -31,7 +31,7 @@ public class PlacementController : MonoBehaviour
     {
         get
         {
-            if (bridge == null) bridge = FindObjectOfType<NetworkMatchBridge>();
+            if (bridge == null) bridge = FindAnyObjectByType<NetworkMatchBridge>();
             return bridge != null && bridge.enabled ? bridge : null;
         }
     }

@@ -21,14 +21,12 @@ public class SceneMgmt : MonoBehaviour
     // called first
     void OnEnable()
     {
-        Debug.Log("OnEnable called");
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
     // called second
     void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        Debug.Log(scene.name);
         if (scene.name == "GameScene")
         {
             //onGameStart.Invoke();
@@ -36,16 +34,9 @@ public class SceneMgmt : MonoBehaviour
         }
     }
 
-    // called third
-    void Start()
-    {
-        Debug.Log("Start");
-    }
-
     // called when the game is terminated
     void OnDisable()
     {
-        Debug.Log("OnDisable");
         SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 }

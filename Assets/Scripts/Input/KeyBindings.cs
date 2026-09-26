@@ -27,7 +27,19 @@ public static class KeyBindings
 
     public static event Action OnChanged;
 
-    public static KeyCode Get(GameAction action) => (KeyCode)PlayerPrefs.GetInt(PrefsPrefix + action, (int)Defaults[action]);
+    // Read from PlayerPrefs once: the keys are polled every frame, the
+    // cancel key once per piece. Set and ResetAll drop it.
+    private static KeyCode[] cache;
+
+    public static KeyCode Get(GameAction action)
+    {
+        if (cache == null)
+        {
+            cache = new KeyCode[Defaults.Count];
+            foreach (var pair in Defaults) cache[(int)pair.Key] = (KeyCode)PlayerPrefs.GetInt(PrefsPrefix + pair.Key, (int)pair.Value);
+        }
+        return cache[(int)action];
+    }
 
     public static bool Down(GameAction action) => Input.GetKeyDown(Get(action));
     public static bool Up(GameAction action) => Input.GetKeyUp(Get(action));
@@ -43,12 +55,14 @@ public static class KeyBindings
         foreach (var other in Defaults.Keys)
             if (other != action && Get(other) == key) PlayerPrefs.SetInt(PrefsPrefix + other, (int)previous);
         PlayerPrefs.SetInt(PrefsPrefix + action, (int)key);
+        cache = null;
         OnChanged?.Invoke();
     }
 
     public static void ResetAll()
     {
         foreach (var action in Defaults.Keys) PlayerPrefs.DeleteKey(PrefsPrefix + action);
+        cache = null;
         OnChanged?.Invoke();
     }
 

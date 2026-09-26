@@ -27,7 +27,7 @@ internal static class JanggiBuilder
     private static void Build()
     {
         var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
-        var setup = Object.FindObjectOfType<BoardSetup>();
+        var setup = Object.FindAnyObjectByType<BoardSetup>();
         Directory.CreateDirectory(AssetDir);
 
         var go = WrapGoBoard(setup.transform);

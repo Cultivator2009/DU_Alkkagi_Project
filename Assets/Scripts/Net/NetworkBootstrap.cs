@@ -18,7 +18,7 @@ public static class NetworkBootstrap
     {
         if (scene.name != "GameScene") return;
         if (SteamLobbyManager.Instance == null || !SteamLobbyManager.Instance.CurrentLobby.HasValue) return;
-        if (Object.FindObjectOfType<NetworkMatchBridge>() != null) return;
+        if (Object.FindAnyObjectByType<NetworkMatchBridge>() != null) return;
 
         new GameObject("NetworkMatchBridge").AddComponent<NetworkMatchBridge>();
     }

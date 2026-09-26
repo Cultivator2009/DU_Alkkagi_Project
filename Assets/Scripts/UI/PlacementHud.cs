@@ -32,7 +32,7 @@ public class PlacementHud : MonoBehaviour
         cardHeight = ((RectTransform)panel.transform).sizeDelta.y;
     }
 
-    private PlacementController Controller => controller != null ? controller : controller = FindObjectOfType<PlacementController>();
+    private PlacementController Controller => controller != null ? controller : controller = FindAnyObjectByType<PlacementController>();
 
     private void Update()
     {

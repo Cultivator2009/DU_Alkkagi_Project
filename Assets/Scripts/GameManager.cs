@@ -100,7 +100,7 @@ public class GameManager : MonoBehaviour
 
         // Host and guest spawn from the same settings, so both boards get the
         // same stones with the same ids.
-        Board = FindObjectOfType<BoardSetup>();
+        Board = FindAnyObjectByType<BoardSetup>();
         foreach (var gamePieceScript in Board.Spawn(settings, totalPlayerCnt))
         {
             gamePieceScripts.Add(gamePieceScript);

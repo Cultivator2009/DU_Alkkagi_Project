@@ -313,6 +313,9 @@ public class Reporter : MonoBehaviour
 #if UNITY_CHANGE3
         SceneManager.sceneLoaded -= _OnLevelWasLoaded;
 #endif
+        // DU_Alkkagi: release builds destroy the Reporter (ReporterHotkey);
+        // left registered, the threaded log hook kept filling a list nobody drains.
+        Application.logMessageReceivedThreaded -= CaptureLogThread;
     }
 
     void OnEnable()

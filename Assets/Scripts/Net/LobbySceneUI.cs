@@ -132,7 +132,7 @@ public class LobbySceneUI : MonoBehaviour
 
     private static void EnsureEventSystem()
     {
-        if (FindObjectOfType<EventSystem>() != null) return;
+        if (FindAnyObjectByType<EventSystem>() != null) return;
         var go = new GameObject("EventSystem");
         go.AddComponent<EventSystem>();
         go.AddComponent<StandaloneInputModule>();

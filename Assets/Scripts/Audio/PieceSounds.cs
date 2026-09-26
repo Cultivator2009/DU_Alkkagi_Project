@@ -36,7 +36,7 @@ public class PieceSounds : MonoBehaviour
         Collider key;
         if (other != null)
         {
-            if (other.GetInstanceID() < GetInstanceID()) return; // the pair's other half plays it
+            if (other.GetEntityId() < GetEntityId()) return; // the pair's other half plays it
             kind = BoardSound.Hit;
             key = collision.rigidbody.GetComponentInChildren<Collider>();
         }

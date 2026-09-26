@@ -127,7 +127,7 @@ public class MainGameUIController : MonoBehaviour
         // TurnController never ticks, so its own events never fire past the
         // initial StartMatch and the bridge's events carry turn/score updates
         // instead.
-        networkBridge = FindObjectOfType<NetworkMatchBridge>();
+        networkBridge = FindAnyObjectByType<NetworkMatchBridge>();
         if (networkBridge != null) SubscribeNetwork(networkBridge);
 
         var online = networkBridge != null;
