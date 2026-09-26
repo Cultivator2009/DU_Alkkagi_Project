@@ -23,10 +23,12 @@ public class MainGameUIController : MonoBehaviour
     public Color turnTextColor = Color.black;
     public Color clockWarningColor = Color.red;
     public float clockWarningSeconds = 5f;
-    public GameObject notice;   // "Black ran out of time" and the like, briefly
+    public GameObject notice;   // "Black ran out of time" and the like, briefly, in the turn pill's place
     public TMP_Text noticeText;
     public float noticeSeconds = 2.5f;
     public KillFeed killFeed;
+    public ControlsHint controlsHint;
+    [Range(0.3f, 1f)] public float minHintScale = 0.75f; // any smaller and the key legend is too small to read, so it hides
 
     [Header("Game over")]
     public GameObject gameOverPanel;
@@ -42,6 +44,7 @@ public class MainGameUIController : MonoBehaviour
     public TMP_Text[] shotsCells;
     public GameObject ratingLabel; // the scoreboard's rating row, shown for a rated match
     public TMP_Text[] ratingCells;
+    public float scoreRowPitch = 46; // without the rating row, the scoreboard and the modal close up by this
     public Color ratingUpColor = Color.green;
     public Color ratingDownColor = Color.red;
     public Color ratingSameColor = Color.gray;
@@ -80,6 +83,7 @@ public class MainGameUIController : MonoBehaviour
     private float arrangedWidth = -1; // the canvas width Arrange last laid out for
     private RatedMatch rated; // null unless this is a rated online match
     private int[] ratingChanges; // by player id, once the result is in
+    private bool ratingRowShown = true; // as built
 
     private void Awake()
     {
@@ -169,6 +173,7 @@ public class MainGameUIController : MonoBehaviour
         {
             noticeUntil = 0;
             notice.SetActive(false);
+            Render(); // the pill comes back
         }
         if (turnsStarted && !winnerPlayerId.HasValue) RenderTurn();
     }
@@ -225,6 +230,20 @@ public class MainGameUIController : MonoBehaviour
         Scale(menu, buttons);
         Scale(reset, buttons);
         reset.anchoredPosition = menu.anchoredPosition - new Vector2((menu.rect.width + ButtonGap) * buttons, 0);
+        // The key legend above them - with three or four sides above the
+        // skip button too, which moves there (below). It keeps a margin from
+        // the board as well as from the screen's edge.
+        var hint = (RectTransform)controlsHint.transform;
+        var hintScale = Mathf.Min(1, (room - hudMargin) / hint.rect.width);
+        Scale(hint, hintScale);
+        var hintY = hudMargin + (menu.rect.height + ButtonGap) * buttons;
+        if (players > 2)
+        {
+            var skip = (RectTransform)playerPanels[0].skipButton.transform;
+            hintY += (skip.rect.height + compactGap) * Fit(skip);
+        }
+        hint.anchoredPosition = new Vector2(-hudMargin, hintY);
+        controlsHint.gameObject.SetActive(hintScale >= minHintScale);
 
         var panelSize = ((RectTransform)playerPanels[0].transform).rect.size;
         if (players <= 2)
@@ -411,6 +430,7 @@ public class MainGameUIController : MonoBehaviour
     {
         noticeText.text = text;
         notice.SetActive(true);
+        turnPill.SetActive(false);
         noticeUntil = Time.time + noticeSeconds;
     }
 
@@ -494,7 +514,7 @@ public class MainGameUIController : MonoBehaviour
         if (turnController == null || gameManager == null) return;
 
         var playing = turnsStarted && !winnerPlayerId.HasValue;
-        turnPill.SetActive(playing);
+        turnPill.SetActive(playing && noticeUntil <= 0);
         turnStone.playerId = currentPlayerId;
         turnStone.Show(MatchSettings.Current.PieceType);
         if (playing) RenderTurn();
@@ -566,7 +586,7 @@ public class MainGameUIController : MonoBehaviour
             ratingCells[i].gameObject.SetActive(ratingChanges != null);
             if (ratingChanges != null) ratingCells[i].text = RatingCell(rated.Rating(i), ratingChanges[i]);
         }
-        ratingLabel.SetActive(ratingChanges != null);
+        ShowRatingRow(ratingChanges != null);
         // Time.time runs at the game's pace (and stands still while paused).
         var seconds = Mathf.FloorToInt((matchEndTime - matchStartTime) / GamePace.Speed);
         matchTimeText.text = Loc.Get("stats.time", $"{seconds / 60}:{seconds % 60:00}");
@@ -617,6 +637,21 @@ public class MainGameUIController : MonoBehaviour
     {
         var (change, result) = rated.IfLeftNow();
         PlayerRating.Hold(change, result);
+    }
+
+    // The rating row is the scoreboard's last: without it the scoreboard,
+    // the modal and the lines under the scoreboard close up by a row (the
+    // buttons sit on the modal's bottom edge, so they follow).
+    private void ShowRatingRow(bool shown)
+    {
+        ratingLabel.SetActive(shown);
+        if (shown == ratingRowShown) return;
+        ratingRowShown = shown;
+        var step = new Vector2(0, shown ? scoreRowPitch : -scoreRowPitch);
+        var scoreboard = (RectTransform)ratingLabel.transform.parent;
+        scoreboard.sizeDelta += step;
+        ((RectTransform)scoreboard.parent).sizeDelta += step;
+        foreach (var line in new[] { matchTimeText, seriesText, statusText }) line.rectTransform.anchoredPosition -= step;
     }
 
     // The new rating, and smaller beside it the change.

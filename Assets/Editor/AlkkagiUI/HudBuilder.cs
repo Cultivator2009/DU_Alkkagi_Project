@@ -59,6 +59,7 @@ namespace AlkkagiUIEditor
             controller.resetViewButton = UIKit.CapsuleButton(root, "ResetViewButton", "hud.resetView", new Vector2(200, 64), false, 26);
             controller.resetViewButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-Margin - 180 - 16, Margin), new Vector2(200, 64));
             controller.resetViewButton.gameObject.SetActive(false);
+            BuildControlsHint(root, controller);
             BuildGameOverPanel(root, controller);
             BuildPauseMenu(root, controller);
             return canvas.gameObject;
@@ -81,9 +82,10 @@ namespace AlkkagiUIEditor
             text.rectTransform.offsetMax = new Vector2(-20, 0);
             controller.turnText = text;
 
-            // Timed-out / skipped turn, shown for a moment under the pill.
-            var notice = UIKit.Capsule(root, "Notice", 48, Theme.Seal, null);
-            notice.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -78), new Vector2(460, 48));
+            // Timed-out / skipped turn, shown for a moment in the pill's place:
+            // under it would cover the board's top row.
+            var notice = UIKit.Capsule(root, "Notice", 56, Theme.Seal, null);
+            notice.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -10), new Vector2(460, 56));
             controller.notice = notice.gameObject;
             controller.noticeText = UIKit.Text(notice.transform, "Text", "흑 시간 초과 · 턴을 넘겨요", 24, true, Theme.SealText, TextAlignmentOptions.Center);
             controller.noticeText.rectTransform.Stretch();
@@ -192,6 +194,40 @@ namespace AlkkagiUIEditor
             hud.readyButton = UIKit.CapsuleButton(t, "ReadyButton", "placement.ready", new Vector2(width, 72), true, 30);
             hud.readyButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, Pad), new Vector2(width, 72), new Vector2(0.5f, 0));
             bg.gameObject.SetActive(false);
+        }
+
+        // A key legend in the right column, above the Menu button: how to
+        // flick, the camera keys (ControlsHint fills in this machine's
+        // bindings) and the menu. The controller places it for the number of
+        // sides.
+        private static void BuildControlsHint(Transform root, MainGameUIController controller)
+        {
+            const float width = 420, lineHeight = 34, keyWidth = 140, inset = 20;
+            var bound = new[] { GameAction.CancelAim, GameAction.CameraView, GameAction.PanView, GameAction.ResetView };
+            var bg = UIKit.Panel(root, "ControlsHint", Theme.Hanji, Theme.FieldBorder);
+            bg.rectTransform.Place(new Vector2(1, 0), new Vector2(-Margin, Margin + 64 + 16), new Vector2(width, (bound.Length + 2) * lineHeight + inset * 2));
+            var hint = bg.gameObject.AddComponent<ControlsHint>();
+            hint.actions = bound;
+            hint.keyTexts = new TMP_Text[bound.Length];
+            var t = bg.transform;
+            var topLeft = new Vector2(0, 1);
+
+            // keyLoc null: the key is literal text (a binding, filled in at runtime, or Esc).
+            TMP_Text Line(int index, string key, string keyLoc, string actionLoc)
+            {
+                var y = -inset - index * lineHeight;
+                var keyText = keyLoc != null
+                    ? UIKit.Label(t, "Key" + index, keyLoc, 20, true, Theme.Ink, TextAlignmentOptions.MidlineRight)
+                    : UIKit.Text(t, "Key" + index, key, 20, true, Theme.Ink, TextAlignmentOptions.MidlineRight);
+                keyText.rectTransform.Place(topLeft, new Vector2(inset, y), new Vector2(keyWidth, lineHeight));
+                UIKit.Label(t, "Action" + index, actionLoc, 20, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                    .rectTransform.Place(topLeft, new Vector2(inset + keyWidth + 16, y), new Vector2(width - inset * 2 - keyWidth - 16, lineHeight));
+                return keyText;
+            }
+            Line(0, null, "hint.flickKey", "hint.flick");
+            for (var i = 0; i < bound.Length; i++) hint.keyTexts[i] = Line(i + 1, "Ctrl", null, "hint." + bound[i]);
+            Line(bound.Length + 1, "Esc", null, "hud.menu");
+            controller.controlsHint = hint;
         }
 
         // CS2-style kill feed at the top of the left column. The placement
@@ -482,6 +518,7 @@ namespace AlkkagiUIEditor
             controller.shotsCells = cells[5];
             controller.ratingCells = cells[6];
             controller.ratingLabel = rowLabels[6];
+            controller.scoreRowPitch = RowY(0) - RowY(1);
             controller.ratingUpColor = Theme.StatusOk;
             controller.ratingDownColor = Theme.Seal;
             controller.ratingSameColor = Theme.InkFaint;

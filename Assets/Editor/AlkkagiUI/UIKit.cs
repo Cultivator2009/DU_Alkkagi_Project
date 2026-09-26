@@ -523,18 +523,26 @@ namespace AlkkagiUIEditor
                 Label(rowRect, "Label", def.LabelKey, labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
                     .rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(width - stepperWidth - 16, rowHeight), new Vector2(0, 0.5f));
 
-                var frame = Capsule(rowRect, "Stepper", rowHeight, Theme.HanjiField, Theme.FieldBorder);
+                var (frame, valueText, previous, next) = Stepper(rowRect, "Stepper", rowHeight, def.Format(def.Default), labelSize);
                 frame.rectTransform.Place(new Vector2(1, 0.5f), Vector2.zero, new Vector2(stepperWidth, rowHeight), new Vector2(1, 0.5f));
-                row.valueText = Text(frame.transform, "Value", def.Format(def.Default), labelSize, true, Theme.Ink, TextAlignmentOptions.Center);
-                row.valueText.rectTransform.Stretch();
-                row.valueText.rectTransform.offsetMin = new Vector2(rowHeight, 0);
-                row.valueText.rectTransform.offsetMax = new Vector2(-rowHeight, 0);
-                row.previousButton = Arrow(frame.transform, "Previous", rowHeight, false);
-                row.nextButton = Arrow(frame.transform, "Next", rowHeight, true);
+                row.valueText = valueText;
+                row.previousButton = previous;
+                row.nextButton = next;
                 rows.Add(row);
             }
             panel.rows = rows.ToArray();
             return panel;
+        }
+
+        // "◀ value ▶" in a field capsule; the caller places the frame.
+        public static (Image frame, TextMeshProUGUI value, Button previous, Button next) Stepper(Transform parent, string name, float height, string content, float fontSize)
+        {
+            var frame = Capsule(parent, name, height, Theme.HanjiField, Theme.FieldBorder);
+            var value = Text(frame.transform, "Value", content, fontSize, true, Theme.Ink, TextAlignmentOptions.Center);
+            value.rectTransform.Stretch();
+            value.rectTransform.offsetMin = new Vector2(height, 0);
+            value.rectTransform.offsetMax = new Vector2(-height, 0);
+            return (frame, value, Arrow(frame.transform, "Previous", height, false), Arrow(frame.transform, "Next", height, true));
         }
 
         // A square hit area at one end of a stepper with a small triangle
