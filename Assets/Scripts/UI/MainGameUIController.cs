@@ -14,6 +14,7 @@ using UnityEngine.UI;
 public class MainGameUIController : MonoBehaviour
 {
     public GameObject turnPill;
+    public UIPulse turnPulse;   // a punch as the turn changes
     public TMP_Text turnText;
     public SideMark turnStone;
     public PlayerHudPanel[] playerPanels; // index-aligned with GameManager.playersList (0 = black), four
@@ -25,6 +26,7 @@ public class MainGameUIController : MonoBehaviour
     public float clockWarningSeconds = 5f;
     public GameObject notice;   // "Black ran out of time" and the like, briefly, in the turn pill's place
     public TMP_Text noticeText;
+    public UIPulse noticePulse;
     public float noticeSeconds = 2.5f;
     public KillFeed killFeed;
     public ControlsHint controlsHint;
@@ -78,6 +80,7 @@ public class MainGameUIController : MonoBehaviour
     private MatchEndReason endReason;
     private bool opponentReturnedToLobby;
     private bool turnsStarted;
+    private bool anyTurnAnnounced;
     private float noticeUntil;
     private int lastTickSecond = -1; // the countdown second last ticked
     private float arrangedWidth = -1; // the canvas width Arrange last laid out for
@@ -167,6 +170,12 @@ public class MainGameUIController : MonoBehaviour
         {
             turnsStarted = true;
             matchStartTime = Time.time;
+            // The start signal, and who opens. The opening turn itself may
+            // have begun before this screen subscribed (a local game without
+            // placement), so it's announced here unless it already was.
+            GameAudio.PlayInterface(GameAudio.Bank.start);
+            ShowNotice(Loc.Get("hud.start", ColorName(currentPlayerId)));
+            if (!anyTurnAnnounced) AnnounceTurn(chime: false);
             Render();
         }
         if (noticeUntil > 0 && Time.time >= noticeUntil)
@@ -328,6 +337,17 @@ public class MainGameUIController : MonoBehaviour
         return turnController.TurnTimeRemaining;
     }
 
+    // This screen may pick up playerId's pieces right now: that side is to
+    // move, it's this screen's to play, and it's waiting for a flick. The
+    // aim's hover ring asks.
+    public bool MayPickUp(int playerId)
+    {
+        if (turnController == null || winnerPlayerId.HasValue || playerId != currentPlayerId) return false;
+        if (networkBridge != null && !networkBridge.IsHost) return playerId == networkBridge.LocalPlayerId && networkBridge.GuestCanPass;
+        if (turnController.State != GameManager.GameState.WaitingForInput) return false;
+        return networkBridge != null ? playerId == networkBridge.LocalPlayerId : playerId != GameManager.manager.AIPlayerId;
+    }
+
     private bool CanSkip(int playerId)
     {
         if (networkBridge == null) return turnController.IsAwaitingShot && playerId != GameManager.manager.AIPlayerId; // hot seat: whoever's turn it is
@@ -389,15 +409,27 @@ public class MainGameUIController : MonoBehaviour
     {
         currentPlayerId = player.ID;
         rated?.TurnStarted();
-        PlayTurnChime();
+        turnPulse.Play();
+        AnnounceTurn();
         Render();
     }
 
-    // Only for this screen's own turns (online, against the AI); in a
-    // hot-seat game every turn is somebody's here.
-    private void PlayTurnChime()
+    // The chime, and a ring out of each piece that may now be flicked. Only
+    // for this screen's own turns (online, against the AI); in a hot-seat
+    // game every turn is somebody's here.
+    private void AnnounceTurn(bool chime = true)
     {
-        if (!OwnSide.HasValue || currentPlayerId == OwnSide.Value) GameAudio.PlayInterface(GameAudio.Bank.turn, 0.7f);
+        anyTurnAnnounced = true;
+        if (OwnSide.HasValue && currentPlayerId != OwnSide.Value) return;
+        if (chime) GameAudio.PlayInterface(GameAudio.Bank.turn, 0.7f);
+        if (HitEffects.Instance == null) return;
+        var index = 0;
+        foreach (var piece in GameManager.manager.gamePieceScripts)
+        {
+            if (piece == null) continue;
+            var manager = piece.GetComponent<GamePieceManager>();
+            if (manager.playerIndex == currentPlayerId) HitEffects.Instance.PlayTurn(piece.transform.position, manager.radius, index++);
+        }
     }
 
     // Host and local only; a guest counts through HandleGuestTurnEnded.
@@ -430,6 +462,7 @@ public class MainGameUIController : MonoBehaviour
     {
         noticeText.text = text;
         notice.SetActive(true);
+        noticePulse.Play();
         turnPill.SetActive(false);
         noticeUntil = Time.time + noticeSeconds;
     }
@@ -459,7 +492,8 @@ public class MainGameUIController : MonoBehaviour
     {
         currentPlayerId = playerId;
         rated?.TurnStarted();
-        PlayTurnChime();
+        turnPulse.Play();
+        AnnounceTurn();
         Render();
     }
 

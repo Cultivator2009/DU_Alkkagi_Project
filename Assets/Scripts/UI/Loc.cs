@@ -83,6 +83,7 @@ public static class Loc
         { "hud.outNotice.Surrender", ("{0} 쪽이 기권했어요", "{0} conceded") },
         { "hud.outNotice.OpponentLeft", ("{0} 쪽이 나갔어요", "{0} left") },
         { "hud.resetView", ("시점 초기화", "Reset view") },
+        { "hud.start", ("대전 시작 · {0} 먼저", "Match start · {0} first") },
         { "hint.flickKey", ("왼쪽 끌기", "Left drag") },
         { "hint.flick", ("당겼다 놓아 튕기기", "Pull back, release") },
         { "hint.CancelAim", ("조준 취소", "Cancel aim") },

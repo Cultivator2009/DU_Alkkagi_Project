@@ -141,6 +141,7 @@ namespace AlkkagiUIEditor
             var cardHeight = -RowY(controlsSection, actions.Length - 1) + rowHeight + 40 + 84 + 48;
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(overlay, card.rectTransform);
             card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, cardHeight));
             var c = card.transform;
             var topLeft = new Vector2(0, 1);
@@ -256,6 +257,7 @@ namespace AlkkagiUIEditor
             menu.setupPanel = overlay.gameObject;
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(overlay, card.rectTransform);
             card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 148 + opponentRow + rulesHeight + 40 + 84 + 48));
             var top = new Vector2(0.5f, 1);
 
@@ -290,6 +292,7 @@ namespace AlkkagiUIEditor
             const float rowsTop = -260;
             var rowsBottom = rowsTop - rowCount * (rowHeight + rowGap);
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(overlay, card.rectTransform);
             card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, -rowsBottom + 20 + 84 + 40));
             var c = card.transform;
             var topLeft = new Vector2(0, 1);

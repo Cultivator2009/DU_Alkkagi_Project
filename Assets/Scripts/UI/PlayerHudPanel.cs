@@ -11,6 +11,7 @@ public class PlayerHudPanel : MonoBehaviour
     public TMP_Text nameText;
     public TMP_Text numberText;
     public TMP_Text remainingText;
+    public UIPulse remainingPulse; // a punch when a stone goes
     public TMP_Text capturedText;
     public GameObject turnBadge;
     public CanvasGroup canvasGroup;
@@ -22,6 +23,7 @@ public class PlayerHudPanel : MonoBehaviour
     public float minStoneSpacing = 4f;
 
     private readonly List<GameObject> stones = new List<GameObject>();
+    private int shownRemaining = -1;
 
     public void Build(int stoneCount)
     {
@@ -58,6 +60,8 @@ public class PlayerHudPanel : MonoBehaviour
         nameText.text = playerName;
         numberText.text = outStatus == null ? playerNumber : $"{playerNumber} · {outStatus}";
         remainingText.text = remaining.ToString();
+        if (shownRemaining >= 0 && remaining < shownRemaining) remainingPulse.Play();
+        shownRemaining = remaining;
         capturedText.text = Loc.Get("hud.captured", captured);
         turnBadge.SetActive(isTurn);
         canvasGroup.alpha = isTurn ? 1f : outStatus != null ? outAlpha : idleAlpha;

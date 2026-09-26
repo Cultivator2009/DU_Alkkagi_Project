@@ -12,6 +12,7 @@ public class KillFeed : MonoBehaviour
     public int maxEntries = 6;
     public float lifetime = 6f;
     public float fadeSeconds = 0.6f;
+    public float fadeInSeconds = 0.15f;
     public Color outlineColor = Color.black;
     public Color localOutlineColor = Color.red;
 
@@ -34,9 +35,10 @@ public class KillFeed : MonoBehaviour
     {
         for (var i = entries.Count - 1; i >= 0; i--)
         {
-            var left = lifetime - (Time.time - entries[i].shownAt);
+            var age = Time.time - entries[i].shownAt;
+            var left = lifetime - age;
             if (left <= 0) RemoveAt(i);
-            else entries[i].entry.canvasGroup.alpha = Mathf.Clamp01(left / fadeSeconds);
+            else entries[i].entry.canvasGroup.alpha = Mathf.Min(Mathf.Clamp01(age / fadeInSeconds), Mathf.Clamp01(left / fadeSeconds));
         }
     }
 

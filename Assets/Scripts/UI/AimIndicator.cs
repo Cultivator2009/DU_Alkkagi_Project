@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 // Screen-space aiming feedback for the piece being dragged: a ring around
@@ -9,7 +10,8 @@ using UnityEngine.UI;
 // power percentage, a faint line back to the pull point, and - when the
 // match allows it (MatchSettings.AimGuide) - a dotted guide up to the first
 // stone or board edge the shot would reach. Only ever shows for this
-// machine's own drag.
+// machine's own drag. Before a drag, a ring round the piece under the
+// cursor says it can be picked up.
 public class AimIndicator : MonoBehaviour
 {
     public RectTransform ring;
@@ -23,6 +25,7 @@ public class AimIndicator : MonoBehaviour
     public RectTransform guideRoot;
     public GameObject dotTemplate;
     public RectTransform targetMark;
+    public RectTransform hoverRing;     // round a piece this screen may pick up, under the cursor
     public float ringPadding = 14f;
     public float arrowMaxLength = 150f;
     public float labelGap = 46f;
@@ -32,12 +35,14 @@ public class AimIndicator : MonoBehaviour
     private RectTransform area;
     private Canvas canvas;
     private Camera worldCamera;
+    private MainGameUIController game;
     private bool guideEnabled;
 
     private void OnEnable()
     {
         area = (RectTransform)transform;
         canvas = GetComponentInParent<Canvas>();
+        game = GetComponentInParent<MainGameUIController>();
         worldCamera = Camera.main;
         guideEnabled = MatchSettings.Current.AimGuide; // fixed for the match
         SetVisible(false);
@@ -50,9 +55,11 @@ public class AimIndicator : MonoBehaviour
         if (piece == null || worldCamera == null)
         {
             SetVisible(false);
+            ShowHover();
             return;
         }
         SetVisible(true);
+        hoverRing.gameObject.SetActive(false);
 
         var origin = piece.transform.position;
         var stoneRadius = piece.GetComponent<GamePieceManager>().radius;
@@ -82,6 +89,29 @@ public class AimIndicator : MonoBehaviour
 
         if (guideEnabled && hasDirection) DrawGuide(piece, gameManager, origin, stoneRadius, center + direction * ringRadius);
         else HideGuide();
+    }
+
+    private void ShowHover()
+    {
+        var piece = worldCamera != null && game != null ? PieceUnderCursor() : null;
+        var show = piece != null && game.MayPickUp(piece.GetComponent<GamePieceManager>().playerIndex);
+        hoverRing.gameObject.SetActive(show);
+        if (!show) return;
+        var origin = piece.transform.position;
+        var center = ToLocal(origin);
+        var radius = (ToLocal(origin + Vector3.right * piece.GetComponent<GamePieceManager>().radius) - center).magnitude + ringPadding;
+        hoverRing.anchoredPosition = center;
+        hoverRing.sizeDelta = Vector2.one * (radius * 2 * (1 + 0.05f * Mathf.Sin(Time.unscaledTime * 6f))); // breathing
+    }
+
+    // Not while the view moves, the game is paused, or the cursor is on the HUD.
+    private GamePieceDragAndReleaseForce PieceUnderCursor()
+    {
+        if (CameraRig.Busy || Time.timeScale <= 0) return null;
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
+        var ray = worldCamera.ScreenPointToRay(Input.mousePosition);
+        if (!Physics.Raycast(ray, out var hit, 100f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return null;
+        return hit.collider.GetComponentInParent<GamePieceDragAndReleaseForce>();
     }
 
     // First contact along the shot, on the board plane: the nearest piece
@@ -172,7 +202,11 @@ public class AimIndicator : MonoBehaviour
 
     private void SetVisible(bool visible)
     {
-        for (var i = 0; i < transform.childCount; i++) transform.GetChild(i).gameObject.SetActive(visible);
+        for (var i = 0; i < transform.childCount; i++)
+        {
+            var child = transform.GetChild(i);
+            if (child != hoverRing) child.gameObject.SetActive(visible); // ShowHover has it
+        }
         if (visible) return;
         HideGuide();
     }

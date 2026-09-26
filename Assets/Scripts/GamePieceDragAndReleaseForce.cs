@@ -29,6 +29,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     public float maxRiseSpeed = 0.4f;
 
     private int lowVelocityFrameCount = 0;
+    private int powerNotch; // tenths of the pull's power reached so far, for the ratchet tick
 
     private Rigidbody rb;
     private LineRenderer lr;
@@ -92,7 +93,13 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             pull.y = 0;
             AimPower = Mathf.Clamp01(pull.magnitude / maxDragDistance);
             AimDirection = pull.sqrMagnitude > 1e-6f ? pull.normalized : Vector3.zero;
+
+            // A soft ratchet: a tick at each tenth of power pulled, higher as it grows.
+            var notch = Mathf.FloorToInt(AimPower * 10);
+            if (notch > powerNotch) GameAudio.PlayInterface(GameAudio.Bank.notch, 0.3f, 0.85f + 0.06f * notch);
+            powerNotch = notch;
         }
+        else powerNotch = 0;
         // https://docs.unity3d.com/ScriptReference/Input.GetMouseButtonDown.html
         if (isDragging && KeyBindings.Down(GameAction.CancelAim)) Cancel();
 
@@ -138,6 +145,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // for input again.
     public void Cancel()
     {
+        if (isDragging) GameAudio.PlayInterface(GameAudio.Bank.cancel, 0.5f);
         isSelected = false;
         isDragging = false;
         isCancelled = true;

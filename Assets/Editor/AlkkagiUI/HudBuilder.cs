@@ -71,6 +71,7 @@ namespace AlkkagiUIEditor
             // Wide enough for "흑 차례 · 30" when the turn timer is on.
             pill.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -10), new Vector2(340, 56));
             controller.turnPill = pill.gameObject;
+            controller.turnPulse = Pulse(pill.gameObject, 1.12f, 0.3f);
 
             var stone = UIKit.Stone(pill.transform, "TurnStone", 28, Theme.StoneBlack, Theme.Ink, false);
             stone.Place(new Vector2(0, 0.5f), new Vector2(26, 0), new Vector2(28, 28), new Vector2(0, 0.5f));
@@ -87,6 +88,7 @@ namespace AlkkagiUIEditor
             var notice = UIKit.Capsule(root, "Notice", 56, Theme.Seal, null);
             notice.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -10), new Vector2(460, 56));
             controller.notice = notice.gameObject;
+            controller.noticePulse = Pulse(notice.gameObject, 0.8f, 0.22f); // grows into place
             controller.noticeText = UIKit.Text(notice.transform, "Text", "흑 시간 초과 · 턴을 넘겨요", 24, true, Theme.SealText, TextAlignmentOptions.Center);
             controller.noticeText.rectTransform.Stretch();
             notice.gameObject.SetActive(false);
@@ -122,6 +124,7 @@ namespace AlkkagiUIEditor
                 .rectTransform.Place(topLeft, new Vector2(Pad, -162), new Vector2(180, 30));
             panel.remainingText = UIKit.Text(t, "Remaining", "6", 72, true, Theme.Ink, TextAlignmentOptions.TopRight);
             panel.remainingText.rectTransform.Place(topRight, new Vector2(-Pad, -132), new Vector2(160, 84));
+            panel.remainingPulse = Pulse(panel.remainingText.gameObject, 1.4f, 0.35f);
 
             var row = UIKit.Node("StoneRow", t).Place(topLeft, new Vector2(Pad, -238), new Vector2(PanelSize.x - Pad * 2, 40));
             var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -341,6 +344,10 @@ namespace AlkkagiUIEditor
             var targetMark = UIKit.Image(area, "TargetMark", UIKit.CircleOutline, Faded(Theme.Seal, 0.85f));
             targetMark.rectTransform.Place(center, Vector2.zero, new Vector2(60, 60));
             aim.targetMark = targetMark.rectTransform;
+            var hover = UIKit.Image(area, "HoverRing", UIKit.CircleOutline, Faded(Theme.Ink, 0.6f));
+            hover.rectTransform.Place(center, Vector2.zero, new Vector2(80, 80));
+            hover.gameObject.SetActive(false);
+            aim.hoverRing = hover.rectTransform;
 
             aim.ring = UIKit.Node("Ring", area).Place(center, Vector2.zero, new Vector2(80, 80));
             UIKit.Image(aim.ring, "Track", UIKit.CircleOutline, Faded(Theme.Ink, 0.2f)).rectTransform.Stretch();
@@ -377,6 +384,7 @@ namespace AlkkagiUIEditor
             controller.gameOverPanel = overlay.gameObject;
 
             var modal = UIKit.Panel(overlay.transform, "Modal", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(overlay, modal.rectTransform, swish: false); // the seal lands with its own sound
             modal.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760, 956));
             var m = modal.transform;
             var top = new Vector2(0.5f, 1);
@@ -384,6 +392,13 @@ namespace AlkkagiUIEditor
             var stamp = UIKit.Panel(m, "Stamp", Theme.Seal, null, 2f);
             stamp.rectTransform.Place(top, new Vector2(0, -40), new Vector2(120, 120));
             stamp.rectTransform.localRotation = Quaternion.Euler(0, 0, 8);
+            // Comes down on the result just after the modal opens, and lands with a thump.
+            var slam = Pulse(stamp.gameObject, 2.4f, 0.3f);
+            slam.slam = true;
+            slam.playOnEnable = true;
+            slam.delay = 0.12f;
+            slam.fade = stamp.gameObject.AddComponent<CanvasGroup>();
+            slam.landSound = AssetDatabase.LoadAssetAtPath<SoundBank>("Assets/Resources/SoundBank.asset").stamp;
             controller.stampText = UIKit.Text(stamp.transform, "Label", "승", 60, true, Theme.SealText, TextAlignmentOptions.Center);
             controller.stampText.rectTransform.Stretch(10);
             controller.stampText.enableAutoSizing = true;
@@ -437,6 +452,7 @@ namespace AlkkagiUIEditor
             menu.overlay = overlay.gameObject;
             var height = 148 + 4 * buttonHeight + 3 * gap + 40 + 36 + 48;
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(overlay, card.rectTransform);
             card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, height));
             var top = new Vector2(0.5f, 1);
             UIKit.Label(card.transform, "Title", "pause.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
@@ -525,6 +541,14 @@ namespace AlkkagiUIEditor
         }
 
         private static float RowY(int row) => -72 - row * 46;
+
+        private static UIPulse Pulse(GameObject target, float from, float seconds)
+        {
+            var pulse = target.AddComponent<UIPulse>();
+            pulse.from = from;
+            pulse.seconds = seconds;
+            return pulse;
+        }
 
         private static void WireScene(GameObject prefab)
         {

@@ -116,6 +116,7 @@ public class PlacementController : MonoBehaviour
 
     private void Place(PlacementPhase phase, int player, char id, Vector3 position)
     {
+        GameAudio.PlayBoard(GameAudio.Bank.place, 0.7f, Random.Range(0.94f, 1.06f), BoardSounds.Pan(position));
         if (Bridge != null && !Bridge.IsHost) Bridge.RequestPlace(id, position);
         else phase.TryPlace(player, id, position);
     }

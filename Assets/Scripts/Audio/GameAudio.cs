@@ -27,9 +27,9 @@ public static class GameAudio
         Play(clip, volume, pitch, pan);
     }
 
-    public static void PlayInterface(AudioClip clip, float volume = 1f)
+    public static void PlayInterface(AudioClip clip, float volume = 1f, float pitch = 1f)
     {
-        Play(clip, volume * GameSettings.InterfaceVolume, 1f, 0f);
+        Play(clip, volume * GameSettings.InterfaceVolume, pitch, 0f);
     }
 
     private static void Play(AudioClip clip, float volume, float pitch, float pan)

@@ -407,6 +407,7 @@ namespace AlkkagiUIEditor
 
             var button = fill.gameObject.AddComponent<Button>();
             fill.gameObject.AddComponent<ClickSound>();
+            fill.gameObject.AddComponent<ButtonFeel>();
             button.targetGraphic = fill;
             var colors = button.colors;
             colors.highlightedColor = new Color(0.94f, 0.94f, 0.94f);
@@ -543,6 +544,14 @@ namespace AlkkagiUIEditor
             value.rectTransform.offsetMin = new Vector2(height, 0);
             value.rectTransform.offsetMax = new Vector2(-height, 0);
             return (frame, value, Arrow(frame.transform, "Previous", height, false), Arrow(frame.transform, "Next", height, true));
+        }
+
+        // A modal's overlay fades in and its card grows into place as it opens.
+        public static void Appear(Image overlay, RectTransform card, bool swish = true)
+        {
+            var appear = overlay.gameObject.AddComponent<PanelAppear>();
+            appear.card = card;
+            appear.swish = swish;
         }
 
         // A square hit area at one end of a stepper with a small triangle

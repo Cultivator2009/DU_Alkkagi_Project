@@ -12,6 +12,7 @@ public class SoundBank : ScriptableObject
     public AudioClip hingeHit;  // a piece meeting a board hinge
     public AudioClip flick;
     public AudioClip fall;      // a piece going over the edge
+    public AudioClip place;     // a stone set down while placing
 
     [Header("Interface")]
     public AudioClip click;
@@ -21,4 +22,9 @@ public class SoundBank : ScriptableObject
     public AudioClip win;
     public AudioClip lose;
     public AudioClip draw;
+    public AudioClip start;     // the match's first turn: a bak, the court clapper
+    public AudioClip notch;     // each tenth of a pull's power
+    public AudioClip cancel;    // an aim let go of
+    public AudioClip stamp;     // the result's seal landing
+    public AudioClip open;      // a card opening
 }

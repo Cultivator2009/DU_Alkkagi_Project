@@ -17,6 +17,7 @@ MonoBehaviour:
   hingeHit: {fileID: 8300000, guid: 43a0df44831854c5b8750113b4eba970, type: 3}
   flick: {fileID: 8300000, guid: f8491711fa7ff4b08befbcc3a6257633, type: 3}
   fall: {fileID: 8300000, guid: 2c40b1e3800c34cf1965bda2b547cff9, type: 3}
+  place: {fileID: 8300000, guid: a426e5c751ecf4ed4a03a907fc6f81bf, type: 3}
   click: {fileID: 8300000, guid: 5a2b217670a9742a1af8d0ef2367dcf6, type: 3}
   tick: {fileID: 8300000, guid: dd9d0b1e8cf544fc7a8a5d86d0e22b7d, type: 3}
   turn: {fileID: 8300000, guid: 223e1affce31d4a97bcfbc4dcfd05220, type: 3}
@@ -24,3 +25,8 @@ MonoBehaviour:
   win: {fileID: 8300000, guid: 21432f65e565446948319d75b473b07f, type: 3}
   lose: {fileID: 8300000, guid: afbe258cea2bb4e2187484adcb7f8b8e, type: 3}
   draw: {fileID: 8300000, guid: b7d036940783a43a88fd4ccb7a856e42, type: 3}
+  start: {fileID: 8300000, guid: f03d9e660269b4f3eaa2c94152718c9f, type: 3}
+  notch: {fileID: 8300000, guid: ead0607494c0a4eb6a06da9e284d6ff1, type: 3}
+  cancel: {fileID: 8300000, guid: ef8e14ffbfbc64a0e916ed0a7fdd44b6, type: 3}
+  stamp: {fileID: 8300000, guid: ec19102e96bef4d26876047e0ba64d0b, type: 3}
+  open: {fileID: 8300000, guid: 9eda2d428512446058580c66e890f63b, type: 3}

@@ -92,8 +92,8 @@ public class LobbySceneUI : MonoBehaviour
     {
         lobbyManager = SteamLobbyManager.Instance;
         lobbyManager.OnLobbyReady += HandleLobbyReady;
-        lobbyManager.OnMemberJoined += HandleMemberChanged;
-        lobbyManager.OnMemberLeft += HandleMemberChanged;
+        lobbyManager.OnMemberJoined += HandleMemberJoined;
+        lobbyManager.OnMemberLeft += HandleMemberLeft;
         lobbyManager.OnLobbyFailed += HandleLobbyFailed;
         lobbyManager.OnLobbyDataChanged += Render;
         SteamTransport.Instance.OnMessageReceived += HandleNetworkMessage;
@@ -112,8 +112,8 @@ public class LobbySceneUI : MonoBehaviour
         if (lobbyManager != null)
         {
             lobbyManager.OnLobbyReady -= HandleLobbyReady;
-            lobbyManager.OnMemberJoined -= HandleMemberChanged;
-            lobbyManager.OnMemberLeft -= HandleMemberChanged;
+            lobbyManager.OnMemberJoined -= HandleMemberJoined;
+            lobbyManager.OnMemberLeft -= HandleMemberLeft;
             lobbyManager.OnLobbyFailed -= HandleLobbyFailed;
             lobbyManager.OnLobbyDataChanged -= Render;
         }
@@ -239,8 +239,16 @@ public class LobbySceneUI : MonoBehaviour
         Render();
     }
 
-    private void HandleMemberChanged(Steamworks.Friend friend)
+    // Heard as well as seen, for a host waiting in another window.
+    private void HandleMemberJoined(Steamworks.Friend friend)
     {
+        GameAudio.PlayInterface(GameAudio.Bank.turn, 0.8f);
+        Render();
+    }
+
+    private void HandleMemberLeft(Steamworks.Friend friend)
+    {
+        GameAudio.PlayInterface(GameAudio.Bank.cancel, 0.6f);
         Render();
     }
 

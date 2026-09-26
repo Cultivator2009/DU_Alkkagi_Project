@@ -23,8 +23,8 @@ public struct BoardSoundEvent
 // the network host) hears its own collisions through each piece's
 // PieceSounds. A guest's pieces are kinematic and never collide, so
 // NetworkMatchBridge forwards the host's sounds, and the guest plays each a
-// moment late to line up with its eased view of the board. A knock's burst
-// (HitEffects) goes off with its sound.
+// moment late to line up with its eased view of the board. A knock's burst,
+// a fall's ink splash and a flick's ring (HitEffects) go off with the sound.
 public class BoardSounds : MonoBehaviour
 {
     public static BoardSounds Instance { get; private set; }
@@ -95,7 +95,13 @@ public class BoardSounds : MonoBehaviour
 
     private void Play(BoardSoundEvent sound)
     {
-        if (sound.Kind == BoardSound.Hit && HitEffects.Instance != null) HitEffects.Instance.Play(sound.Position, sound.Volume);
+        var effects = HitEffects.Instance;
+        if (effects != null)
+        {
+            if (sound.Kind == BoardSound.Hit) effects.Play(sound.Position, sound.Volume);
+            else if (sound.Kind == BoardSound.Fall) effects.PlayFall(sound.Position);
+            else if (sound.Kind == BoardSound.Flick) effects.PlayFlick(sound.Position, sound.Volume);
+        }
         var bank = GameAudio.Bank;
         var clip = sound.Kind switch
         {

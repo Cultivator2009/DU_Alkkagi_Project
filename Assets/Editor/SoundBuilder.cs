@@ -46,6 +46,27 @@ internal static class SoundBuilder
         Write("lose", 1.2f, 0.7f, t => Marimba(t, 392f, 0.35f) + Marimba(t - 0.16f, 329.63f, 0.35f) + Marimba(t - 0.32f, 261.63f, 0.7f), null);
         Write("draw", 0.9f, 0.6f, t => Bell(t, 523.25f, 0.35f) + Bell(t, 783.99f, 0.35f) + 0.6f * (Bell(t - 0.18f, 523.25f, 0.4f) + Bell(t - 0.18f, 783.99f, 0.4f)), null);
 
+        // Added 2026-09-26, after the rest so the noise they draw leaves the
+        // clips above exactly as they were.
+        // The start signal: a bak, the clapper that opens court music. Its
+        // boards slap together not quite at once - a bright wooden crack.
+        Write("start", 0.4f, 0.9f, t =>
+            Mode(t, 1250, 0.035f, 1f) + Mode(t, 2080, 0.02f, 0.7f) + Mode(t, 3350, 0.012f, 0.45f) + Mode(t, 760, 0.05f, 0.35f)
+            + 0.6f * (Mode(t - 0.004f, 1310, 0.03f, 0.8f) + Mode(t - 0.004f, 2190, 0.018f, 0.5f)),
+            Burst(noise, 0.004f, 0.9f, highpass: 900, lowpass: 7000));
+        // A stone set down on the board while placing: a soft wooden tock.
+        Write("place", 0.16f, 0.75f, t => Mode(t, 880, 0.028f, 1f) + Mode(t, 1760, 0.012f, 0.3f) + Mode(t, 190, 0.03f, 0.45f),
+            Burst(noise, 0.002f, 0.35f, lowpass: 4000));
+        // A tenth of the pull's power: a tiny tick (played higher as the power grows).
+        Write("notch", 0.035f, 0.5f, t => Mode(t, 2800, 0.004f, 1f), Burst(noise, 0.0008f, 0.2f, highpass: 3000));
+        // An aim let go of: a short swish falling away.
+        Write("cancel", 0.2f, 0.5f, t => 0f, Swish(noise, 0.18f, 3200, 700));
+        // The result's seal landing: a dull thump on paper.
+        Write("stamp", 0.32f, 0.85f, t => Mode(t, 105, 0.06f, 1f) + Mode(t, 220, 0.035f, 0.5f) + Mode(t, 640, 0.012f, 0.25f),
+            Burst(noise, 0.01f, 0.45f, lowpass: 1500));
+        // A card opening: hanji brushing past.
+        Write("open", 0.26f, 0.35f, t => 0f, Swish(noise, 0.24f, 1500, 4500));
+
         AssetDatabase.Refresh();
         var bank = AssetDatabase.LoadAssetAtPath<SoundBank>(BankPath);
         if (bank == null)
@@ -65,6 +86,12 @@ internal static class SoundBuilder
         bank.win = Clip("win");
         bank.lose = Clip("lose");
         bank.draw = Clip("draw");
+        bank.start = Clip("start");
+        bank.place = Clip("place");
+        bank.notch = Clip("notch");
+        bank.cancel = Clip("cancel");
+        bank.stamp = Clip("stamp");
+        bank.open = Clip("open");
         EditorUtility.SetDirty(bank);
         AssetDatabase.SaveAssets();
         Debug.Log("[Alkkagi] Sounds built into " + AudioDir + " and " + BankPath + ".");
@@ -123,6 +150,23 @@ internal static class SoundBuilder
             var land = t - 0.26f;
             if (land > 0) samples[i] += Mode(land, 95, 0.07f, 1f) + Mode(land, 190, 0.04f, 0.4f);
         }
+        return samples;
+    }
+
+    // Noise through a lowpass whose cutoff glides from one frequency to
+    // another, under a swell that rises and dies away: a swish.
+    private static float[] Swish(System.Random noise, float seconds, float fromHz, float toHz)
+    {
+        var samples = new float[(int)(Rate * seconds)];
+        var low = 0f;
+        for (var i = 0; i < samples.Length; i++)
+        {
+            var u = (float)i / samples.Length;
+            var a = 1 - Mathf.Exp(-2 * Mathf.PI * Mathf.Lerp(fromHz, toHz, u) / Rate);
+            low += a * ((float)(noise.NextDouble() * 2 - 1) - low);
+            samples[i] = Mathf.Pow(Mathf.Sin(Mathf.PI * u), 1.5f) * low;
+        }
+        Highpass(samples, 300);
         return samples;
     }
 
