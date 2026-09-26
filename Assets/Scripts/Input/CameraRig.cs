@@ -9,9 +9,12 @@ using UnityEngine.EventSystems;
 // the cursor, and the middle of the view stays on the inner part of the
 // board, so most of the board is always in sight. The free look orbits that
 // same middle, so after a pan it turns about what's in the centre of the
-// screen. Reset view (its key, or the HUD button) glides back. While the
-// camera moves - a pan, or the free look - the board takes no clicks, and a
-// pull in progress is dropped.
+// screen. The wheel brings the main view a little closer or takes it
+// further back: back out, a full pull is a shorter reach of the mouse, so a
+// piece near the screen's edge can still be pulled all the way without the
+// cursor stopping at the edge. Reset view (its key, or the HUD button)
+// glides back from both. While the camera moves - a pan, or the free look -
+// the board takes no clicks, and a pull in progress is dropped.
 public class CameraRig : MonoBehaviour
 {
     public static CameraRig Instance { get; private set; }
@@ -19,6 +22,10 @@ public class CameraRig : MonoBehaviour
 
     public float reach = 0.5f;         // how far the middle of the view may go, as a share of the way from the board's centre to its edge
     public float resetSharpness = 12f; // how fast Reset view glides back (1/s)
+    public float minZoom = 0.94f;      // the main view's distance to the board, as a share of home: closest (any closer and the board runs under the HUD)
+    public float maxZoom = 1.35f;      // and furthest
+    public float zoomStep = 0.05f;     // per wheel notch
+    public float zoomSharpness = 14f;  // how fast the view follows the wheel (1/s)
 
     private Transform mainView;  // the main virtual camera
     private float mainFieldOfView;
@@ -28,12 +35,15 @@ public class CameraRig : MonoBehaviour
     private Rect limits;         // where the pivot may go (x, z)
     private float boardHeight;
     private Vector3 offset;      // from home, level
+    private float homeDistance;  // from the main view to the board, along the view
+    private float zoom = 1f;
+    private float zoomTarget = 1f;
     private Vector3 grabbed;     // the board point held under the cursor
     private bool panning;
     private bool freeLook;
     private bool resetting;
 
-    public bool IsMoved => offset.sqrMagnitude > 1e-6f;
+    public bool IsMoved => offset.sqrMagnitude > 1e-6f || !Mathf.Approximately(zoomTarget, 1f);
 
     // vcams: the scene's tagged virtual cameras; the main view is the plain
     // one with the highest priority, the free look's target is its pivot.
@@ -50,6 +60,7 @@ public class CameraRig : MonoBehaviour
         var half = surface.extents * reach;
         limits = Rect.MinMaxRect(center.x - half.x, center.z - half.z, center.x + half.x, center.z + half.z);
         boardHeight = surface.max.y;
+        homeDistance = (boardHeight - mainHome.y) / Mathf.Min(-0.01f, mainView.forward.y);
     }
 
     private void OnDestroy()
@@ -60,7 +71,8 @@ public class CameraRig : MonoBehaviour
     public void ResetView()
     {
         panning = false;
-        resetting = IsMoved;
+        resetting = offset.sqrMagnitude > 1e-6f;
+        zoomTarget = 1f;
     }
 
     // How far the board reaches either side of the screen's middle in the
@@ -105,6 +117,17 @@ public class CameraRig : MonoBehaviour
             BoardPoint(out grabbed); // the same point, unless the edge stopped the view
         }
 
+        // Not over the HUD (a menu), in the free look, or paused.
+        var scroll = Input.mouseScrollDelta.y;
+        if (scroll != 0 && !freeLook && Time.timeScale > 0 && !PointerOverUI())
+            zoomTarget = Mathf.Clamp(zoomTarget - scroll * zoomStep, minZoom, maxZoom);
+        if (zoom != zoomTarget)
+        {
+            zoom = Mathf.Lerp(zoom, zoomTarget, 1 - Mathf.Exp(-zoomSharpness * Time.unscaledDeltaTime));
+            if (Mathf.Abs(zoom - zoomTarget) < 1e-4f) zoom = zoomTarget;
+            MoveTo(offset);
+        }
+
         if (KeyBindings.Down(GameAction.ResetView)) ResetView();
         if (resetting)
         {
@@ -123,7 +146,7 @@ public class CameraRig : MonoBehaviour
         at.x = Mathf.Clamp(at.x, limits.xMin, limits.xMax);
         at.z = Mathf.Clamp(at.z, limits.yMin, limits.yMax);
         offset = at - pivotHome;
-        mainView.position = mainHome + offset;
+        mainView.position = mainHome + offset - mainView.forward * (homeDistance * (zoom - 1));
         pivot.position = at;
     }
 

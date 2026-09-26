@@ -208,7 +208,7 @@ namespace AlkkagiUIEditor
             const float width = 420, lineHeight = 34, keyWidth = 140, inset = 20;
             var bound = new[] { GameAction.CancelAim, GameAction.CameraView, GameAction.PanView, GameAction.ResetView };
             var bg = UIKit.Panel(root, "ControlsHint", Theme.Hanji, Theme.FieldBorder);
-            bg.rectTransform.Place(new Vector2(1, 0), new Vector2(-Margin, Margin + 64 + 16), new Vector2(width, (bound.Length + 2) * lineHeight + inset * 2));
+            bg.rectTransform.Place(new Vector2(1, 0), new Vector2(-Margin, Margin + 64 + 16), new Vector2(width, (bound.Length + 3) * lineHeight + inset * 2));
             var hint = bg.gameObject.AddComponent<ControlsHint>();
             hint.actions = bound;
             hint.keyTexts = new TMP_Text[bound.Length];
@@ -227,9 +227,14 @@ namespace AlkkagiUIEditor
                     .rectTransform.Place(topLeft, new Vector2(inset + keyWidth + 16, y), new Vector2(width - inset * 2 - keyWidth - 16, lineHeight));
                 return keyText;
             }
-            Line(0, null, "hint.flickKey", "hint.flick");
-            for (var i = 0; i < bound.Length; i++) hint.keyTexts[i] = Line(i + 1, "Ctrl", null, "hint." + bound[i]);
-            Line(bound.Length + 1, "Esc", null, "hud.menu");
+            var line = 0;
+            Line(line++, null, "hint.flickKey", "hint.flick");
+            for (var i = 0; i < bound.Length; i++)
+            {
+                hint.keyTexts[i] = Line(line++, "Ctrl", null, "hint." + bound[i]);
+                if (bound[i] == GameAction.PanView) Line(line++, null, "hint.zoomKey", "hint.zoom"); // the wheel isn't rebindable
+            }
+            Line(line, "Esc", null, "hud.menu");
             controller.controlsHint = hint;
         }
 

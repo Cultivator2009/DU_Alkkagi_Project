@@ -90,6 +90,8 @@ public static class Loc
         { "hint.CameraView", ("시점 전환 (누르는 동안)", "Camera view (hold)") },
         { "hint.PanView", ("판 옮기기 (끌기)", "Pan the board (drag)") },
         { "hint.ResetView", ("시점 초기화", "Reset view") },
+        { "hint.zoomKey", ("휠", "Wheel") },
+        { "hint.zoom", ("확대·축소", "Zoom") },
         { "pause.title", ("메뉴", "Menu") },
         { "pause.resume", ("계속하기", "Resume") },
         { "pause.concede", ("기권", "Concede") },

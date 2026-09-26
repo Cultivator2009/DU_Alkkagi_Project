@@ -1,8 +1,8 @@
-// HitEffects' bursts: flat vertex colours, blended, drawn over everything
-// the way a comic effect sits on top of the picture. Each pixel takes only
-// the first colour drawn to it (the stencil): HitEffects draws front to
-// back, so a fading star fades as one flat shape instead of its ink outline
-// showing through its yellow.
+// HitEffects' bursts: flat vertex colours, blended, lying on the board and
+// depth-tested, so the pieces (drawn before, as opaques) stand over them -
+// an effect never hides a piece. Each pixel takes only the first colour
+// drawn to it (the stencil): HitEffects draws front to back, so a fading
+// shape fades as one instead of what's under it showing through.
 Shader "Alkkagi/Hit Effect"
 {
     SubShader
@@ -10,7 +10,7 @@ Shader "Alkkagi/Hit Effect"
         Tags { "Queue" = "Transparent+100" "RenderType" = "Transparent" "IgnoreProjector" = "True" }
         Blend SrcAlpha OneMinusSrcAlpha
         ZWrite Off
-        ZTest Always
+        ZTest LEqual
         Cull Off
         Stencil
         {
