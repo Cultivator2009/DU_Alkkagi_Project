@@ -2,10 +2,11 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // How each side is named and drawn, which depends on the pieces in play:
-// black and white go stones, the janggi sides Cho (green, moves first,
-// like black) and Han (red), or chess's white (first, as in chess) and
-// black. Online games of three or four add blue and red stones, janggi
-// pieces lettered in blue and black, or red and blue chess pieces.
+// black and white go stones (gonggi stones too), the janggi sides Cho
+// (green, moves first, like black) and Han (red), or chess's white (first,
+// as in chess) and black. Online games of three or four add blue and red
+// stones, janggi pieces lettered in blue and black, or red and blue chess
+// pieces.
 public static class SideStyle
 {
     private static readonly Color StoneBlack = new Color32(0x15, 0x15, 0x15, 0xFF);

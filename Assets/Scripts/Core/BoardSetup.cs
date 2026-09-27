@@ -5,8 +5,8 @@ using TMPro;
 using UnityEngine;
 
 // GameScene's board. Turns on the board the match rules pick, spawns each
-// side's pieces - go stones from the black/white templates, janggi pieces
-// or chess pieces from theirs - holds the preset layouts and placement
+// side's pieces - go stones from the black/white templates, janggi, chess
+// or gonggi pieces from theirs - holds the preset layouts and placement
 // zones, and shows the placement phase while it runs.
 //
 // Two sides face each other across the board (south and north). Three or
@@ -33,6 +33,7 @@ public class BoardSetup : MonoBehaviour
     public GamePieceDragAndReleaseForce whiteTemplate;
     public GamePieceDragAndReleaseForce janggiTemplate;
     public GamePieceDragAndReleaseForce chessTemplate;
+    public GamePieceDragAndReleaseForce gonggiTemplate;
     public BoardVariant[] boards;
 
     // Children named "1".."12", each holding that many points: black's preset
@@ -63,6 +64,12 @@ public class BoardSetup : MonoBehaviour
         ChessKind.Knight, ChessKind.Knight, ChessKind.Pawn, ChessKind.Pawn, ChessKind.Pawn, ChessKind.Pawn,
     };
     [Range(0.1f, 0.6f)] public float chessBalance = 0.3f; // a chess piece's centre of mass, up its height: weighted at the foot, as real ones are
+    // A gonggi stone against a go stone: 6.5 g of plastic and steel shot to
+    // a glass stone's 4.5 or so.
+    public float gonggiWeight = 1.45f;
+    // Its centre of mass, up its height: the shot lies in the bottom (a
+    // plastic shell of even thickness alone would have it a third up).
+    [Range(0.1f, 0.5f)] public float gonggiBalance = 0.22f;
 
     // The chess board's squares, 5.7 cm as at a tournament. Two sides on it
     // start on real squares: chess pieces where chess puts them (the first
@@ -94,7 +101,7 @@ public class BoardSetup : MonoBehaviour
 
     private readonly Dictionary<Rigidbody, CollisionDetectionMode> frozenBodies = new Dictionary<Rigidbody, CollisionDetectionMode>();
     private readonly Dictionary<int, Material> stoneMaterials = new Dictionary<int, Material>(); // the third and fourth sides' colours
-    private readonly Dictionary<int, Material> chessMaterials = new Dictionary<int, Material>(); // every side's
+    private readonly Dictionary<int, Material> sideMaterials = new Dictionary<int, Material>(); // chess and gonggi pieces, every side's
     private readonly Dictionary<char, string> letterKeys = new Dictionary<char, string>(); // janggi and chess pieces, by id
     private PieceType pieceType;
     private SpriteRenderer[] zoneMarkers;
@@ -108,7 +115,13 @@ public class BoardSetup : MonoBehaviour
         UseBoard(settings.BoardType);
         Players = players;
         pieceType = settings.PieceType;
-        var template = pieceType == PieceType.JanggiPieces ? janggiTemplate : pieceType == PieceType.ChessPieces ? chessTemplate : blackTemplate;
+        var template = pieceType switch
+        {
+            PieceType.JanggiPieces => janggiTemplate,
+            PieceType.ChessPieces => chessTemplate,
+            PieceType.GonggiStones => gonggiTemplate,
+            _ => blackTemplate,
+        };
         PieceHeight = template.transform.position.y;
 
         var parent = new GameObject("Pieces").transform;
@@ -125,6 +138,7 @@ public class BoardSetup : MonoBehaviour
                 {
                     PieceType.JanggiPieces => SpawnJanggiPiece(player, i, lineup[i], position, parent),
                     PieceType.ChessPieces => SpawnChessPiece(player, i, lineup[i], position, parent),
+                    PieceType.GonggiStones => SpawnGonggi(player, i, position, parent),
                     _ => SpawnStone(player, i, position, parent),
                 };
                 var manager = piece.GetComponent<GamePieceManager>();
@@ -195,7 +209,7 @@ public class BoardSetup : MonoBehaviour
     private void OnDestroy()
     {
         foreach (var material in stoneMaterials.Values) Destroy(material);
-        foreach (var material in chessMaterials.Values) Destroy(material);
+        foreach (var material in sideMaterials.Values) Destroy(material);
     }
 
     // Letters face their owner's edge. Mass goes with volume against a go
@@ -236,7 +250,7 @@ public class BoardSetup : MonoBehaviour
         var mesh = ChessPieceMesh.Get(kind);
         piece.GetComponent<MeshFilter>().sharedMesh = mesh;
         piece.GetComponent<MeshCollider>().sharedMesh = mesh;
-        piece.GetComponent<MeshRenderer>().sharedMaterial = ChessMaterial(player, piece.GetComponent<MeshRenderer>().sharedMaterial);
+        piece.GetComponent<MeshRenderer>().sharedMaterial = SideMaterial(player, piece.GetComponent<MeshRenderer>().sharedMaterial);
         letterKeys[PieceId(player, index)] = "chess." + kind;
 
         var stoneBox = blackTemplate.GetComponent<BoxCollider>().size;
@@ -249,12 +263,33 @@ public class BoardSetup : MonoBehaviour
         return piece;
     }
 
-    private Material ChessMaterial(int player, Material template)
+    // Gonggi stones in the go stones' colours. The shot inside is the
+    // template's doing (BoardBuilder): its knocks are dead - nothing
+    // bounces off it, a piece that hits it square goes on with it - and a
+    // spin soon dies, the shot dragging behind the shell. Here: the weight
+    // of the shot, low down, so it rocks back onto its foot.
+    private GamePieceDragAndReleaseForce SpawnGonggi(int player, int index, Vector3 position, Transform parent)
     {
-        if (!chessMaterials.TryGetValue(player, out var material))
+        var piece = Instantiate(gonggiTemplate, position, Quaternion.Euler(0, -90 * Seat(player, Players), 0), parent);
+        piece.GetComponent<MeshFilter>().sharedMesh = GonggiMesh.Get();
+        piece.GetComponent<MeshCollider>().sharedMesh = GonggiMesh.Collider();
+        piece.GetComponent<MeshRenderer>().sharedMaterial = SideMaterial(player, piece.GetComponent<MeshRenderer>().sharedMaterial);
+
+        var body = piece.GetComponent<Rigidbody>();
+        body.mass = blackTemplate.GetComponent<Rigidbody>().mass * gonggiWeight;
+        body.centerOfMass = new Vector3(0, GonggiMesh.Height * gonggiBalance, 0);
+
+        piece.GetComponent<GamePieceManager>().radius = GonggiMesh.Radius;
+        piece.name = $"{new[] { "Black", "White", "Blue", "Red" }[player]} {index + 1} (gonggi)";
+        return piece;
+    }
+
+    private Material SideMaterial(int player, Material template)
+    {
+        if (!sideMaterials.TryGetValue(player, out var material))
         {
-            material = new Material(template) { color = SideStyle.Fill(player, PieceType.ChessPieces) };
-            chessMaterials[player] = material;
+            material = new Material(template) { color = SideStyle.Fill(player, pieceType) };
+            sideMaterials[player] = material;
         }
         return material;
     }

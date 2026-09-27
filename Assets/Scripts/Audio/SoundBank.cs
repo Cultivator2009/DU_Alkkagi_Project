@@ -13,6 +13,7 @@ public class SoundBank : ScriptableObject
     public AudioClip flick;
     public AudioClip fall;      // a piece going over the edge
     public AudioClip place;     // a stone set down while placing
+    public AudioClip gonggiHit; // a gonggi stone knocking: plastic, and the shot inside
 
     [Header("Interface")]
     public AudioClip click;

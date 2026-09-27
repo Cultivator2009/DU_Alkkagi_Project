@@ -9,7 +9,7 @@ using UnityEngine;
 public class PieceSounds : MonoBehaviour
 {
     public float minHitSpeed = 0.3f;
-    public bool knocksBoard;         // a chess piece: coming down on the board is heard too
+    public bool knocksBoard;         // a chess piece or gonggi stone: coming down on the board is heard too
     public float minToppleSpeed = 0.5f;
     public float fallHeight = -0.1f; // below the board surface: it went over the edge
 

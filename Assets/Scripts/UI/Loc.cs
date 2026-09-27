@@ -247,6 +247,7 @@ public static class Loc
         { "pieces.GoStones", ("바둑알", "Go stones") },
         { "pieces.JanggiPieces", ("장기말", "Janggi pieces") },
         { "pieces.ChessPieces", ("체스말", "Chess pieces") },
+        { "pieces.GonggiStones", ("공기알", "Gonggi stones") },
         // A chess piece's letter in the kill feed: the notation's, in both languages.
         { "chess.King", ("K", "K") },
         { "chess.Queen", ("Q", "Q") },

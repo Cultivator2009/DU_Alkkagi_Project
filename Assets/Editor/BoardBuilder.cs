@@ -5,9 +5,9 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
-// Builds the board variants and the janggi and chess piece templates into
-// GameScene, wrapping the scene's original go board as a variant too. Safe
-// to run again: it replaces what it made before.
+// Builds the board variants and the janggi, chess and gonggi piece
+// templates into GameScene, wrapping the scene's original go board as a
+// variant too. Safe to run again: it replaces what it made before.
 //
 // Boards are at their real sizes, at the scale where the go board's
 // 45.45 cm length is three units (ChessPieceMesh.UnitsPerCm):
@@ -26,6 +26,7 @@ internal static class BoardBuilder
     private const string ScenePath = "Assets/Scenes/GameScene.unity";
     private const string AssetDir = "Assets/Materials/Janggi";
     private const string ChessDir = "Assets/Materials/Chess";
+    private const string GonggiDir = "Assets/Materials/Gonggi";
     private const float GoWidth = 42.42f * ChessPieceMesh.UnitsPerCm;
     private const float Width = 2.8f;  // janggi: 9 files
     private const float Depth = 3.0f;  // 10 ranks, player to player
@@ -42,6 +43,7 @@ internal static class BoardBuilder
         var setup = Object.FindAnyObjectByType<BoardSetup>();
         Directory.CreateDirectory(AssetDir);
         Directory.CreateDirectory(ChessDir);
+        Directory.CreateDirectory(GonggiDir);
 
         var go = WrapGoBoard(setup.transform);
         FitGoBoard(go);
@@ -50,11 +52,12 @@ internal static class BoardBuilder
         setup.boards = new[] { go, janggi, chess };
         setup.janggiTemplate = BuildPieceTemplate(setup);
         setup.chessTemplate = BuildChessTemplate(setup);
+        setup.gonggiTemplate = BuildGonggiTemplate(setup);
 
         EditorUtility.SetDirty(setup);
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
-        Debug.Log("[Alkkagi] Go, janggi and chess boards and the janggi and chess piece templates built into GameScene.");
+        Debug.Log("[Alkkagi] Go, janggi and chess boards and the janggi, chess and gonggi piece templates built into GameScene.");
     }
 
     // The original board meshes move under a GoBoard variant, positions kept.
@@ -277,6 +280,60 @@ internal static class BoardBuilder
 
         piece.gameObject.SetActive(false);
         return piece;
+    }
+
+    // Like the chess template, with the shot inside a gonggi stone in its
+    // physics. Loose shot soaks up a knock (a dead-blow hammer is filled
+    // with it for that): the stone bounces off nothing and nothing bounces
+    // off it, and Minimum makes that so whatever it meets. And it drags on
+    // the shell's spin - like a raw egg, which spins slowly and stops soon -
+    // so the stone's spin dies away quickly. Mass and its low centre are
+    // set at spawn (BoardSetup).
+    private static GamePieceDragAndReleaseForce BuildGonggiTemplate(BoardSetup setup)
+    {
+        var templates = setup.blackTemplate.transform.parent;
+        var old = templates.Find("GonggiTemplate");
+        if (old != null) Object.DestroyImmediate(old.gameObject);
+
+        var source = setup.blackTemplate;
+        var stone = source.GetComponentsInChildren<Collider>(true).Select(c => c.sharedMaterial).FirstOrDefault(m => m != null);
+        var piece = Object.Instantiate(source, templates);
+        piece.name = "GonggiTemplate";
+        piece.transform.localPosition = new Vector3(0, 0.005f, 0);
+        piece.transform.localRotation = Quaternion.identity;
+        for (var i = piece.transform.childCount - 1; i >= 0; i--) Object.DestroyImmediate(piece.transform.GetChild(i).gameObject);
+        foreach (var box in piece.GetComponents<BoxCollider>()) Object.DestroyImmediate(box);
+        var leftover = piece.GetComponent<PlayersManager>();
+        if (leftover != null) Object.DestroyImmediate(leftover);
+
+        piece.GetComponent<MeshFilter>().sharedMesh = null; // BoardSetup builds it (GonggiMesh)
+        piece.GetComponent<MeshRenderer>().sharedMaterial = Material(GonggiDir, "GonggiPiece", Color.white, 0.8f, 0);
+        var collider = piece.gameObject.AddComponent<MeshCollider>();
+        collider.convex = true;
+        collider.sharedMaterial = GonggiPhysics(stone);
+        piece.GetComponent<Rigidbody>().angularDamping = 4f;
+
+        piece.gameObject.SetActive(false);
+        return piece;
+    }
+
+    // Plastic on the board slides as a stone does; it just doesn't bounce.
+    private static PhysicsMaterial GonggiPhysics(PhysicsMaterial stone)
+    {
+        var path = $"{GonggiDir}/Gonggi.physicMaterial";
+        var material = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(path);
+        if (material == null)
+        {
+            material = new PhysicsMaterial("Gonggi");
+            AssetDatabase.CreateAsset(material, path);
+        }
+        material.dynamicFriction = stone.dynamicFriction;
+        material.staticFriction = stone.staticFriction;
+        material.frictionCombine = stone.frictionCombine;
+        material.bounciness = 0f;
+        material.bounceCombine = PhysicsMaterialCombine.Minimum;
+        EditorUtility.SetDirty(material);
+        return material;
     }
 
     // Smooth metal that doesn't bounce: bouncing is what launched pieces.

@@ -8,7 +8,7 @@ public enum BoardSound : byte
     Hinge, // a piece meeting a board hinge
     Flick,
     Fall,  // a piece going over the edge
-    Topple // a standing piece (chess) knocking down onto the board
+    Topple // a standing piece (chess) knocking down onto the board, a gonggi stone landing
 }
 
 public struct BoardSoundEvent
@@ -38,11 +38,17 @@ public class BoardSounds : MonoBehaviour
     private AudioClip hit;
     private int soundsThisStep;
 
-    // Go stones click; janggi and chess pieces are wood.
+    // Go stones click; janggi and chess pieces are wood; gonggi stones
+    // rattle.
     public void Init(PieceType pieces)
     {
         Instance = this;
-        hit = pieces == PieceType.GoStones ? GameAudio.Bank.stoneHit : GameAudio.Bank.woodHit;
+        hit = pieces switch
+        {
+            PieceType.GoStones => GameAudio.Bank.stoneHit,
+            PieceType.GonggiStones => GameAudio.Bank.gonggiHit,
+            _ => GameAudio.Bank.woodHit,
+        };
     }
 
     private void OnDestroy()

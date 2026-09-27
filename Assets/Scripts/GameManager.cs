@@ -114,7 +114,8 @@ public class GameManager : MonoBehaviour
         new GameObject("CameraRig").AddComponent<CameraRig>().Init(vcams, Board.SurfaceBounds, settings.PieceType == PieceType.ChessPieces);
         new GameObject("BoardSounds").AddComponent<BoardSounds>().Init(settings.PieceType);
         new GameObject("HitEffects").AddComponent<HitEffects>();
-        foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>().knocksBoard = settings.PieceType == PieceType.ChessPieces;
+        var knocksBoard = settings.PieceType == PieceType.ChessPieces || settings.PieceType == PieceType.GonggiStones;
+        foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>().knocksBoard = knocksBoard;
 
         TurnController = new TurnController(Ruleset, playersList, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds);
         gameState = GameState.WaitingForPlayers;

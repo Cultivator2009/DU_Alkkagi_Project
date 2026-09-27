@@ -30,7 +30,8 @@ public enum PieceType : byte
     GoStones,
     JanggiPieces,
     Random,
-    ChessPieces // standing pieces that topple and roll
+    ChessPieces, // standing pieces that topple and roll
+    GonggiStones // plastic filled with steel shot: dead when they knock
 }
 
 public enum SpawnMode : byte
@@ -130,7 +131,7 @@ public sealed class MatchSettings
             v => Loc.Get("mode." + (MatchMode)v), onlineOnly: true),
         new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board", new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Random }, (int)global::BoardType.Go,
             v => Loc.Get("board." + (global::BoardType)v)),
-        new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces, (int)global::PieceType.ChessPieces, (int)global::PieceType.Random }, (int)global::PieceType.GoStones,
+        new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces, (int)global::PieceType.ChessPieces, (int)global::PieceType.GonggiStones, (int)global::PieceType.Random }, (int)global::PieceType.GoStones,
             v => Loc.Get("pieces." + (global::PieceType)v)),
         new MatchSettingDef(MatchSettingId.AimGuide, "aimGuide", "match.aimGuide", new[] { 1, 0 }, 1,
             v => Loc.Get(v == 1 ? "option.on" : "option.off")),

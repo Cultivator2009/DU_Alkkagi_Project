@@ -18,6 +18,7 @@ MonoBehaviour:
   flick: {fileID: 8300000, guid: f8491711fa7ff4b08befbcc3a6257633, type: 3}
   fall: {fileID: 8300000, guid: 2c40b1e3800c34cf1965bda2b547cff9, type: 3}
   place: {fileID: 8300000, guid: a426e5c751ecf4ed4a03a907fc6f81bf, type: 3}
+  gonggiHit: {fileID: 8300000, guid: ffec3c8ff2c244c25be360b1ad3f2436, type: 3}
   click: {fileID: 8300000, guid: 5a2b217670a9742a1af8d0ef2367dcf6, type: 3}
   tick: {fileID: 8300000, guid: dd9d0b1e8cf544fc7a8a5d86d0e22b7d, type: 3}
   turn: {fileID: 8300000, guid: 223e1affce31d4a97bcfbc4dcfd05220, type: 3}

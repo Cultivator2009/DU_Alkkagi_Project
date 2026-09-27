@@ -67,6 +67,13 @@ internal static class SoundBuilder
         // A card opening: hanji brushing past.
         Write("open", 0.26f, 0.35f, t => 0f, Swish(noise, 0.24f, 1500, 4500));
 
+        // Added 2026-09-28, last for the same reason.
+        // A gonggi stone knocking: the thin plastic shell's tick, then the
+        // steel shot inside rattling against it and settling.
+        Write("gonggi_hit", 0.16f, 0.85f, t =>
+            Mode(t, 2450, 0.009f, 1f) + Mode(t, 3900, 0.006f, 0.5f) + Mode(t, 1300, 0.012f, 0.25f),
+            Rattle(noise, 0.14f, 22));
+
         AssetDatabase.Refresh();
         var bank = AssetDatabase.LoadAssetAtPath<SoundBank>(BankPath);
         if (bank == null)
@@ -92,6 +99,7 @@ internal static class SoundBuilder
         bank.cancel = Clip("cancel");
         bank.stamp = Clip("stamp");
         bank.open = Clip("open");
+        bank.gonggiHit = Clip("gonggi_hit");
         EditorUtility.SetDirty(bank);
         AssetDatabase.SaveAssets();
         Debug.Log("[Alkkagi] Sounds built into " + AudioDir + " and " + BankPath + ".");
@@ -150,6 +158,27 @@ internal static class SoundBuilder
             var land = t - 0.26f;
             if (land > 0) samples[i] += Mode(land, 95, 0.07f, 1f) + Mode(land, 190, 0.04f, 0.4f);
         }
+        return samples;
+    }
+
+    // Shot rattling in a shell: grains, each a tiny high ring, most of them
+    // at once and fewer and softer as the shot settles.
+    private static float[] Rattle(System.Random noise, float seconds, int grains)
+    {
+        var samples = new float[(int)(Rate * seconds)];
+        for (var g = 0; g < grains; g++)
+        {
+            var at = 0.002f + Mathf.Pow((float)noise.NextDouble(), 1.8f) * (seconds - 0.02f);
+            var amplitude = 0.35f * Mathf.Exp(-at / 0.035f) * (0.4f + 0.6f * (float)noise.NextDouble());
+            var frequency = 5200 + 2600 * (float)noise.NextDouble();
+            var start = (int)(at * Rate);
+            for (var i = start; i < samples.Length && i < start + Rate / 200; i++)
+            {
+                var t = (float)(i - start) / Rate;
+                samples[i] += Mode(t, frequency, 0.0012f, amplitude) + amplitude * 0.3f * (float)(noise.NextDouble() * 2 - 1) * Mathf.Exp(-t / 0.0005f);
+            }
+        }
+        Highpass(samples, 1500);
         return samples;
     }
 
