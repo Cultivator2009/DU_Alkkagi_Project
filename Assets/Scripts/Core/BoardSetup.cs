@@ -5,8 +5,8 @@ using TMPro;
 using UnityEngine;
 
 // GameScene's board. Turns on the board the match rules pick, spawns each
-// side's pieces - go stones from the black/white templates, or janggi
-// pieces from the janggi template - holds the preset layouts and placement
+// side's pieces - go stones from the black/white templates, janggi pieces
+// or chess pieces from theirs - holds the preset layouts and placement
 // zones, and shows the placement phase while it runs.
 //
 // Two sides face each other across the board (south and north). Three or
@@ -32,6 +32,7 @@ public class BoardSetup : MonoBehaviour
     public GamePieceDragAndReleaseForce blackTemplate;
     public GamePieceDragAndReleaseForce whiteTemplate;
     public GamePieceDragAndReleaseForce janggiTemplate;
+    public GamePieceDragAndReleaseForce chessTemplate;
     public BoardVariant[] boards;
 
     // Children named "1".."12", each holding that many points: black's preset
@@ -55,6 +56,30 @@ public class BoardSetup : MonoBehaviour
     // out back row first, each row from the middle outward, so the general
     // sits at the back in the middle as on a real board.
     public int[] janggiLineup = { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6 };
+    // The chess pieces a side of N gets, the first N of these.
+    public ChessKind[] chessLineup =
+    {
+        ChessKind.King, ChessKind.Queen, ChessKind.Rook, ChessKind.Rook, ChessKind.Bishop, ChessKind.Bishop,
+        ChessKind.Knight, ChessKind.Knight, ChessKind.Pawn, ChessKind.Pawn, ChessKind.Pawn, ChessKind.Pawn,
+    };
+    [Range(0.1f, 0.6f)] public float chessBalance = 0.3f; // a chess piece's centre of mass, up its height: weighted at the foot, as real ones are
+
+    // The chess board's squares, 5.7 cm as at a tournament. Two sides on it
+    // start on real squares: chess pieces where chess puts them (the first
+    // twelve of chessLineup: e1, d1, a1, h1...), anything else from the
+    // middle of the back rank outward. The far side is the mirror, so the
+    // kings face each other up the e-file.
+    public static float ChessSquare => 5.7f * ChessPieceMesh.UnitsPerCm;
+    private static readonly Vector2Int[] ChessSquares =
+    {
+        new Vector2Int(4, 0), new Vector2Int(3, 0), new Vector2Int(0, 0), new Vector2Int(7, 0), new Vector2Int(2, 0), new Vector2Int(5, 0),
+        new Vector2Int(1, 0), new Vector2Int(6, 0), new Vector2Int(4, 1), new Vector2Int(3, 1), new Vector2Int(2, 1), new Vector2Int(5, 1),
+    };
+    private static readonly Vector2Int[] MiddleOutSquares =
+    {
+        new Vector2Int(4, 0), new Vector2Int(3, 0), new Vector2Int(5, 0), new Vector2Int(2, 0), new Vector2Int(6, 0), new Vector2Int(1, 0),
+        new Vector2Int(7, 0), new Vector2Int(0, 0), new Vector2Int(4, 1), new Vector2Int(3, 1), new Vector2Int(5, 1), new Vector2Int(2, 1),
+    };
 
     public float gap = 0.02f; // between two pieces placed side by side
     public Color zoneColor = new Color(0.18f, 0.14f, 0.10f, 0.10f);
@@ -69,7 +94,9 @@ public class BoardSetup : MonoBehaviour
 
     private readonly Dictionary<Rigidbody, CollisionDetectionMode> frozenBodies = new Dictionary<Rigidbody, CollisionDetectionMode>();
     private readonly Dictionary<int, Material> stoneMaterials = new Dictionary<int, Material>(); // the third and fourth sides' colours
-    private readonly Dictionary<char, string> letterKeys = new Dictionary<char, string>(); // janggi pieces, by id
+    private readonly Dictionary<int, Material> chessMaterials = new Dictionary<int, Material>(); // every side's
+    private readonly Dictionary<char, string> letterKeys = new Dictionary<char, string>(); // janggi and chess pieces, by id
+    private PieceType pieceType;
     private SpriteRenderer[] zoneMarkers;
 
     private BoardVariant ActiveOrFirst => Active != null ? Active : boards[0];
@@ -80,19 +107,26 @@ public class BoardSetup : MonoBehaviour
     {
         UseBoard(settings.BoardType);
         Players = players;
-        var janggi = settings.PieceType == PieceType.JanggiPieces;
-        PieceHeight = (janggi ? janggiTemplate : blackTemplate).transform.position.y;
+        pieceType = settings.PieceType;
+        var template = pieceType == PieceType.JanggiPieces ? janggiTemplate : pieceType == PieceType.ChessPieces ? chessTemplate : blackTemplate;
+        PieceHeight = template.transform.position.y;
 
         var parent = new GameObject("Pieces").transform;
         var pieces = new List<GamePieceDragAndReleaseForce>();
         for (var player = 0; player < players; player++)
         {
             var count = Mathf.Clamp(settings.StonesFor(player), 1, MaxStones);
-            var lineup = LineupRanks(count, Seat(player, players));
+            // On chess squares the layout is already in lineup order.
+            var lineup = OnChessSquares ? Enumerable.Range(0, count).ToArray() : LineupRanks(count, Seat(player, players));
             for (var i = 0; i < count; i++)
             {
                 var position = PresetPosition(player, i, count);
-                var piece = janggi ? SpawnJanggiPiece(player, i, lineup[i], position, parent) : SpawnStone(player, i, position, parent);
+                var piece = pieceType switch
+                {
+                    PieceType.JanggiPieces => SpawnJanggiPiece(player, i, lineup[i], position, parent),
+                    PieceType.ChessPieces => SpawnChessPiece(player, i, lineup[i], position, parent),
+                    _ => SpawnStone(player, i, position, parent),
+                };
                 var manager = piece.GetComponent<GamePieceManager>();
                 manager.playerIndex = player;
                 manager.pieceID = PieceId(player, i);
@@ -161,6 +195,7 @@ public class BoardSetup : MonoBehaviour
     private void OnDestroy()
     {
         foreach (var material in stoneMaterials.Values) Destroy(material);
+        foreach (var material in chessMaterials.Values) Destroy(material);
     }
 
     // Letters face their owner's edge. Mass goes with volume against a go
@@ -177,7 +212,7 @@ public class BoardSetup : MonoBehaviour
         var letterKey = SideStyle.ChoLetters(player) ? kind.choLabel : kind.hanLabel;
         letterKeys[PieceId(player, index)] = letterKey;
         label.text = SideStyle.PieceLetter(letterKey);
-        label.color = SideStyle.LetterColor(player);
+        label.color = SideStyle.LetterColor(player, PieceType.JanggiPieces);
         label.transform.localPosition = new Vector3(0, kind.height + 0.001f, 0);
         label.rectTransform.sizeDelta = Vector2.one * kind.width * 0.62f;
 
@@ -188,6 +223,51 @@ public class BoardSetup : MonoBehaviour
         piece.GetComponent<GamePieceManager>().radius = JanggiPieceMesh.Circumradius(kind.width);
         piece.name = $"{new[] { "Cho", "Han", "Blue", "Black" }[player]} {index + 1} ({label.text})";
         return piece;
+    }
+
+    // Standing pieces that topple and roll (ChessPieceMesh). Mass goes with
+    // volume, the same wood as the janggi pieces, and sits low in the foot,
+    // so a piece rocks before it tips.
+    private GamePieceDragAndReleaseForce SpawnChessPiece(int player, int index, int rank, Vector3 position, Transform parent)
+    {
+        var kind = chessLineup[Mathf.Min(rank, chessLineup.Length - 1)];
+        // Seat-facing, like the janggi letters: a knight looks across the board.
+        var piece = Instantiate(chessTemplate, position, Quaternion.Euler(0, -90 * Seat(player, Players), 0), parent);
+        var mesh = ChessPieceMesh.Get(kind);
+        piece.GetComponent<MeshFilter>().sharedMesh = mesh;
+        piece.GetComponent<MeshCollider>().sharedMesh = mesh;
+        piece.GetComponent<MeshRenderer>().sharedMaterial = ChessMaterial(player, piece.GetComponent<MeshRenderer>().sharedMaterial);
+        letterKeys[PieceId(player, index)] = "chess." + kind;
+
+        var stoneBox = blackTemplate.GetComponent<BoxCollider>().size;
+        var body = piece.GetComponent<Rigidbody>();
+        body.mass = blackTemplate.GetComponent<Rigidbody>().mass * ChessPieceMesh.Volume(kind) / (stoneBox.x * stoneBox.y * stoneBox.z);
+        body.centerOfMass = new Vector3(0, ChessPieceMesh.Height(kind) * chessBalance, 0);
+
+        piece.GetComponent<GamePieceManager>().radius = ChessPieceMesh.BaseRadius(kind);
+        piece.name = $"{new[] { "White", "Black", "Red", "Blue" }[player]} {index + 1} ({kind})";
+        return piece;
+    }
+
+    private Material ChessMaterial(int player, Material template)
+    {
+        if (!chessMaterials.TryGetValue(player, out var material))
+        {
+            material = new Material(template) { color = SideStyle.Fill(player, PieceType.ChessPieces) };
+            chessMaterials[player] = material;
+        }
+        return material;
+    }
+
+    // Two sides on the chess board start on its squares.
+    private bool OnChessSquares => ActiveOrFirst.type == BoardType.Chess && Players == 2;
+
+    // A square's centre for the south side; the north side's is its mirror.
+    private Vector2 ChessPoint(int index, int player)
+    {
+        var square = (pieceType == PieceType.ChessPieces ? ChessSquares : MiddleOutSquares)[Mathf.Min(index, ChessSquares.Length - 1)];
+        var point = new Vector2((square.x - 3.5f) * ChessSquare, (square.y - 3.5f) * ChessSquare);
+        return player == 0 ? point : new Vector2(point.x, -point.y);
     }
 
     // For each layout slot, its place in the lineup: back row first (the
@@ -207,6 +287,7 @@ public class BoardSetup : MonoBehaviour
 
     public Vector3 PresetPosition(int player, int index, int count)
     {
+        if (OnChessSquares) return OnBoard(ChessPoint(index, player));
         var seat = Seat(player, Players);
         var point = SouthPoint(index, count, seat);
         // Three or four sides: the rows are drawn for a 3 x 3 board; a

@@ -124,7 +124,7 @@ public class PlacementController : MonoBehaviour
     private bool TryGetBoardPoint(BoardSetup board, int player, out Vector3 point)
     {
         point = default;
-        if (mainCamera == null) return false;
+        if (mainCamera == null || !Pointer.OnScreen) return false;
         boardPlane.SetNormalAndPosition(Vector3.up, new Vector3(0, board.PieceHeight, 0));
         var ray = mainCamera.ScreenPointToRay(Input.mousePosition);
         if (!boardPlane.Raycast(ray, out var distance)) return false;
@@ -134,6 +134,7 @@ public class PlacementController : MonoBehaviour
 
     private GamePieceDragAndReleaseForce StoneUnderCursor()
     {
+        if (!Pointer.OnScreen) return null;
         var ray = mainCamera.ScreenPointToRay(Input.mousePosition);
         return Physics.Raycast(ray, out var hit, 100f) ? hit.collider.GetComponentInParent<GamePieceDragAndReleaseForce>() : null;
     }

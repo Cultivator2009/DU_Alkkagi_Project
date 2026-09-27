@@ -1,13 +1,16 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// One piece's knocks, hinge hits and fall, heard on the physics authority
-// and passed to BoardSounds. On a network guest the pieces are kinematic:
-// nothing collides and this stays quiet (the host's sounds come over).
+// One piece's knocks, hinge hits, fall and (a chess piece's) topples, heard
+// on the physics authority and passed to BoardSounds. On a network guest the
+// pieces are kinematic: nothing collides and this stays quiet (the host's
+// sounds come over).
 [RequireComponent(typeof(Rigidbody))]
 public class PieceSounds : MonoBehaviour
 {
     public float minHitSpeed = 0.3f;
+    public bool knocksBoard;         // a chess piece: coming down on the board is heard too
+    public float minToppleSpeed = 0.5f;
     public float fallHeight = -0.1f; // below the board surface: it went over the edge
 
     private Rigidbody body;
@@ -45,7 +48,16 @@ public class PieceSounds : MonoBehaviour
             kind = BoardSound.Hinge;
             key = collision.collider;
         }
-        else return; // the board itself
+        else if (knocksBoard)
+        {
+            // How hard it came down, not how fast it slides: a flicked piece
+            // skipping along the board isn't falling over.
+            speed = Mathf.Abs(Vector3.Dot(collision.relativeVelocity, collision.GetContact(0).normal));
+            if (speed < minToppleSpeed) return;
+            kind = BoardSound.Topple;
+            key = collision.collider;
+        }
+        else return; // the board itself, under a flat piece
 
         if (lastHit.TryGetValue(key, out var at) && Time.time - at < 0.1f) return;
         lastHit[key] = Time.time;

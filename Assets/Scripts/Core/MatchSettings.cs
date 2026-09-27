@@ -15,19 +15,22 @@ public enum MatchMode : byte
 }
 
 // Random is a lobby or setup choice only: MatchSettings.Resolve rolls it
-// before a match, so the board never sees it.
+// before a match, so the board never sees it. It keeps its number (saved
+// choices and lobby data are numbers); what came later goes after it.
 public enum BoardType : byte
 {
     Go,
     Janggi, // folding board: the hinges across the middle are obstacles
-    Random
+    Random,
+    Chess
 }
 
 public enum PieceType : byte
 {
     GoStones,
     JanggiPieces,
-    Random
+    Random,
+    ChessPieces // standing pieces that topple and roll
 }
 
 public enum SpawnMode : byte
@@ -125,9 +128,9 @@ public sealed class MatchSettings
         // Item joins the list with the item mode.
         new MatchSettingDef(MatchSettingId.Mode, "mode", "match.mode", new[] { (int)MatchMode.Normal, (int)MatchMode.Custom }, (int)MatchMode.Normal,
             v => Loc.Get("mode." + (MatchMode)v), onlineOnly: true),
-        new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board", new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Random }, (int)global::BoardType.Go,
+        new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board", new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Random }, (int)global::BoardType.Go,
             v => Loc.Get("board." + (global::BoardType)v)),
-        new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces, (int)global::PieceType.Random }, (int)global::PieceType.GoStones,
+        new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces, (int)global::PieceType.ChessPieces, (int)global::PieceType.Random }, (int)global::PieceType.GoStones,
             v => Loc.Get("pieces." + (global::PieceType)v)),
         new MatchSettingDef(MatchSettingId.AimGuide, "aimGuide", "match.aimGuide", new[] { 1, 0 }, 1,
             v => Loc.Get(v == 1 ? "option.on" : "option.off")),
@@ -230,9 +233,16 @@ public sealed class MatchSettings
     public MatchSettings Resolve()
     {
         var copy = Clone();
-        if (BoardType == BoardType.Random) copy.Set(MatchSettingId.BoardType, UnityEngine.Random.Range((int)BoardType.Go, (int)BoardType.Random));
-        if (PieceType == PieceType.Random) copy.Set(MatchSettingId.PieceType, UnityEngine.Random.Range((int)PieceType.GoStones, (int)PieceType.Random));
+        if (BoardType == BoardType.Random) copy.Set(MatchSettingId.BoardType, Roll(MatchSettingId.BoardType, (int)BoardType.Random));
+        if (PieceType == PieceType.Random) copy.Set(MatchSettingId.PieceType, Roll(MatchSettingId.PieceType, (int)PieceType.Random));
         return copy;
+    }
+
+    // Any of the rule's values but Random itself.
+    private static int Roll(MatchSettingId id, int random)
+    {
+        var choices = Defs[(int)id].Values.Where(v => v != random).ToArray();
+        return choices[UnityEngine.Random.Range(0, choices.Length)];
     }
 
     // ---- Storage ----

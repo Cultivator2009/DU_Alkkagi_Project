@@ -5,40 +5,56 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
-// Builds the janggi board variant and the janggi piece template into
-// GameScene, and wraps the existing go board as a variant too. Safe to run
-// again: it replaces what it made before.
+// Builds the board variants and the janggi and chess piece templates into
+// GameScene, wrapping the scene's original go board as a variant too. Safe
+// to run again: it replaces what it made before.
 //
-// The board: a generated wood texture with the 9 x 10 grid and both
-// palaces, and two metal hinges across the fold in the middle - on a real
-// folding board they stand proud of the surface, and in alkkagi they're
-// obstacles. Pieces get their mesh, letter and mass per kind at spawn
-// (BoardSetup), so the template only carries the shared parts.
-internal static class JanggiBuilder
+// Boards are at their real sizes, at the scale where the go board's
+// 45.45 cm length is three units (ChessPieceMesh.UnitsPerCm):
+// - go: 42.42 x 45.45 cm (the Japanese standard; its lines are 22 mm apart
+//   across and 23.7 along, which the original square texture, narrowed to
+//   the board, comes to).
+// - janggi: kept at the go board's size - sets vary, and a 4 cm general
+//   sits right on it. A generated wood texture with the 9 x 10 grid and both
+//   palaces, and two metal hinges across the fold - on a real folding board
+//   they stand proud of the surface, and in alkkagi they're obstacles.
+// - chess: 5.7 cm squares (a tournament board) with a 2.2 cm border, 50 cm.
+// Pieces get their mesh, letter and mass per kind at spawn (BoardSetup), so
+// the templates only carry the shared parts.
+internal static class BoardBuilder
 {
     private const string ScenePath = "Assets/Scenes/GameScene.unity";
     private const string AssetDir = "Assets/Materials/Janggi";
-    private const float Width = 2.8f;  // 9 files
+    private const string ChessDir = "Assets/Materials/Chess";
+    private const float GoWidth = 42.42f * ChessPieceMesh.UnitsPerCm;
+    private const float Width = 2.8f;  // janggi: 9 files
     private const float Depth = 3.0f;  // 10 ranks, player to player
-    private static readonly Rect BlackZone = new Rect(-1.25f, -1.35f, 2.5f, 1.05f);
+    private static readonly Rect BlackZone = new Rect(-1.25f, -1.35f, 2.5f, 1.05f); // go's too, now it's as narrow
     private static readonly float[] HingeX = { -0.8f, 0.8f };
+    private const float ChessBorder = 2.2f * ChessPieceMesh.UnitsPerCm;
+    private static float ChessSize => 8 * BoardSetup.ChessSquare + 2 * ChessBorder;
+    private static readonly Rect ChessZone = new Rect(-1.45f, -1.5f, 2.9f, 1.1f);
 
-    [MenuItem("Tools/Alkkagi/Build boards and janggi pieces")]
+    [MenuItem("Tools/Alkkagi/Build boards and piece templates")]
     private static void Build()
     {
         var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
         var setup = Object.FindAnyObjectByType<BoardSetup>();
         Directory.CreateDirectory(AssetDir);
+        Directory.CreateDirectory(ChessDir);
 
         var go = WrapGoBoard(setup.transform);
+        FitGoBoard(go);
         var janggi = BuildJanggiBoard(setup.transform, go);
-        setup.boards = new[] { go, janggi };
+        var chess = BuildChessBoard(setup.transform, go);
+        setup.boards = new[] { go, janggi, chess };
         setup.janggiTemplate = BuildPieceTemplate(setup);
+        setup.chessTemplate = BuildChessTemplate(setup);
 
         EditorUtility.SetDirty(setup);
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
-        Debug.Log("[Alkkagi] Go and janggi boards and the janggi piece template built into GameScene.");
+        Debug.Log("[Alkkagi] Go, janggi and chess boards and the janggi and chess piece templates built into GameScene.");
     }
 
     // The original board meshes move under a GoBoard variant, positions kept.
@@ -56,6 +72,18 @@ internal static class JanggiBuilder
         variant.type = BoardType.Go;
         variant.surface = cube.GetComponent<Collider>();
         return variant;
+    }
+
+    // The original board was square; a real one is a little narrower than
+    // it is long.
+    private static void FitGoBoard(BoardVariant go)
+    {
+        var cube = go.transform.Find("BoardCube");
+        cube.localScale = new Vector3(GoWidth, cube.localScale.y, Depth);
+        var quad = go.transform.Find("Quad");
+        quad.localScale = new Vector3(GoWidth, Depth, quad.localScale.z);
+        go.blackZone = BlackZone;
+        EditorUtility.SetDirty(go);
     }
 
     private static BoardVariant BuildJanggiBoard(Transform boardRoot, BoardVariant go)
@@ -185,6 +213,72 @@ internal static class JanggiBuilder
         return piece;
     }
 
+    private static BoardVariant BuildChessBoard(Transform boardRoot, BoardVariant go)
+    {
+        var old = boardRoot.Find("ChessBoard");
+        if (old != null) Object.DestroyImmediate(old.gameObject);
+        var root = new GameObject("ChessBoard").transform;
+        root.SetParent(boardRoot, false);
+
+        var size = ChessSize;
+        var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        cube.name = "BoardCube";
+        cube.transform.SetParent(root, false);
+        cube.transform.localPosition = new Vector3(0, -0.25f, 0);
+        cube.transform.localScale = new Vector3(size, 0.5f, size);
+        cube.GetComponent<MeshRenderer>().sharedMaterial = Material(ChessDir, "ChessBoardSide", new Color(0.36f, 0.24f, 0.15f), 0.3f, 0);
+        cube.GetComponent<Collider>().sharedMaterial = go.surface.sharedMaterial;
+
+        var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        quad.name = "Quad";
+        Object.DestroyImmediate(quad.GetComponent<Collider>());
+        quad.transform.SetParent(root, false);
+        quad.transform.localPosition = new Vector3(0, 0.0005f, 0);
+        quad.transform.localRotation = Quaternion.Euler(90, 0, 0);
+        quad.transform.localScale = new Vector3(size, size, 1);
+        var boardMaterial = Material(ChessDir, "ChessBoard", Color.white, 0.3f, 0);
+        boardMaterial.mainTexture = ChessTexture(size);
+        quad.GetComponent<MeshRenderer>().sharedMaterial = boardMaterial;
+
+        var variant = root.gameObject.AddComponent<BoardVariant>();
+        variant.type = BoardType.Chess;
+        variant.surface = cube.GetComponent<Collider>();
+        variant.blackZone = ChessZone;
+        root.gameObject.SetActive(false);
+        return variant;
+    }
+
+    // Like the janggi template, with the chess material (each side's colour
+    // is set at spawn) and more angular damping: a piece lying on its side
+    // would otherwise roll round and round, nothing on a flat board slowing it.
+    private static GamePieceDragAndReleaseForce BuildChessTemplate(BoardSetup setup)
+    {
+        var templates = setup.blackTemplate.transform.parent;
+        var old = templates.Find("ChessTemplate");
+        if (old != null) Object.DestroyImmediate(old.gameObject);
+
+        var source = setup.blackTemplate;
+        var physics = source.GetComponentsInChildren<Collider>(true).Select(c => c.sharedMaterial).FirstOrDefault(m => m != null);
+        var piece = Object.Instantiate(source, templates);
+        piece.name = "ChessTemplate";
+        piece.transform.localPosition = new Vector3(0, 0.005f, 0);
+        piece.transform.localRotation = Quaternion.identity;
+        for (var i = piece.transform.childCount - 1; i >= 0; i--) Object.DestroyImmediate(piece.transform.GetChild(i).gameObject);
+        foreach (var box in piece.GetComponents<BoxCollider>()) Object.DestroyImmediate(box);
+        var leftover = piece.GetComponent<PlayersManager>();
+        if (leftover != null) Object.DestroyImmediate(leftover);
+
+        piece.GetComponent<MeshFilter>().sharedMesh = null; // BoardSetup builds one per kind
+        piece.GetComponent<MeshRenderer>().sharedMaterial = Material(ChessDir, "ChessPiece", Color.white, 0.55f, 0);
+        var collider = piece.gameObject.AddComponent<MeshCollider>();
+        collider.convex = true;
+        collider.sharedMaterial = physics;
+        piece.GetComponent<Rigidbody>().angularDamping = 1.2f;
+
+        piece.gameObject.SetActive(false);
+        return piece;
+    }
+
     // Smooth metal that doesn't bounce: bouncing is what launched pieces.
     private static PhysicsMaterial HingePhysics()
     {
@@ -203,9 +297,11 @@ internal static class JanggiBuilder
         return material;
     }
 
-    private static Material Material(string name, Color color, float smoothness, float metallic)
+    private static Material Material(string name, Color color, float smoothness, float metallic) => Material(AssetDir, name, color, smoothness, metallic);
+
+    private static Material Material(string dir, string name, Color color, float smoothness, float metallic)
     {
-        var path = $"{AssetDir}/{name}.mat";
+        var path = $"{dir}/{name}.mat";
         var material = AssetDatabase.LoadAssetAtPath<Material>(path);
         if (material == null)
         {
@@ -253,6 +349,49 @@ internal static class JanggiBuilder
 
         var path = $"{AssetDir}/JanggiBoard.png";
         var texture = new Texture2D(w, h, TextureFormat.RGB24, true);
+        texture.SetPixels(pixels);
+        File.WriteAllBytes(path, texture.EncodeToPNG());
+        Object.DestroyImmediate(texture);
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+        var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+        importer.wrapMode = TextureWrapMode.Clamp;
+        importer.anisoLevel = 4;
+        importer.SaveAndReimport();
+        return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+    }
+
+    // Eight by eight, a1 dark (light on each player's right), maple and
+    // walnut with the grain running along the files, in a darker frame.
+    private static Texture2D ChessTexture(float size)
+    {
+        const int w = 1024;
+        var pixels = new Color[w * w];
+        var light = new Color(0.92f, 0.82f, 0.64f);
+        var dark = new Color(0.58f, 0.39f, 0.24f);
+        var frame = new Color(0.36f, 0.24f, 0.15f);
+        var inlay = new Color(0.80f, 0.66f, 0.45f);
+        var border = ChessBorder / size * w;
+        var square = (w - 2 * border) / 8f;
+        for (var y = 0; y < w; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var grain = Mathf.PerlinNoise(x * 0.05f, y * 0.004f) * 0.6f + Mathf.PerlinNoise(x * 0.25f, y * 0.02f) * 0.4f;
+            var fx = (x - border) / square;
+            var fy = (y - border) / square;
+            Color wood;
+            if (fx < 0 || fy < 0 || fx >= 8 || fy >= 8) wood = frame;
+            else wood = (Mathf.FloorToInt(fx) + Mathf.FloorToInt(fy)) % 2 == 0 ? dark : light;
+            pixels[y * w + x] = wood * (0.90f + 0.12f * grain);
+        }
+        // A thin inlay round the squares.
+        var edge = border - 3;
+        Line(pixels, w, w, edge, edge, w - edge, edge, 2.5f, inlay);
+        Line(pixels, w, w, w - edge, edge, w - edge, w - edge, 2.5f, inlay);
+        Line(pixels, w, w, w - edge, w - edge, edge, w - edge, 2.5f, inlay);
+        Line(pixels, w, w, edge, w - edge, edge, edge, 2.5f, inlay);
+
+        var path = $"{ChessDir}/ChessBoard.png";
+        var texture = new Texture2D(w, w, TextureFormat.RGB24, true);
         texture.SetPixels(pixels);
         File.WriteAllBytes(path, texture.EncodeToPNG());
         Object.DestroyImmediate(texture);

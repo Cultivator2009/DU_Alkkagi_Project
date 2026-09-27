@@ -111,10 +111,10 @@ public class GameManager : MonoBehaviour
 
         vcams = GameObject.FindGameObjectsWithTag("vcam");
         // Lives in GameScene, so it goes with the match.
-        new GameObject("CameraRig").AddComponent<CameraRig>().Init(vcams, Board.SurfaceBounds);
-        new GameObject("BoardSounds").AddComponent<BoardSounds>().Init(settings.PieceType == PieceType.JanggiPieces);
+        new GameObject("CameraRig").AddComponent<CameraRig>().Init(vcams, Board.SurfaceBounds, settings.PieceType == PieceType.ChessPieces);
+        new GameObject("BoardSounds").AddComponent<BoardSounds>().Init(settings.PieceType);
         new GameObject("HitEffects").AddComponent<HitEffects>();
-        foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>();
+        foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>().knocksBoard = settings.PieceType == PieceType.ChessPieces;
 
         TurnController = new TurnController(Ruleset, playersList, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds);
         gameState = GameState.WaitingForPlayers;

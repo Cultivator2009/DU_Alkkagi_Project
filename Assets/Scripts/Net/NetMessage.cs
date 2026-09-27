@@ -17,7 +17,7 @@ public enum NetMessageType : byte
     PlaceRequest = 11,   // guest -> host: put/move one of my stones
     PlacementReady = 12, // guest -> host: my stones are final
     Kick = 13,           // host -> guest: leave my lobby
-    BoardSound = 14,     // host -> guest: a knock, hinge, flick or fall to play, and where (unreliable)
+    BoardSound = 14,     // host -> guest: a knock, hinge, flick, fall or topple to play, and where (unreliable)
     Concede = 15,        // guest -> host: I give up
     PlayerOut = 16       // host -> guests: a side is out and the match goes on (three or four)
 }
@@ -49,7 +49,7 @@ public static class NetMessage
     // Bump whenever a message changes shape. Lobbies advertise it, and a
     // build only lists and joins lobbies on its own version: two builds that
     // disagree here would misread each other's messages mid-match.
-    public const int ProtocolVersion = 5;
+    public const int ProtocolVersion = 6;
 
     public static byte[] WriteStartMatch(int localPlayerId, IReadOnlyList<PieceOwnerEntry> pieceOwners)
     {

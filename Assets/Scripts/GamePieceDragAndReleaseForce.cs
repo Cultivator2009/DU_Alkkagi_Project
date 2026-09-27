@@ -78,13 +78,16 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             // plane.SetNormalAndPosition(transform.up,transform.position);
             plane.SetNormalAndPosition(Vector3.up,transform.position);
             mousePosInput = Input.mousePosition;
-            ray = mainCam.ScreenPointToRay(mousePosInput);
-
             // Get the end position of the drag in the world space
             startPos = transform.position;
 
-            // https://docs.unity3d.com/ScriptReference/Physics.Raycast.html
-            if (plane.Raycast(ray, out float dist)) endPos = ray.GetPoint(dist);
+            // Off the window the pull holds where it was.
+            if (Pointer.OnScreen)
+            {
+                ray = mainCam.ScreenPointToRay(mousePosInput);
+                // https://docs.unity3d.com/ScriptReference/Physics.Raycast.html
+                if (plane.Raycast(ray, out float dist)) endPos = ray.GetPoint(dist);
+            }
             // endPos = mainCam.ScreenToWorldPoint(new Vector3(mousePosInput.x, mousePosInput.y, mainCam.transform.position.y));
             // endPos.y = transform.position.y;
 

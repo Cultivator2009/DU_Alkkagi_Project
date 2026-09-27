@@ -243,8 +243,17 @@ public static class Loc
         { "match.pieces", ("알", "Pieces") },
         { "board.Go", ("바둑판", "Go board") },
         { "board.Janggi", ("장기판 (경첩)", "Janggi (hinged)") },
+        { "board.Chess", ("체스판", "Chess board") },
         { "pieces.GoStones", ("바둑알", "Go stones") },
         { "pieces.JanggiPieces", ("장기말", "Janggi pieces") },
+        { "pieces.ChessPieces", ("체스말", "Chess pieces") },
+        // A chess piece's letter in the kill feed: the notation's, in both languages.
+        { "chess.King", ("K", "K") },
+        { "chess.Queen", ("Q", "Q") },
+        { "chess.Rook", ("R", "R") },
+        { "chess.Bishop", ("B", "B") },
+        { "chess.Knight", ("N", "N") },
+        { "chess.Pawn", ("P", "P") },
         // Rolled by the host for each match.
         { "board.Random", ("랜덤", "Random") },
         { "pieces.Random", ("랜덤", "Random") },

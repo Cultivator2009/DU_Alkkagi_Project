@@ -7,7 +7,8 @@ public enum BoardSound : byte
     Hit,   // two pieces knocking together
     Hinge, // a piece meeting a board hinge
     Flick,
-    Fall   // a piece going over the edge
+    Fall,  // a piece going over the edge
+    Topple // a standing piece (chess) knocking down onto the board
 }
 
 public struct BoardSoundEvent
@@ -37,10 +38,11 @@ public class BoardSounds : MonoBehaviour
     private AudioClip hit;
     private int soundsThisStep;
 
-    public void Init(bool janggiPieces)
+    // Go stones click; janggi and chess pieces are wood.
+    public void Init(PieceType pieces)
     {
         Instance = this;
-        hit = janggiPieces ? GameAudio.Bank.woodHit : GameAudio.Bank.stoneHit;
+        hit = pieces == PieceType.GoStones ? GameAudio.Bank.stoneHit : GameAudio.Bank.woodHit;
     }
 
     private void OnDestroy()
@@ -89,6 +91,7 @@ public class BoardSounds : MonoBehaviour
         {
             case BoardSound.Fall: return 0.8f;
             case BoardSound.Flick: return Mathf.Clamp01(0.35f + speed / 25f);
+            case BoardSound.Topple: return 0.1f + 0.6f * Mathf.Pow(Mathf.Clamp01(speed / 3f), 0.6f);
             default: return 0.15f + 0.85f * Mathf.Pow(Mathf.Clamp01(speed / fullHitSpeed), 0.6f);
         }
     }
@@ -106,6 +109,7 @@ public class BoardSounds : MonoBehaviour
         var clip = sound.Kind switch
         {
             BoardSound.Hit => hit,
+            BoardSound.Topple => hit,
             BoardSound.Hinge => bank.hingeHit,
             BoardSound.Flick => bank.flick,
             _ => bank.fall,
@@ -113,6 +117,7 @@ public class BoardSounds : MonoBehaviour
         // Harder knocks ring a touch higher; a small random spread keeps a
         // volley of hits from sounding like one sample repeated.
         var pitch = UnityEngine.Random.Range(0.95f, 1.05f) + (sound.Kind == BoardSound.Hit ? 0.08f * sound.Volume : 0f);
+        if (sound.Kind == BoardSound.Topple) pitch *= 0.72f; // a whole piece on the board is deeper than a knock
         GameAudio.PlayBoard(clip, sound.Volume, pitch, sound.Pan);
     }
 }

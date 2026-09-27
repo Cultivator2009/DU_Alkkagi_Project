@@ -75,7 +75,7 @@ public class KillFeed : MonoBehaviour
         if (badgeKey != null) entry.badgeText.text = Loc.Get(badgeKey);
     }
 
-    // The side's stone, or for a janggi piece its wood disc with the letter.
+    // The side's stone, or for a janggi or chess piece its disc with the letter.
     private static void Icon(SideMark mark, TMPro.TMP_Text letter, int playerId, char pieceId, BoardSetup board, PieceType pieces)
     {
         mark.playerId = playerId;
@@ -84,6 +84,6 @@ public class KillFeed : MonoBehaviour
         letter.gameObject.SetActive(key != null);
         if (key == null) return;
         letter.text = SideStyle.PieceLetter(key);
-        letter.color = SideStyle.LetterColor(playerId);
+        letter.color = SideStyle.LetterColor(playerId, pieces);
     }
 }

@@ -26,6 +26,10 @@ public class CameraRig : MonoBehaviour
     public float maxZoom = 1.35f;      // and furthest
     public float zoomStep = 0.05f;     // per wheel notch
     public float zoomSharpness = 14f;  // how fast the view follows the wheel (1/s)
+    // The main view's with standing pieces (chess), narrower and from further
+    // back so the board is framed the same: seen from straight above at the
+    // scene's 60 degrees, a king by the edge leaned a whole square out over it.
+    public float tallFieldOfView = 35f;
 
     private Transform mainView;  // the main virtual camera
     private float mainFieldOfView;
@@ -47,7 +51,7 @@ public class CameraRig : MonoBehaviour
 
     // vcams: the scene's tagged virtual cameras; the main view is the plain
     // one with the highest priority, the free look's target is its pivot.
-    public void Init(GameObject[] vcams, Bounds surface)
+    public void Init(GameObject[] vcams, Bounds surface, bool tallPieces = false)
     {
         Instance = this;
         var main = vcams.Select(v => v.GetComponent<CinemachineVirtualCamera>()).Where(v => v != null).OrderByDescending(v => v.Priority).First();
@@ -60,8 +64,22 @@ public class CameraRig : MonoBehaviour
         var half = surface.extents * reach;
         limits = Rect.MinMaxRect(center.x - half.x, center.z - half.z, center.x + half.x, center.z + half.z);
         boardHeight = surface.max.y;
-        homeDistance = (boardHeight - mainHome.y) / Mathf.Min(-0.01f, mainView.forward.y);
+        // The scene frames a board FramedDepth deep; another is framed the
+        // same, from further back or closer in, so it fills the same height.
+        var distance = (boardHeight - mainHome.y) / Mathf.Min(-0.01f, mainView.forward.y);
+        var fit = surface.size.z / FramedDepth;
+        if (tallPieces)
+        {
+            fit *= Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Tan(tallFieldOfView * 0.5f * Mathf.Deg2Rad);
+            mainFieldOfView = tallFieldOfView;
+            main.m_Lens.FieldOfView = tallFieldOfView;
+        }
+        homeDistance = distance * fit;
+        mainHome -= mainView.forward * (homeDistance - distance);
+        mainView.position = mainHome;
     }
+
+    private const float FramedDepth = 3f;
 
     private void OnDestroy()
     {

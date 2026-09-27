@@ -107,7 +107,7 @@ public class AimIndicator : MonoBehaviour
     // Not while the view moves, the game is paused, or the cursor is on the HUD.
     private GamePieceDragAndReleaseForce PieceUnderCursor()
     {
-        if (CameraRig.Busy || Time.timeScale <= 0) return null;
+        if (CameraRig.Busy || Time.timeScale <= 0 || !Pointer.OnScreen) return null;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
         var ray = worldCamera.ScreenPointToRay(Input.mousePosition);
         if (!Physics.Raycast(ray, out var hit, 100f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return null;
