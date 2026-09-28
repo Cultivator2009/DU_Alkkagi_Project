@@ -41,6 +41,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     private Plane plane;
     private Ray ray;
     public bool isSelected = false;
+    public int PickRank { get; private set; } // among the pieces under the last click, 0 = nearest
     public bool isDragging = false;
     public bool isOnfire = false;
     public bool isCancelled = false;
@@ -105,6 +106,9 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         else powerNotch = 0;
         // https://docs.unity3d.com/ScriptReference/Input.GetMouseButtonDown.html
         if (isDragging && KeyBindings.Down(GameAction.CancelAim)) Cancel();
+        // Let go: Unity's OnMouseUp would go to the piece the click landed
+        // on, which needn't be the one picked (OnMouseDown).
+        if (isDragging && Input.GetMouseButtonUp(0)) isOnfire = true;
 
         // Debug lines
         // Debug.Log(mainCam.transform.position.y);
@@ -188,20 +192,21 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         }
     }
 
+    // Unity sends this to whichever piece is first under the click. Every
+    // piece under it is marked, nearest first, and PieceSelector takes the
+    // nearest one that may be moved: a piece of your own under someone
+    // else's can still be picked up.
     private void OnMouseDown()
     {
         // Physics picking ignores the UI: a click on a menu or button over
         // the board would otherwise also pick up the piece under it.
         if (UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
         if (CameraRig.Busy) return; // no aiming while the view moves
-        isSelected = true;
-    }
-
-    private void OnMouseUp()
-    {
-        if (isDragging)
+        var under = PiecePicker.UnderCursor(mainCam);
+        for (var i = 0; i < under.Count; i++)
         {
-            isOnfire = true;
+            under[i].isSelected = true;
+            under[i].PickRank = i;
         }
     }
 }

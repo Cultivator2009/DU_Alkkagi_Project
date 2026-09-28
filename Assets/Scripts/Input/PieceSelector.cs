@@ -18,25 +18,22 @@ public class PieceSelector
         this.pieces = pieces;
     }
 
-    // Piece hit-testing is handled by Unity's own OnMouseDown on each piece's
-    // collider, so this only needs to read the isSelected flag it sets and
-    // gate it by turn ownership.
+    // A click marks every piece under it (OnMouseDown, with PickRank);
+    // this reads the marks, gated by turn ownership: the nearest piece the
+    // side to move may take. Every other mark goes.
     public GamePieceDragAndReleaseForce TrySelect(int currentPlayerID)
     {
+        GamePieceDragAndReleaseForce picked = null;
         foreach (var piece in pieces)
         {
             if (!piece.isSelected || KeyBindings.Down(GameAction.CancelAim)) continue;
 
-            var pieceManager = piece.GetComponent<GamePieceManager>();
-            if (LocalPlayerId.HasValue && pieceManager.playerIndex != LocalPlayerId.Value)
-            {
-                piece.isSelected = false;
-                continue;
-            }
-            if (pieceManager.playerIndex == currentPlayerID) return piece;
-
-            piece.isSelected = false;
+            var playerIndex = piece.GetComponent<GamePieceManager>().playerIndex;
+            var mayTake = playerIndex == currentPlayerID && (!LocalPlayerId.HasValue || playerIndex == LocalPlayerId.Value);
+            if (mayTake && (picked == null || piece.PickRank < picked.PickRank)) picked = piece;
         }
-        return null;
+        foreach (var piece in pieces)
+            if (piece != picked) piece.isSelected = false;
+        return picked;
     }
 }

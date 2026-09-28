@@ -189,6 +189,7 @@ public class BoardSetup : MonoBehaviour
         var template = player == 0 ? blackTemplate : whiteTemplate;
         var piece = Instantiate(template, position, template.transform.rotation, parent);
         piece.name = $"{new[] { "Black", "White", "Blue", "Red" }[player]} {index + 1}";
+        piece.GetComponent<MeshCollider>().sharedMesh = GoStoneCollider.Get();
         piece.GetComponent<GamePieceManager>().radius = StoneRadius;
         if (player >= 2)
             foreach (var renderer in piece.GetComponentsInChildren<Renderer>())
@@ -247,9 +248,18 @@ public class BoardSetup : MonoBehaviour
         var kind = chessLineup[Mathf.Min(rank, chessLineup.Length - 1)];
         // Seat-facing, like the janggi letters: a knight looks across the board.
         var piece = Instantiate(chessTemplate, position, Quaternion.Euler(0, -90 * Seat(player, Players), 0), parent);
-        var mesh = ChessPieceMesh.Get(kind);
-        piece.GetComponent<MeshFilter>().sharedMesh = mesh;
-        piece.GetComponent<MeshCollider>().sharedMesh = mesh;
+        piece.GetComponent<MeshFilter>().sharedMesh = ChessPieceMesh.Get(kind);
+        // The template's collider takes the first part, and copies of it the rest.
+        var parts = ChessPieceMesh.Colliders(kind);
+        var collider = piece.GetComponent<MeshCollider>();
+        collider.sharedMesh = parts[0];
+        for (var i = 1; i < parts.Length; i++)
+        {
+            var part = piece.gameObject.AddComponent<MeshCollider>();
+            part.convex = true;
+            part.sharedMaterial = collider.sharedMaterial;
+            part.sharedMesh = parts[i];
+        }
         piece.GetComponent<MeshRenderer>().sharedMaterial = SideMaterial(player, piece.GetComponent<MeshRenderer>().sharedMaterial);
         letterKeys[PieceId(player, index)] = "chess." + kind;
 

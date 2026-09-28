@@ -94,7 +94,7 @@ public class AimIndicator : MonoBehaviour
     private void ShowHover()
     {
         var piece = worldCamera != null && game != null ? PieceUnderCursor() : null;
-        var show = piece != null && game.MayPickUp(piece.GetComponent<GamePieceManager>().playerIndex);
+        var show = piece != null;
         hoverRing.gameObject.SetActive(show);
         if (!show) return;
         var origin = piece.transform.position;
@@ -104,14 +104,14 @@ public class AimIndicator : MonoBehaviour
         hoverRing.sizeDelta = Vector2.one * (radius * 2 * (1 + 0.05f * Mathf.Sin(Time.unscaledTime * 6f))); // breathing
     }
 
-    // Not while the view moves, the game is paused, or the cursor is on the HUD.
+    // The piece a click here would pick up (as PieceSelector takes it): the
+    // nearest under the cursor that this screen may move. Not while the
+    // view moves, the game is paused, or the cursor is on the HUD.
     private GamePieceDragAndReleaseForce PieceUnderCursor()
     {
         if (CameraRig.Busy || Time.timeScale <= 0 || !Pointer.OnScreen) return null;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
-        var ray = worldCamera.ScreenPointToRay(Input.mousePosition);
-        if (!Physics.Raycast(ray, out var hit, 100f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return null;
-        return hit.collider.GetComponentInParent<GamePieceDragAndReleaseForce>();
+        return PiecePicker.UnderCursor(worldCamera).FirstOrDefault(p => game.MayPickUp(p.GetComponent<GamePieceManager>().playerIndex));
     }
 
     // First contact along the shot, on the board plane: the nearest piece

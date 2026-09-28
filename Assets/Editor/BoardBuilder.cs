@@ -47,6 +47,7 @@ internal static class BoardBuilder
 
         var go = WrapGoBoard(setup.transform);
         FitGoBoard(go);
+        FitGoStones(setup);
         var janggi = BuildJanggiBoard(setup.transform, go);
         var chess = BuildChessBoard(setup.transform, go);
         setup.boards = new[] { go, janggi, chess };
@@ -87,6 +88,29 @@ internal static class BoardBuilder
         quad.localScale = new Vector3(GoWidth, Depth, quad.localScale.z);
         go.blackZone = BlackZone;
         EditorUtility.SetDirty(go);
+    }
+
+    // The go stones' eight boxes (a flat-topped disc) give way to one convex
+    // collider of the stone's own shape (GoStoneCollider, set at spawn).
+    // The big trigger box on the stone stays: it's what the death trigger
+    // below the board catches, and the other pieces' masses are measured
+    // against it.
+    private static void FitGoStones(BoardSetup setup)
+    {
+        foreach (var stone in new[] { setup.blackTemplate, setup.whiteTemplate })
+        {
+            var boxes = stone.GetComponentsInChildren<BoxCollider>(true).Where(b => b.transform != stone.transform).ToArray();
+            var physics = boxes.Select(b => b.sharedMaterial).FirstOrDefault(m => m != null);
+            foreach (var box in boxes) Object.DestroyImmediate(box.gameObject);
+            var collider = stone.GetComponent<MeshCollider>();
+            if (collider == null)
+            {
+                collider = stone.gameObject.AddComponent<MeshCollider>();
+                collider.convex = true;
+                collider.sharedMaterial = physics;
+            }
+            EditorUtility.SetDirty(stone.gameObject);
+        }
     }
 
     private static BoardVariant BuildJanggiBoard(Transform boardRoot, BoardVariant go)
@@ -190,7 +214,7 @@ internal static class BoardBuilder
         piece.transform.localPosition = new Vector3(0, 0.005f, 0);
         piece.transform.localRotation = Quaternion.identity;
         for (var i = piece.transform.childCount - 1; i >= 0; i--) Object.DestroyImmediate(piece.transform.GetChild(i).gameObject);
-        foreach (var box in piece.GetComponents<BoxCollider>()) Object.DestroyImmediate(box);
+        foreach (var stoneCollider in piece.GetComponents<Collider>()) Object.DestroyImmediate(stoneCollider);
         var leftover = piece.GetComponent<PlayersManager>(); // came along from the old scene stones
         if (leftover != null) Object.DestroyImmediate(leftover);
 
@@ -267,7 +291,7 @@ internal static class BoardBuilder
         piece.transform.localPosition = new Vector3(0, 0.005f, 0);
         piece.transform.localRotation = Quaternion.identity;
         for (var i = piece.transform.childCount - 1; i >= 0; i--) Object.DestroyImmediate(piece.transform.GetChild(i).gameObject);
-        foreach (var box in piece.GetComponents<BoxCollider>()) Object.DestroyImmediate(box);
+        foreach (var stoneCollider in piece.GetComponents<Collider>()) Object.DestroyImmediate(stoneCollider);
         var leftover = piece.GetComponent<PlayersManager>();
         if (leftover != null) Object.DestroyImmediate(leftover);
 
@@ -302,7 +326,7 @@ internal static class BoardBuilder
         piece.transform.localPosition = new Vector3(0, 0.005f, 0);
         piece.transform.localRotation = Quaternion.identity;
         for (var i = piece.transform.childCount - 1; i >= 0; i--) Object.DestroyImmediate(piece.transform.GetChild(i).gameObject);
-        foreach (var box in piece.GetComponents<BoxCollider>()) Object.DestroyImmediate(box);
+        foreach (var stoneCollider in piece.GetComponents<Collider>()) Object.DestroyImmediate(stoneCollider);
         var leftover = piece.GetComponent<PlayersManager>();
         if (leftover != null) Object.DestroyImmediate(leftover);
 
