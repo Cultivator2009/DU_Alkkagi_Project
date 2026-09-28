@@ -55,12 +55,17 @@ public class PlacementController : MonoBehaviour
         }
 
         var player = Actor;
+        if (mainCamera == null) mainCamera = Camera.main;
         if (player < 0 || !phase.CanAct(player))
         {
             dragging = null;
+            PieceOutline.For(mainCamera).Set(PieceOutline.Mark.Hover, null);
             return;
         }
-        if (mainCamera == null) mainCamera = Camera.main;
+        // The stone being moved, or the one a press here would pick up.
+        var under = dragging != null ? dragging : StoneUnderCursor();
+        var movable = under != null && under.GetComponent<GamePieceManager>().playerIndex == player && phase.CanMoveStones && (dragging != null || !IsPointerOverUI());
+        PieceOutline.For(mainCamera).Set(PieceOutline.Mark.Hover, movable ? under : null);
         var board = gameManager.Board;
         if (!TryGetBoardPoint(board, player, out var point)) return;
 

@@ -327,10 +327,10 @@ namespace AlkkagiUIEditor
             feed.template = entry;
         }
 
-        // Option A from the aim-UI mockups: power ring around the stone, shot
-        // arrow, % label, a faint pull line, and the optional first-contact
-        // guide. AimIndicator positions everything each frame; sizes here are
-        // just the resting shape.
+        // Option A from the aim-UI mockups, its power ring now the piece's own
+        // outline: shot arrow, % label, a faint pull line, and the optional
+        // first-contact guide. AimIndicator positions everything each frame;
+        // sizes here are just the resting shape.
         private static void BuildAim(Transform root)
         {
             var area = UIKit.Node("Aim", root).Stretch();
@@ -351,26 +351,11 @@ namespace AlkkagiUIEditor
             dot.rectTransform.Place(center, Vector2.zero, new Vector2(7, 7));
             dot.gameObject.SetActive(false);
             aim.dotTemplate = dot.gameObject;
-            var targetMark = UIKit.Image(area, "TargetMark", UIKit.CircleOutline, Faded(Theme.Seal, 0.85f));
-            targetMark.rectTransform.Place(center, Vector2.zero, new Vector2(60, 60));
-            aim.targetMark = targetMark.rectTransform;
-            var hover = UIKit.Image(area, "HoverRing", UIKit.CircleOutline, Faded(Theme.Ink, 0.6f));
-            hover.rectTransform.Place(center, Vector2.zero, new Vector2(80, 80));
-            hover.gameObject.SetActive(false);
-            aim.hoverRing = hover.rectTransform;
+            // The piece under the cursor, the aimed one and the one the shot
+            // would meet are outlined in the scene (PieceOutline), not ringed here.
 
-            aim.ring = UIKit.Node("Ring", area).Place(center, Vector2.zero, new Vector2(80, 80));
-            UIKit.Image(aim.ring, "Track", UIKit.CircleOutline, Faded(Theme.Ink, 0.2f)).rectTransform.Stretch();
-            aim.ringFill = UIKit.Image(aim.ring, "Fill", UIKit.CircleOutline, Theme.Seal);
-            aim.ringFill.rectTransform.Stretch();
-            aim.ringFill.type = UnityEngine.UI.Image.Type.Filled;
-            aim.ringFill.fillMethod = UnityEngine.UI.Image.FillMethod.Radial360;
-            aim.ringFill.fillOrigin = (int)UnityEngine.UI.Image.Origin360.Top;
-            aim.ringFill.fillClockwise = true;
-            aim.ringFill.fillAmount = 0.72f;
-
-            // Pivot at the base so it rotates about the ring edge; the head rides
-            // on the shaft's tip as the shaft grows with power.
+            // Pivot at the base so it turns about the piece's edge; the head
+            // rides on the shaft's tip as the shaft grows with power.
             aim.arrow = UIKit.Node("Arrow", area).Place(center, Vector2.zero, new Vector2(30, 10), new Vector2(0.5f, 0));
             var shaft = UIKit.Image(aim.arrow, "Shaft", null, Theme.Seal);
             shaft.rectTransform.Place(new Vector2(0.5f, 0), Vector2.zero, new Vector2(8, 100), new Vector2(0.5f, 0));

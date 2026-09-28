@@ -3,19 +3,16 @@ using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
-// Screen-space aiming feedback for the piece being dragged: a ring around
-// the stone that fills with power, an arrow in the shot direction, the
-// power percentage, a faint line back to the pull point, and - when the
+// Screen-space aiming feedback for the piece being dragged: a line round it
+// (PieceOutline) that deepens with power, an arrow in the shot direction,
+// the power percentage, a faint line back to the pull point, and - when the
 // match allows it (MatchSettings.AimGuide) - a dotted guide up to the first
-// stone or board edge the shot would reach. Only ever shows for this
-// machine's own drag. Before a drag, a ring round the piece under the
-// cursor says it can be picked up.
+// stone or board edge the shot would reach, the stone outlined too. Only
+// ever shows for this machine's own drag. Before a drag, a line round the
+// piece under the cursor says it can be picked up.
 public class AimIndicator : MonoBehaviour
 {
-    public RectTransform ring;
-    public Image ringFill;              // Filled / Radial360
     public RectTransform arrow;         // pivot at its base, pointing up
     public RectTransform arrowShaft;
     public RectTransform powerLabel;
@@ -24,9 +21,7 @@ public class AimIndicator : MonoBehaviour
     public RectTransform pullMark;
     public RectTransform guideRoot;
     public GameObject dotTemplate;
-    public RectTransform targetMark;
-    public RectTransform hoverRing;     // round a piece this screen may pick up, under the cursor
-    public float ringPadding = 14f;
+    public float arrowGap = 14f;        // between the piece's outline and the arrow
     public float arrowMaxLength = 150f;
     public float labelGap = 46f;
     public float dotSpacing = 16f;
@@ -36,6 +31,7 @@ public class AimIndicator : MonoBehaviour
     private Canvas canvas;
     private Camera worldCamera;
     private MainGameUIController game;
+    private PieceOutline outline;
     private bool guideEnabled;
 
     private void OnEnable()
@@ -44,8 +40,15 @@ public class AimIndicator : MonoBehaviour
         canvas = GetComponentInParent<Canvas>();
         game = GetComponentInParent<MainGameUIController>();
         worldCamera = Camera.main;
+        if (worldCamera != null) outline = PieceOutline.For(worldCamera);
         guideEnabled = MatchSettings.Current.AimGuide; // fixed for the match
         SetVisible(false);
+    }
+
+    private void OnDisable()
+    {
+        if (outline == null) return;
+        foreach (PieceOutline.Mark mark in System.Enum.GetValues(typeof(PieceOutline.Mark))) outline.Set(mark, null);
     }
 
     private void LateUpdate()
@@ -55,21 +58,23 @@ public class AimIndicator : MonoBehaviour
         if (piece == null || worldCamera == null)
         {
             SetVisible(false);
+            if (outline != null)
+            {
+                outline.Set(PieceOutline.Mark.Aim, null);
+                outline.Set(PieceOutline.Mark.Target, null);
+            }
             ShowHover();
             return;
         }
         SetVisible(true);
-        hoverRing.gameObject.SetActive(false);
+        outline.Set(PieceOutline.Mark.Hover, null);
+        outline.Set(PieceOutline.Mark.Aim, piece);
 
-        var origin = piece.transform.position;
+        var origin = piece.AimOrigin;
         var stoneRadius = piece.GetComponent<GamePieceManager>().radius;
         var center = ToLocal(origin);
-        var ringRadius = (ToLocal(origin + Vector3.right * stoneRadius) - center).magnitude + ringPadding;
         var power = piece.AimPower;
-
-        ring.anchoredPosition = center;
-        ring.sizeDelta = Vector2.one * ringRadius * 2f;
-        ringFill.fillAmount = power;
+        outline.AimPower = power;
 
         var pullPoint = ToLocal(piece.DragPoint);
         Point(pullLine, center, pullPoint);
@@ -77,31 +82,41 @@ public class AimIndicator : MonoBehaviour
 
         var hasDirection = piece.AimDirection != Vector3.zero && power > 0f;
         var direction = hasDirection ? (ToLocal(origin + piece.AimDirection) - center).normalized : Vector2.up;
+        // From just outside the piece as it lies, whichever way it points.
+        var arrowBase = center + direction * (Reach(piece, center, direction) + arrowGap);
         arrow.gameObject.SetActive(hasDirection);
-        arrow.anchoredPosition = center + direction * ringRadius;
+        arrow.anchoredPosition = arrowBase;
         arrow.localRotation = Quaternion.Euler(0, 0, Angle(direction));
         arrowShaft.sizeDelta = new Vector2(arrowShaft.sizeDelta.x, arrowMaxLength * power);
 
         // Beside the arrow rather than on it, whichever way it points.
         var side = new Vector2(direction.y, -direction.x);
-        powerLabel.anchoredPosition = center + side * (ringRadius + labelGap);
+        powerLabel.anchoredPosition = center + side * (Reach(piece, center, side) + labelGap);
         powerText.text = $"{Mathf.RoundToInt(power * 100)}%";
 
-        if (guideEnabled && hasDirection) DrawGuide(piece, gameManager, origin, stoneRadius, center + direction * ringRadius);
+        if (guideEnabled && hasDirection) DrawGuide(piece, gameManager, origin, stoneRadius, arrowBase);
         else HideGuide();
     }
 
+    // How far the piece reaches on screen from center along direction: the
+    // furthest corner of its bounds.
+    private float Reach(GamePieceDragAndReleaseForce piece, Vector2 center, Vector2 direction)
+    {
+        var bounds = piece.GetComponent<Renderer>().bounds;
+        var reach = 0f;
+        for (var i = 0; i < 8; i++)
+        {
+            var corner = bounds.center + Vector3.Scale(bounds.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+            reach = Mathf.Max(reach, Vector2.Dot(ToLocal(corner) - center, direction));
+        }
+        return reach;
+    }
+
+    // Not during placement, which marks its own (PlacementController).
     private void ShowHover()
     {
-        var piece = worldCamera != null && game != null ? PieceUnderCursor() : null;
-        var show = piece != null;
-        hoverRing.gameObject.SetActive(show);
-        if (!show) return;
-        var origin = piece.transform.position;
-        var center = ToLocal(origin);
-        var radius = (ToLocal(origin + Vector3.right * piece.GetComponent<GamePieceManager>().radius) - center).magnitude + ringPadding;
-        hoverRing.anchoredPosition = center;
-        hoverRing.sizeDelta = Vector2.one * (radius * 2 * (1 + 0.05f * Mathf.Sin(Time.unscaledTime * 6f))); // breathing
+        if (outline == null || (GameManager.manager != null && GameManager.manager.gameState == GameManager.GameState.Placement)) return;
+        outline.Set(PieceOutline.Mark.Hover, game != null ? PieceUnderCursor() : null);
     }
 
     // The piece a click here would pick up (as PieceSelector takes it): the
@@ -121,12 +136,11 @@ public class AimIndicator : MonoBehaviour
     {
         var dir = piece.AimDirection;
         var best = DistanceToBoardEdge(gameManager.Board.SurfaceBounds, origin, dir);
-        Transform target = null;
-        var targetRadius = 0f;
+        GamePieceDragAndReleaseForce target = null;
         foreach (var other in gameManager.gamePieceScripts)
         {
             if (other == null || other == piece) continue;
-            var to = other.transform.position - origin;
+            var to = other.AimOrigin - origin;
             to.y = 0;
             var otherRadius = other.GetComponent<GamePieceManager>().radius;
             var reach = radius + otherRadius; // pieces come in sizes
@@ -137,8 +151,7 @@ public class AimIndicator : MonoBehaviour
             var contact = along - Mathf.Sqrt(reach * reach - offLine);
             if (contact >= best) continue;
             best = contact;
-            target = other.transform;
-            targetRadius = otherRadius;
+            target = other;
         }
 
         var to2D = ToLocal(origin + dir * Mathf.Max(best, 0f));
@@ -156,21 +169,13 @@ public class AimIndicator : MonoBehaviour
             dots[i].anchoredPosition = from + step * (dotSpacing * (i + 0.5f));
         }
         for (var i = count; i < dots.Count; i++) dots[i].gameObject.SetActive(false);
-
-        targetMark.gameObject.SetActive(target != null);
-        if (target != null)
-        {
-            var targetCenter = ToLocal(target.position);
-            var screenRadius = (ToLocal(target.position + Vector3.right * targetRadius) - targetCenter).magnitude;
-            targetMark.anchoredPosition = targetCenter;
-            targetMark.sizeDelta = Vector2.one * (screenRadius * 2f + 16f);
-        }
+        outline.Set(PieceOutline.Mark.Target, target);
     }
 
     private void HideGuide()
     {
         foreach (var dot in dots) dot.gameObject.SetActive(false);
-        targetMark.gameObject.SetActive(false);
+        if (outline != null) outline.Set(PieceOutline.Mark.Target, null);
     }
 
     private static float DistanceToBoardEdge(Bounds board, Vector3 origin, Vector3 dir)
@@ -202,11 +207,7 @@ public class AimIndicator : MonoBehaviour
 
     private void SetVisible(bool visible)
     {
-        for (var i = 0; i < transform.childCount; i++)
-        {
-            var child = transform.GetChild(i);
-            if (child != hoverRing) child.gameObject.SetActive(visible); // ShowHover has it
-        }
+        for (var i = 0; i < transform.childCount; i++) transform.GetChild(i).gameObject.SetActive(visible);
         if (visible) return;
         HideGuide();
     }

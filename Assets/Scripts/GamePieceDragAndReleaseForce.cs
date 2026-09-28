@@ -54,6 +54,19 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     public Vector3 AimDirection { get; private set; }   // shot direction on the board plane (unit, or zero)
     public Vector3 DragPoint => endPos;                 // where the pull is held, on the board plane
 
+    // Where the pull is measured from and the aim drawn round: the centre of
+    // mass (where the flick acts), at the pull's level. Over the foot of
+    // anything standing; partway along a chess piece lying down, whose foot
+    // is off to one end.
+    public Vector3 AimOrigin
+    {
+        get
+        {
+            var centre = rb.worldCenterOfMass;
+            return new Vector3(centre.x, transform.position.y, centre.z);
+        }
+    }
+
     // True on a local single-player piece and on the network host (who always
     // simulates physics). False on a network guest, whose flicks are only
     // requests sent to the host instead of being applied locally.
@@ -80,7 +93,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             plane.SetNormalAndPosition(Vector3.up,transform.position);
             mousePosInput = Input.mousePosition;
             // Get the end position of the drag in the world space
-            startPos = transform.position;
+            startPos = AimOrigin;
 
             // Off the window the pull holds where it was.
             if (Pointer.OnScreen)
