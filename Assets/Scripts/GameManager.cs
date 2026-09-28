@@ -79,6 +79,7 @@ public class GameManager : MonoBehaviour
         if (SkipLocalTurnProcessing) return; // a network guest's state is driven by NetworkMatchBridge instead
         TurnController.Tick();
         gameState = TurnController.State;
+        if (GamePace.FastForwarding && gameState != GameState.ProcessingTurn) GamePace.SetFastForward(false); // the shot is over
     }
 
     private void GamePreparation()
@@ -197,6 +198,7 @@ public class GameManager : MonoBehaviour
         AIPlayerId = -1;
         SkipLocalTurnProcessing = false;
         gameState = GameState.Mainmenu;
+        GamePace.SetFastForward(false);
         Time.timeScale = 1f; // menus run at full speed
     }
 }

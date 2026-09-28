@@ -35,6 +35,8 @@ public class TurnController
     public int TurnSeconds { get; }
     public float TurnTimeRemaining { get; private set; }
     public bool IsAwaitingShot => State == GameManager.GameState.WaitingForInput || State == GameManager.GameState.WaitingForEndTurn;
+    // The shot has played out long enough that it may be fast-forwarded (GamePace).
+    public bool MayFastForward => State == GameManager.GameState.ProcessingTurn && Time.unscaledTime - shotStartedAt >= GamePace.FastForwardAfter;
 
     // Online the host's clock also times the guests' turns, but a guest's
     // flick reaches the host a network trip after it was let go. A guest's
@@ -57,6 +59,7 @@ public class TurnController
     private readonly PieceSelector pieceSelector;
 
     private GamePieceDragAndReleaseForce selGamePiece;
+    private float shotStartedAt; // real time
     private readonly HashSet<int> forfeited = new HashSet<int>(); // conceded or gone
     private List<PlayersManager> standingAtShot = new List<PlayersManager>();
 
@@ -196,6 +199,7 @@ public class TurnController
 
     private void BeginShot(GamePieceManager piece)
     {
+        shotStartedAt = Time.unscaledTime;
         ruleset.OnBeforeFlick(piece);
         Kills.BeginShot(CurrentPlayerID, piece.pieceID);
         standingAtShot = players.Where(IsStanding).ToList();

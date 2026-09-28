@@ -44,6 +44,8 @@ public class NetworkMatchBridge : MonoBehaviour
 
     public bool IsHost => isHost;
     public int LocalPlayerId => localPlayerId;
+    // On a guest: the host has the shot playing out fast-forwarded (GamePace).
+    public bool HostFastForwarding { get; private set; }
     public int PlayerCount => roster.Count;
     public bool LocalWantsRematch => wantsRematch.Contains(localId);
     // The other players still here, and how many of them asked for a rematch.
@@ -78,6 +80,7 @@ public class NetworkMatchBridge : MonoBehaviour
     private PieceSelector guestSelector;
     private int guestKnownCurrentPlayerId;
     private bool awaitingTurnResult;
+    private bool sentFastForward; // on the host: what the guests were last told
     private bool guestTurnsStarted;
     private float guestClockRemaining;
     private bool guestClockRunning;
@@ -413,6 +416,13 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void Update()
     {
+        // The host's fast-forward, as it's turned on or off (the guests
+        // follow its snapshots anyway; this is so they know why).
+        if (isHost && hostInitialized && GamePace.FastForwarding != sentFastForward)
+        {
+            sentFastForward = GamePace.FastForwarding;
+            transport.Broadcast(NetMessage.WriteFastForward(sentFastForward));
+        }
         if (isHost || pieceLookup == null || guestSelector == null || !guestSelector.LocalPlayerId.HasValue) return;
         if (guestClockRunning) guestClockRemaining = Mathf.Max(0, guestClockRemaining - GamePace.ClockDelta);
 
@@ -456,6 +466,7 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         var (nextPlayerId, turnEnd, matchOver, winnerPlayerId, reason, removed, kills, finalTransforms) = NetMessage.ReadTurnResult(data);
         awaitingTurnResult = false;
+        HostFastForwarding = false; // the shot is over
         var finishedPlayerId = guestKnownCurrentPlayerId;
         if (turnEnd == TurnEnd.Shot) OnGuestTurnEnded?.Invoke(finishedPlayerId);
         else if (turnEnd != TurnEnd.None) OnGuestTurnPassed?.Invoke(finishedPlayerId, turnEnd);
@@ -641,6 +652,9 @@ public class NetworkMatchBridge : MonoBehaviour
             case NetMessageType.PlayerOut:
                 var (outPlayer, outReason) = NetMessage.ReadPlayerOut(data);
                 OnPlayerOut?.Invoke(outPlayer, outReason);
+                break;
+            case NetMessageType.FastForward:
+                HostFastForwarding = NetMessage.ReadFastForward(data);
                 break;
             case NetMessageType.LoadGameScene:
                 // A rematch, or the host starting a new match from the lobby

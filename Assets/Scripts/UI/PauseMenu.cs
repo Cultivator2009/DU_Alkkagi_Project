@@ -92,7 +92,7 @@ public class PauseMenu : MonoBehaviour
     {
         overlay.SetActive(false);
         settings.gameObject.SetActive(false);
-        Time.timeScale = GamePace.Speed;
+        Time.timeScale = GamePace.Current;
         armed = null;
     }
 

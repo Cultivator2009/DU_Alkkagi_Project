@@ -59,6 +59,11 @@ namespace AlkkagiUIEditor
             controller.resetViewButton = UIKit.CapsuleButton(root, "ResetViewButton", "hud.resetView", new Vector2(200, 64), false, 26);
             controller.resetViewButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-Margin - 180 - 16, Margin), new Vector2(200, 64));
             controller.resetViewButton.gameObject.SetActive(false);
+            // In the key legend's place once a long shot may be fast-forwarded.
+            controller.fastForwardButton = UIKit.CapsuleButton(root, "FastForwardButton", "hud.fastForward", new Vector2(240, 64), false, 26);
+            controller.fastForwardButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-Margin, Margin + 64 + 16), new Vector2(240, 64));
+            controller.fastForwardLabel = controller.fastForwardButton.GetComponentInChildren<LocalizedText>();
+            controller.fastForwardButton.gameObject.SetActive(false);
             BuildControlsHint(root, controller);
             BuildGameOverPanel(root, controller);
             BuildPauseMenu(root, controller);

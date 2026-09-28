@@ -58,6 +58,10 @@ public class MainGameUIController : MonoBehaviour
     public Button lobbyButton;
     public Button mainMenuButton;
     public Button resetViewButton; // shown once the view is panned away
+    // In the key legend's place: to the screen running the physics once a
+    // shot may be fast-forwarded (GamePace), to a guest while the host has.
+    public Button fastForwardButton;
+    public LocalizedText fastForwardLabel;
 
     // Item-mode placeholder: reserves a slot for a future item bar without
     // building any real item logic yet (Phase 1's ITurnAction is still a
@@ -82,6 +86,7 @@ public class MainGameUIController : MonoBehaviour
     private bool turnsStarted;
     private bool anyTurnAnnounced;
     private float noticeUntil;
+    private bool hintFits = true; // the key legend is big enough to read (Arrange)
     private int lastTickSecond = -1; // the countdown second last ticked
     private float arrangedWidth = -1; // the canvas width Arrange last laid out for
     private RatedMatch rated; // null unless this is a rated online match
@@ -97,6 +102,7 @@ public class MainGameUIController : MonoBehaviour
         {
             if (CameraRig.Instance != null) CameraRig.Instance.ResetView();
         });
+        fastForwardButton.onClick.AddListener(() => GamePace.SetFastForward(!GamePace.FastForwarding));
         for (var i = 0; i < playerPanels.Length; i++)
         {
             var playerId = i;
@@ -161,6 +167,7 @@ public class MainGameUIController : MonoBehaviour
     {
         resetViewButton.gameObject.SetActive(CameraRig.Instance != null && CameraRig.Instance.IsMoved);
         if (turnController == null) return;
+        ShowFastForward();
         var gameManager = GameManager.manager;
         if (!Mathf.Approximately(CanvasRect.rect.width, arrangedWidth)) Arrange(PlayerCount); // the window changed shape
 
@@ -252,7 +259,11 @@ public class MainGameUIController : MonoBehaviour
             hintY += (skip.rect.height + compactGap) * Fit(skip);
         }
         hint.anchoredPosition = new Vector2(-hudMargin, hintY);
-        controlsHint.gameObject.SetActive(hintScale >= minHintScale);
+        hintFits = hintScale >= minHintScale;
+        controlsHint.gameObject.SetActive(hintFits && !fastForwardButton.gameObject.activeSelf);
+        var fast = (RectTransform)fastForwardButton.transform;
+        Scale(fast, buttons);
+        fast.anchoredPosition = new Vector2(-hudMargin, hintY);
 
         var panelSize = ((RectTransform)playerPanels[0].transform).rect.size;
         if (players <= 2)
@@ -335,6 +346,24 @@ public class MainGameUIController : MonoBehaviour
         if (networkBridge != null && !networkBridge.IsHost) return networkBridge.GuestTurnTimeRemaining;
         if (turnController.TurnSeconds <= 0 || !turnController.IsAwaitingShot) return null;
         return turnController.TurnTimeRemaining;
+    }
+
+    // The fast-forward button, in the key legend's place (the keys are no
+    // use while the pieces roll): the screen that runs the physics can turn
+    // it on and off once the shot has run a while; a guest only sees that
+    // the host has.
+    private void ShowFastForward()
+    {
+        var authority = networkBridge == null || networkBridge.IsHost;
+        var show = authority ? turnController.MayFastForward && !winnerPlayerId.HasValue : networkBridge.HostFastForwarding;
+        fastForwardButton.gameObject.SetActive(show);
+        controlsHint.gameObject.SetActive(hintFits && !show);
+        if (!show) return;
+        fastForwardButton.interactable = authority;
+        var key = !authority ? "hud.hostFastForward" : GamePace.FastForwarding ? "hud.normalSpeed" : "hud.fastForward";
+        if (fastForwardLabel.key == key) return;
+        fastForwardLabel.key = key;
+        fastForwardLabel.GetComponent<TMP_Text>().text = Loc.Get(key);
     }
 
     // This screen may pick up playerId's pieces right now: that side is to

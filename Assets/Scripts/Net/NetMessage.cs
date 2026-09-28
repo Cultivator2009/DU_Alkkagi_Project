@@ -19,7 +19,8 @@ public enum NetMessageType : byte
     Kick = 13,           // host -> guest: leave my lobby
     BoardSound = 14,     // host -> guest: a knock, hinge, flick, fall or topple to play, and where (unreliable)
     Concede = 15,        // guest -> host: I give up
-    PlayerOut = 16       // host -> guests: a side is out and the match goes on (three or four)
+    PlayerOut = 16,      // host -> guests: a side is out and the match goes on (three or four)
+    FastForward = 17     // host -> guests: the host has (or no longer has) the shot fast-forwarded
 }
 
 public struct PieceOwnerEntry
@@ -242,6 +243,10 @@ public static class NetMessage
     public static byte[] WritePlayerOut(int playerId, MatchEndReason reason) => new[] { (byte)NetMessageType.PlayerOut, (byte)playerId, (byte)reason };
 
     public static (int playerId, MatchEndReason reason) ReadPlayerOut(byte[] data) => (data[1], (MatchEndReason)data[2]);
+
+    public static byte[] WriteFastForward(bool on) => new[] { (byte)NetMessageType.FastForward, (byte)(on ? 1 : 0) };
+
+    public static bool ReadFastForward(byte[] data) => data[1] != 0;
 
     public static byte[] WritePlacementState(PlacementSnapshot state)
     {
