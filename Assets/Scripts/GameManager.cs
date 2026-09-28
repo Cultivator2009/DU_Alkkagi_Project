@@ -105,11 +105,11 @@ public class GameManager : MonoBehaviour
 
         vcams = GameObject.FindGameObjectsWithTag("vcam");
         // Lives in GameScene, so it goes with the match.
-        new GameObject("CameraRig").AddComponent<CameraRig>().Init(vcams, Board.SurfaceBounds, settings.PieceType == PieceType.ChessPieces);
-        new GameObject("BoardSounds").AddComponent<BoardSounds>().Init(settings.PieceType);
+        var pieceSet = PieceSet.Of(settings.PieceType);
+        new GameObject("CameraRig").AddComponent<CameraRig>().Init(vcams, Board.SurfaceBounds, pieceSet.Standing);
+        new GameObject("BoardSounds").AddComponent<BoardSounds>().Init(pieceSet);
         new GameObject("HitEffects").AddComponent<HitEffects>();
-        var knocksBoard = settings.PieceType == PieceType.ChessPieces || settings.PieceType == PieceType.GonggiStones;
-        foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>().knocksBoard = knocksBoard;
+        foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>().knocksBoard = pieceSet.KnocksBoard;
 
         TurnController = new TurnController(Ruleset, Sides, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds)
         {

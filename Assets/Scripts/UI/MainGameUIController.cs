@@ -281,12 +281,15 @@ public class MainGameUIController : MonoBehaviour
 
         var compact = Mathf.Min(compactScale, room / panelSize.x);
         var pitch = panelSize.y * compact + compactGap;
-        var rightColumn = 0;
+        // Left column: the sides whose edge is on the left (and the south),
+        // up from the bottom; right column: the rest, down from the top.
+        var board = GameManager.manager.Board;
+        var directions = Enumerable.Range(0, players).Select(i => board.SeatDirection(i)).ToArray();
+        bool Left(int i) => directions[i].x < -0.1f || (Mathf.Abs(directions[i].x) <= 0.1f && directions[i].y < 0);
         for (var i = 0; i < players; i++)
         {
-            var seat = BoardSetup.Seat(i, players);
-            var left = seat == 0 || seat == 3;
-            var slot = left ? (seat == 0 ? 0 : 1) : rightColumn++;
+            var left = Left(i);
+            var slot = Enumerable.Range(0, players).Count(j => Left(j) == left && (left ? directions[j].y < directions[i].y : directions[j].y > directions[i].y));
             var rect = (RectTransform)playerPanels[i].transform;
             Scale(rect, compact);
             rect.anchorMin = rect.anchorMax = rect.pivot = left ? Vector2.zero : Vector2.one;

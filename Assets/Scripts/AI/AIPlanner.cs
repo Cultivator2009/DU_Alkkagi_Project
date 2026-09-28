@@ -64,7 +64,7 @@ public class AIPlanner : IDisposable
     private readonly Scene scene;
     private readonly PhysicsScene physics;
     private readonly List<Stand> stands = new List<Stand>();
-    private readonly Bounds surface;
+    private readonly BoardShape shape; // what's left of the board
     private readonly BothOutRule bothOutRule;
     private readonly IRuleset ruleset;
     private readonly IReadOnlyList<Side> sides;
@@ -75,7 +75,7 @@ public class AIPlanner : IDisposable
         this.sides = sides;
         scene = SceneManager.CreateScene("AIPlanner " + Time.frameCount, new CreateSceneParameters(LocalPhysicsMode.Physics3D));
         physics = scene.GetPhysicsScene();
-        surface = board.SurfaceBounds;
+        shape = board.Playable;
         bothOutRule = rule;
 
         Copy(board.Active.gameObject);
@@ -282,20 +282,9 @@ public class AIPlanner : IDisposable
     }
 
     // How far from point along direction the board ends.
-    private float EdgeDistance(Vector3 point, Vector3 direction)
-    {
-        var best = float.MaxValue;
-        if (direction.x > 1e-4f) best = Mathf.Min(best, (surface.max.x - point.x) / direction.x);
-        if (direction.x < -1e-4f) best = Mathf.Min(best, (surface.min.x - point.x) / direction.x);
-        if (direction.z > 1e-4f) best = Mathf.Min(best, (surface.max.z - point.z) / direction.z);
-        if (direction.z < -1e-4f) best = Mathf.Min(best, (surface.min.z - point.z) / direction.z);
-        return Mathf.Max(0, best);
-    }
+    private float EdgeDistance(Vector3 point, Vector3 direction) => shape.Exit(new Vector2(point.x, point.z), new Vector2(direction.x, direction.z));
 
-    private float EdgeMargin(Vector3 point)
-    {
-        return Mathf.Min(Mathf.Min(point.x - surface.min.x, surface.max.x - point.x), Mathf.Min(point.z - surface.min.z, surface.max.z - point.z));
-    }
+    private float EdgeMargin(Vector3 point) => shape.Margin(new Vector2(point.x, point.z));
 
     private static Vector3 Flat(Vector3 v) => new Vector3(v.x, 0, v.z);
 }

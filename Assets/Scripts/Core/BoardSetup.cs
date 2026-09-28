@@ -9,10 +9,10 @@ using UnityEngine;
 // or gonggi pieces from theirs - holds the preset layouts and placement
 // zones, and shows the placement phase while it runs.
 //
-// Two sides face each other across the board (south and north). Three or
-// four (online) sit at the edges, going round clockwise from the south:
-// south, west, north, east (three leave the north empty). Every side's
-// layout and zone is the south side's turned to face its own edge.
+// Where the sides sit is the board's (BoardVariant.Seats): two face each
+// other across it (south and north); three or four sit at its edges, going
+// round clockwise from the south. Every side's layout and zone is the
+// south side's turned to face its own edge, by its seat's angle.
 public class BoardSetup : MonoBehaviour
 {
     public const int MaxStones = 12;
@@ -94,7 +94,9 @@ public class BoardSetup : MonoBehaviour
 
     public BoardVariant Active { get; private set; }
     public int Players { get; private set; } = 2;
-    public Bounds SurfaceBounds => ActiveOrFirst.surface.bounds;
+    public Bounds SurfaceBounds => ActiveOrFirst.Bounds;
+    // What's left of the board to play on (BoardZone crumbles it).
+    public BoardShape Playable => ActiveOrFirst.Playable;
     // Where pieces rest while placed by hand (they drop onto the board when
     // the match starts).
     public float PieceHeight { get; private set; }
@@ -132,7 +134,7 @@ public class BoardSetup : MonoBehaviour
         {
             var count = Mathf.Clamp(settings.StonesFor(player), 1, MaxStones);
             // On chess squares the layout is already in lineup order.
-            var lineup = OnChessSquares ? Enumerable.Range(0, count).ToArray() : LineupRanks(count, Seat(player, players));
+            var lineup = OnChessSquares ? Enumerable.Range(0, count).ToArray() : LineupRanks(count, player);
             for (var i = 0; i < count; i++)
             {
                 var position = PresetPosition(player, i, count);
@@ -158,23 +160,33 @@ public class BoardSetup : MonoBehaviour
     // addresses pieces by it. Twelve a side at most.
     public static char PieceId(int player, int index) => (char)("AaMm"[player] + index);
 
-    // Which edge a side sits at, as quarter turns anticlockwise from the
-    // south (seen from above): 0 south, 1 east, 2 north, 3 west.
-    public static int Seat(int player, int players) => players switch
+    // Which edge a side sits at: degrees anticlockwise from the south,
+    // seen from above (90 east, 180 north, 270 west on a square board).
+    public float SeatAngle(int player)
     {
-        2 => new[] { 0, 2 }[player],
-        3 => new[] { 0, 3, 1 }[player],
-        _ => new[] { 0, 3, 2, 1 }[player],
-    };
+        var seats = ActiveOrFirst.Seats(Players);
+        return seats[Mathf.Clamp(player, 0, seats.Length - 1)];
+    }
 
-    // A south-side (x, z) point turned to face a seat's edge.
-    private static Vector2 Turn(Vector2 point, int seat) => seat switch
+    // Out from the board's centre towards a side's edge, in (x, z).
+    public Vector2 SeatDirection(int player) => Turn(Vector2.down, SeatAngle(player));
+
+    // How a piece of that side stands to face across the board from its edge.
+    public Quaternion Facing(int player) => Quaternion.Euler(0, -SeatAngle(player), 0);
+
+    // A south-side (x, z) point turned to face a seat's edge (angle), and back.
+    public static Vector2 Turn(Vector2 point, float angle)
     {
-        1 => new Vector2(-point.y, point.x),
-        2 => -point,
-        3 => new Vector2(point.y, -point.x),
-        _ => point,
-    };
+        var a = angle * Mathf.Deg2Rad;
+        var cos = Mathf.Cos(a);
+        var sin = Mathf.Sin(a);
+        var turned = new Vector2(point.x * cos - point.y * sin, point.x * sin + point.y * cos);
+        // Exactly on the axes for the square board's quarter turns.
+        return new Vector2(Mathf.Round(turned.x * 1e5f) / 1e5f, Mathf.Round(turned.y * 1e5f) / 1e5f);
+    }
+
+    private Vector2 ToSeat(int player, Vector2 world) => Turn(world, -SeatAngle(player));
+    private Vector2 FromSeat(int player, Vector2 local) => Turn(local, SeatAngle(player));
 
     // The Loc key of a janggi piece's letter, null for a go stone. Still
     // answers once the piece is gone (the kill feed asks then).
@@ -183,6 +195,7 @@ public class BoardSetup : MonoBehaviour
     private void UseBoard(BoardType type)
     {
         Active = Array.Find(boards, b => b.type == type) ?? boards[0];
+        Active.Build(); // whole again, whatever the last match left of it
         foreach (var board in boards) board.gameObject.SetActive(board == Active);
     }
 
@@ -221,7 +234,7 @@ public class BoardSetup : MonoBehaviour
     private GamePieceDragAndReleaseForce SpawnJanggiPiece(int player, int index, int rank, Vector3 position, Transform parent)
     {
         var kind = janggiKinds[janggiLineup[Mathf.Min(rank, janggiLineup.Length - 1)]];
-        var piece = Instantiate(janggiTemplate, position, Quaternion.Euler(0, -90 * Seat(player, Players), 0), parent);
+        var piece = Instantiate(janggiTemplate, position, Facing(player), parent);
         var mesh = JanggiPieceMesh.Get(kind.width, kind.height);
         piece.GetComponent<MeshFilter>().sharedMesh = mesh;
         piece.GetComponent<MeshCollider>().sharedMesh = mesh;
@@ -250,7 +263,7 @@ public class BoardSetup : MonoBehaviour
     {
         var kind = chessLineup[Mathf.Min(rank, chessLineup.Length - 1)];
         // Seat-facing, like the janggi letters: a knight looks across the board.
-        var piece = Instantiate(chessTemplate, position, Quaternion.Euler(0, -90 * Seat(player, Players), 0), parent);
+        var piece = Instantiate(chessTemplate, position, Facing(player), parent);
         piece.GetComponent<MeshFilter>().sharedMesh = ChessPieceMesh.Get(kind);
         // The template's collider takes the first part, and copies of it the rest.
         var parts = ChessPieceMesh.Colliders(kind);
@@ -283,7 +296,7 @@ public class BoardSetup : MonoBehaviour
     // of the shot, low down, so it rocks back onto its foot.
     private GamePieceDragAndReleaseForce SpawnGonggi(int player, int index, Vector3 position, Transform parent)
     {
-        var piece = Instantiate(gonggiTemplate, position, Quaternion.Euler(0, -90 * Seat(player, Players), 0), parent);
+        var piece = Instantiate(gonggiTemplate, position, Facing(player), parent);
         piece.GetComponent<MeshFilter>().sharedMesh = GonggiMesh.Get();
         piece.GetComponent<MeshCollider>().sharedMesh = GonggiMesh.Collider();
         piece.GetComponent<MeshRenderer>().sharedMaterial = SideMaterial(player, piece.GetComponent<MeshRenderer>().sharedMaterial);
@@ -322,11 +335,11 @@ public class BoardSetup : MonoBehaviour
     // south side's layout, so further from the center line = smaller z),
     // then from the middle outward. Only layout positions go in, so every
     // machine agrees.
-    private int[] LineupRanks(int count, int seat)
+    private int[] LineupRanks(int count, int player)
     {
         var order = Enumerable.Range(0, count)
-            .OrderBy(i => SouthPoint(i, count, seat).y)
-            .ThenBy(i => Mathf.Abs(SouthPoint(i, count, seat).x))
+            .OrderBy(i => SouthPoint(i, count, player).y)
+            .ThenBy(i => Mathf.Abs(SouthPoint(i, count, player).x))
             .ToArray();
         var ranks = new int[count];
         for (var rank = 0; rank < count; rank++) ranks[order[rank]] = rank;
@@ -336,26 +349,26 @@ public class BoardSetup : MonoBehaviour
     public Vector3 PresetPosition(int player, int index, int count)
     {
         if (OnChessSquares) return OnBoard(ChessPoint(index, player));
-        var seat = Seat(player, Players);
-        var point = SouthPoint(index, count, seat);
-        // Three or four sides: the rows are drawn for a 3 x 3 board; a
-        // narrower edge moves them in, keeping the rows apart.
-        if (Players > 2) point.y += 1.5f - HalfSize(seat);
-        return OnBoard(Turn(point, seat));
+        return OnBoard(FromSeat(player, SouthPoint(index, count, player)));
     }
 
-    // The south side's layout: the scene's for two sides, the narrower one
-    // below for more. The janggi board's hinges lie across the middle, under
-    // the west and east sides' front rows: those leave the fold clear.
-    private Vector2 SouthPoint(int index, int count, int seat) =>
-        Players > 2 ? MultiLayout(count, seat % 2 == 1 && ActiveOrFirst.type == BoardType.Janggi)[index] : LayoutPoint(index, count);
-
-    // How far the board reaches from its centre towards a seat's edge.
-    private float HalfSize(int seat)
+    // The south side's layout: the scene's for two sides on the boards it's
+    // drawn for, rows of the board's own otherwise, in as far from the
+    // side's edge as the board says. The janggi board's hinges lie across
+    // the middle, under the west and east sides' front rows: those leave the
+    // fold clear.
+    private Vector2 SouthPoint(int index, int count, int player)
     {
-        var extents = ActiveOrFirst.surface.bounds.extents;
-        return seat % 2 == 0 ? extents.z : extents.x;
+        var board = ActiveOrFirst;
+        if (Players == 2 && board.sceneLayouts) return LayoutPoint(index, count);
+        var edge = EdgeDistance(player);
+        // East or west: facing along the fold.
+        var acrossFold = board.type == BoardType.Janggi && Mathf.Abs(Mathf.Sin(SeatAngle(player) * Mathf.Deg2Rad)) > 0.7f;
+        return MultiLayout(count, board.multiSpacing, -(edge - board.multiFront), -(edge - board.multiBack), acrossFold)[index];
     }
+
+    // How far the board reaches from its centre towards a side's edge.
+    public float EdgeDistance(int player) => ActiveOrFirst.Shape.Exit(Vector2.zero, SeatDirection(player));
 
     private Vector2 LayoutPoint(int index, int count)
     {
@@ -381,15 +394,13 @@ public class BoardSetup : MonoBehaviour
         return points.ToArray();
     }
 
-    // Three or four sides, on a 3 x 3 board: a row a unit in from the edge,
-    // and from six pieces a second one behind it. Each row keeps a third of a
-    // unit inside the diagonal, so the neighbours' corners stay apart.
-    // clearMiddle keeps the front row off the centre line (the fold of the
-    // janggi board): up to five go there in a single row further back.
-    public static Vector2[] MultiLayout(int count, bool clearMiddle = false)
+    // A front row (frontZ) and, from six pieces, a second one behind it
+    // (backZ). On the square board with three or four sides each row keeps
+    // a third of a unit inside the diagonal, so the neighbours' corners stay
+    // apart. clearMiddle keeps the front row off the centre line (the fold
+    // of the janggi board): up to five go there in a single row further back.
+    public static Vector2[] MultiLayout(int count, float spacing, float frontZ, float backZ, bool clearMiddle = false)
     {
-        const float spacing = 0.32f;
-        const float frontZ = -1.0f, backZ = -1.3f;
         var back = count <= 5 ? 0 : Mathf.Max((count + 1) / 2, count - 5);
         var points = new List<Vector2>();
         void Row(int n, float z)
@@ -417,24 +428,22 @@ public class BoardSetup : MonoBehaviour
 
     // ---- Zones ----
 
-    // Where the center of a piece of this radius may go: the board's zone,
-    // pulled in for pieces bigger than a go stone.
+    // Where the center of a piece of this radius may go, in the side's own
+    // frame (the south side's, turned by its seat's angle): the board's
+    // zone, pulled in for pieces bigger than a go stone. With three or four
+    // sides it's narrower and short of the middle, clear of the neighbours',
+    // and measured in from the side's own edge.
     public Rect Zone(int player, float radius = StoneRadius)
     {
-        var seat = Seat(player, Players);
-        var zone = ActiveOrFirst.blackZone;
+        var board = ActiveOrFirst;
+        var zone = board.blackZone;
         if (Players > 2)
         {
-            // Narrower than the two-side zone and short of the middle, clear
-            // of the neighbours' zones; moved in on a narrower edge.
-            var inward = 1.5f - HalfSize(seat);
-            zone = Rect.MinMaxRect(-0.7f, zone.yMin + inward, 0.7f, -0.8f + inward);
+            var edge = EdgeDistance(player);
+            zone = Rect.MinMaxRect(board.multiZone.xMin, -(edge - board.multiZone.yMin), board.multiZone.xMax, -(edge - board.multiZone.yMax));
         }
         var inset = Mathf.Max(0, radius - StoneRadius);
-        zone = Rect.MinMaxRect(zone.xMin + inset, zone.yMin + inset, zone.xMax - inset, zone.yMax - inset);
-        var a = Turn(zone.min, seat);
-        var b = Turn(zone.max, seat);
-        return Rect.MinMaxRect(Mathf.Min(a.x, b.x), Mathf.Min(a.y, b.y), Mathf.Max(a.x, b.x), Mathf.Max(a.y, b.y));
+        return Rect.MinMaxRect(zone.xMin + inset, zone.yMin + inset, zone.xMax - inset, zone.yMax - inset);
     }
 
     // Edges count as inside: ClampToZone lands exactly on them, and
@@ -442,13 +451,15 @@ public class BoardSetup : MonoBehaviour
     public bool InZone(int player, Vector3 position, float radius)
     {
         var zone = Zone(player, radius);
-        return position.x >= zone.xMin && position.x <= zone.xMax && position.z >= zone.yMin && position.z <= zone.yMax;
+        var local = ToSeat(player, new Vector2(position.x, position.z));
+        return local.x >= zone.xMin - 1e-4f && local.x <= zone.xMax + 1e-4f && local.y >= zone.yMin - 1e-4f && local.y <= zone.yMax + 1e-4f;
     }
 
     public Vector3 ClampToZone(int player, Vector3 position, float radius)
     {
         var zone = Zone(player, radius);
-        return OnBoard(new Vector2(Mathf.Clamp(position.x, zone.xMin, zone.xMax), Mathf.Clamp(position.z, zone.yMin, zone.yMax)));
+        var local = ToSeat(player, new Vector2(position.x, position.z));
+        return OnBoard(FromSeat(player, new Vector2(Mathf.Clamp(local.x, zone.xMin, zone.xMax), Mathf.Clamp(local.y, zone.yMin, zone.yMax))));
     }
 
     public bool IsClear(Vector3 position, float radius, IEnumerable<(Vector3 position, float radius)> others)
@@ -463,26 +474,36 @@ public class BoardSetup : MonoBehaviour
         return true;
     }
 
-    // A random spot in the zone clear of every piece in `occupied`. Falls back
-    // to scanning the zone on a grid, which with 12 pieces always finds room.
+    // A random spot in the zone clear of every piece in `occupied`, on what's
+    // left of the board. Falls back to scanning the zone on a grid, which
+    // with 12 pieces always finds room - unless the board has crumbled away
+    // under it, when the spot goes as near the side's edge as there's board.
     public Vector3 RandomFreePosition(int player, float radius, List<(Vector3 position, float radius)> occupied, System.Random random)
     {
         var zone = Zone(player, radius);
+        var playable = Playable;
+        bool Free(Vector2 local, out Vector3 world)
+        {
+            world = OnBoard(FromSeat(player, local));
+            return playable.Contains(new Vector2(world.x, world.z), radius) && IsClear(world, radius, occupied);
+        }
         for (var attempt = 0; attempt < 200; attempt++)
         {
-            var candidate = OnBoard(new Vector2(
-                zone.xMin + (float)random.NextDouble() * zone.width,
-                zone.yMin + (float)random.NextDouble() * zone.height));
-            if (IsClear(candidate, radius, occupied)) return candidate;
+            var local = new Vector2(zone.xMin + (float)random.NextDouble() * zone.width, zone.yMin + (float)random.NextDouble() * zone.height);
+            if (Free(local, out var world)) return world;
         }
         var step = radius + gap;
         for (var z = zone.yMin; z <= zone.yMax; z += step)
         for (var x = zone.xMin; x <= zone.xMax; x += step)
+            if (Free(new Vector2(x, z), out var world)) return world;
+        // In from the side's edge, and across, until there's board and room.
+        for (var z = -EdgeDistance(player); z <= 0; z += step)
+        for (var x = 0f; x <= zone.width; x += step)
         {
-            var candidate = OnBoard(new Vector2(x, z));
-            if (IsClear(candidate, radius, occupied)) return candidate;
+            if (Free(new Vector2(x, z), out var right)) return right;
+            if (Free(new Vector2(-x, z), out var left)) return left;
         }
-        return OnBoard(zone.center);
+        return OnBoard(Vector2.zero);
     }
 
     // A piece coming back (a battle of health): somewhere free in its side's
@@ -564,7 +585,8 @@ public class BoardSetup : MonoBehaviour
         marker.transform.SetParent(transform, false);
         marker.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 4);
         // Flat on the board, just above the surface; sprite height runs along z.
-        marker.transform.SetPositionAndRotation(new Vector3(zone.center.x, 0.003f, zone.center.y), Quaternion.Euler(90, 0, 0));
+        var center = FromSeat(player, zone.center);
+        marker.transform.SetPositionAndRotation(new Vector3(center.x, 0.003f, center.y), Facing(player) * Quaternion.Euler(90, 0, 0));
         // Pad by a stone radius so the tint covers the stones, not just their centers.
         marker.transform.localScale = new Vector3(zone.width + 2 * StoneRadius, zone.height + 2 * StoneRadius, 1);
         return marker;
@@ -572,12 +594,14 @@ public class BoardSetup : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        if (boards == null || boards.Length == 0 || boards[0] == null) return;
+        if (boards == null || boards.Length == 0 || boards[0] == null || boards[0].parts == null) return;
         for (var player = 0; player < 2; player++)
         {
             var zone = Zone(player);
             Gizmos.color = player == 0 ? new Color(0.1f, 0.1f, 0.1f, 0.8f) : new Color(1f, 1f, 1f, 0.8f);
-            Gizmos.DrawWireCube(new Vector3(zone.center.x, 0.01f, zone.center.y), new Vector3(zone.width, 0, zone.height));
+            var corners = new[] { zone.min, new Vector2(zone.xMax, zone.yMin), zone.max, new Vector2(zone.xMin, zone.yMax) }.Select(c => FromSeat(player, c)).ToArray();
+            for (var i = 0; i < 4; i++)
+                Gizmos.DrawLine(new Vector3(corners[i].x, 0.01f, corners[i].y), new Vector3(corners[(i + 1) % 4].x, 0.01f, corners[(i + 1) % 4].y));
         }
     }
 }

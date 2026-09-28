@@ -39,16 +39,11 @@ public class BoardSounds : MonoBehaviour
     private int soundsThisStep;
 
     // Go stones click; janggi and chess pieces are wood; gonggi stones
-    // rattle.
-    public void Init(PieceType pieces)
+    // rattle (PieceSet).
+    public void Init(PieceSet pieces)
     {
         Instance = this;
-        hit = pieces switch
-        {
-            PieceType.GoStones => GameAudio.Bank.stoneHit,
-            PieceType.GonggiStones => GameAudio.Bank.gonggiHit,
-            _ => GameAudio.Bank.woodHit,
-        };
+        hit = pieces.Hit(GameAudio.Bank);
     }
 
     private void OnDestroy()

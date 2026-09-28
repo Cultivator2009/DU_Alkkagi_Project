@@ -19,9 +19,11 @@ public enum MatchMode : byte
 public enum BoardType : byte
 {
     Go,
-    Janggi, // folding board: the hinges across the middle are obstacles
+    Janggi,  // folding board: the hinges across the middle are obstacles
     Random,
-    Chess
+    Chess,
+    Hexagon, // three sides, a flat edge each (two across from each other); not for four
+    Cross    // four sides, one at the end of each arm
 }
 
 public enum PieceType : byte
@@ -85,6 +87,9 @@ public sealed class MatchSettingDef
     public readonly int[] Values;     // allowed values, in display order
     public readonly int Default;
     public readonly Func<MatchSettings, bool> IsRelevant; // greys the row out when false; null = always
+    // Whether a value can be played with the other rules as they are (a
+    // board only for the sides it has edges for); null = always.
+    public readonly Func<MatchSettings, int, bool> IsAvailable;
     public readonly bool OnlineOnly; // a lobby rule: local games are always two at one screen
     // What the ranked modes allow, in display order: one value fixes the
     // rule, null leaves it open. RankedFallback is where they put it.
@@ -92,8 +97,9 @@ public sealed class MatchSettingDef
     public readonly int RankedFallback;
     private readonly Func<int, string> format;
 
-    public MatchSettingDef(MatchSettingId id, string key, string labelKey, int[] values, int defaultValue, Func<int, string> format, Func<MatchSettings, bool> isRelevant = null, bool onlineOnly = false, int[] ranked = null, int? rankedFallback = null)
+    public MatchSettingDef(MatchSettingId id, string key, string labelKey, int[] values, int defaultValue, Func<int, string> format, Func<MatchSettings, bool> isRelevant = null, bool onlineOnly = false, int[] ranked = null, int? rankedFallback = null, Func<MatchSettings, int, bool> isAvailable = null)
     {
+        IsAvailable = isAvailable;
         Id = id;
         Key = key;
         LabelKey = labelKey;
@@ -128,8 +134,9 @@ public sealed class MatchSettings
         // Item joins the list with the item mode.
         new MatchSettingDef(MatchSettingId.Mode, "mode", "match.mode", new[] { (int)MatchMode.Normal, (int)MatchMode.Custom }, (int)MatchMode.Normal,
             v => Loc.Get("mode." + (MatchMode)v), onlineOnly: true),
-        new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board", new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Random }, (int)global::BoardType.Go,
-            v => Loc.Get("board." + (global::BoardType)v)),
+        new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board",
+            new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Hexagon, (int)global::BoardType.Cross, (int)global::BoardType.Random }, (int)global::BoardType.Go,
+            v => Loc.Get("board." + (global::BoardType)v), isAvailable: (s, v) => v != (int)global::BoardType.Hexagon || s.Seats <= 3),
         new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces, (int)global::PieceType.ChessPieces, (int)global::PieceType.GonggiStones, (int)global::PieceType.Random }, (int)global::PieceType.GoStones,
             v => Loc.Get("pieces." + (global::PieceType)v)),
         new MatchSettingDef(MatchSettingId.AimGuide, "aimGuide", "match.aimGuide", new[] { 1, 0 }, 1,
@@ -213,19 +220,34 @@ public sealed class MatchSettings
 
     // ---- Modes ----
 
-    // The values a rule may take in this lobby's mode.
-    public int[] Allowed(MatchSettingDef def) => RankedMode && def.RankedValues != null ? def.RankedValues : def.Values;
+    // The values a rule may take with the others as they are.
+    public int[] Available(MatchSettingDef def) => def.IsAvailable == null ? def.Values : def.Values.Where(v => def.IsAvailable(this, v)).ToArray();
+
+    // The values a rule may take in this lobby's mode, with the others as they are.
+    public int[] Allowed(MatchSettingDef def)
+    {
+        var values = RankedMode && def.RankedValues != null ? def.RankedValues : def.Values;
+        return def.IsAvailable == null ? values : values.Where(v => def.IsAvailable(this, v)).ToArray();
+    }
 
     // Whether the result moves ratings: a ranked mode, played by its rules. A
     // host sending anything else plays unrated on every machine.
     public bool Rated => RankedMode && Defs.All(def => Array.IndexOf(Allowed(def), Get(def.Id)) >= 0);
 
     // Brings the rules a ranked mode fixes back inside it, e.g. on switching
-    // a lobby from Custom to Normal.
-    public void ApplyMode()
+    // a lobby from Custom to Normal, and any rule the others no longer
+    // allow back to one they do.
+    public void ApplyMode() => Normalize(modes: true);
+
+    // modes: the lobby's (a ranked mode fixes rules); the local setup has none.
+    public void Normalize(bool modes)
     {
         foreach (var def in Defs)
-            if (Array.IndexOf(Allowed(def), Get(def.Id)) < 0) Set(def.Id, def.RankedFallback);
+        {
+            var allowed = modes ? Allowed(def) : Available(def);
+            if (allowed.Length == 0 || Array.IndexOf(allowed, Get(def.Id)) >= 0) continue;
+            Set(def.Id, Array.IndexOf(allowed, def.RankedFallback) >= 0 ? def.RankedFallback : allowed[0]);
+        }
     }
 
     // A copy with Random rolled. The host rolls once per match and sends the
@@ -238,10 +260,10 @@ public sealed class MatchSettings
         return copy;
     }
 
-    // Any of the rule's values but Random itself.
-    private static int Roll(MatchSettingId id, int random)
+    // Any of the rule's values the others allow but Random itself.
+    private int Roll(MatchSettingId id, int random)
     {
-        var choices = Defs[(int)id].Values.Where(v => v != random).ToArray();
+        var choices = Available(Defs[(int)id]).Where(v => v != random).ToArray();
         return choices[UnityEngine.Random.Range(0, choices.Length)];
     }
 

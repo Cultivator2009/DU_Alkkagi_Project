@@ -50,7 +50,9 @@ public class MatchSettingsPanel : MonoBehaviour
         if (index < 0 || index >= values.Length) return;
 
         settings.Set(id, values[index]);
-        if (modes) settings.ApplyMode(); // switched to a ranked mode: its fixed rules snap back
+        // Switched to a ranked mode: its fixed rules snap back; a rule the
+        // new value rules out (the hexagon with four seats) moves on too.
+        settings.Normalize(modes);
         Render();
         OnChanged?.Invoke(settings.Clone());
     }
@@ -69,5 +71,5 @@ public class MatchSettingsPanel : MonoBehaviour
         }
     }
 
-    private int[] Values(MatchSettingDef def) => modes ? settings.Allowed(def) : def.Values;
+    private int[] Values(MatchSettingDef def) => modes ? settings.Allowed(def) : settings.Available(def);
 }

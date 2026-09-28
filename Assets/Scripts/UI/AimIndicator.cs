@@ -135,7 +135,7 @@ public class AimIndicator : MonoBehaviour
     private void DrawGuide(GamePieceDragAndReleaseForce piece, GameManager gameManager, Vector3 origin, float radius, Vector2 from)
     {
         var dir = piece.AimDirection;
-        var best = DistanceToBoardEdge(gameManager.Board.SurfaceBounds, origin, dir);
+        var best = gameManager.Board.Playable.Exit(new Vector2(origin.x, origin.z), new Vector2(dir.x, dir.z));
         GamePieceDragAndReleaseForce target = null;
         foreach (var other in gameManager.gamePieceScripts)
         {
@@ -176,16 +176,6 @@ public class AimIndicator : MonoBehaviour
     {
         foreach (var dot in dots) dot.gameObject.SetActive(false);
         if (outline != null) outline.Set(PieceOutline.Mark.Target, null);
-    }
-
-    private static float DistanceToBoardEdge(Bounds board, Vector3 origin, Vector3 dir)
-    {
-        var t = float.MaxValue;
-        if (dir.x > 1e-5f) t = Mathf.Min(t, (board.max.x - origin.x) / dir.x);
-        if (dir.x < -1e-5f) t = Mathf.Min(t, (board.min.x - origin.x) / dir.x);
-        if (dir.z > 1e-5f) t = Mathf.Min(t, (board.max.z - origin.z) / dir.z);
-        if (dir.z < -1e-5f) t = Mathf.Min(t, (board.min.z - origin.z) / dir.z);
-        return t == float.MaxValue ? 0f : t;
     }
 
     private Vector2 ToLocal(Vector3 world)
