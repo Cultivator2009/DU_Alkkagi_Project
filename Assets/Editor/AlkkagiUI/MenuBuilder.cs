@@ -198,6 +198,14 @@ namespace AlkkagiUIEditor
             panel.windowSmallerButton = smaller;
             panel.windowLargerButton = larger;
 
+            // Online: the players this player blocked (BlockList), all let go at once.
+            var online = SectionAfter(display, 2);
+            Section("Online", "settings.online", left, online);
+            panel.blockedText = UIKit.Text(c, "BlockedLabel", Loc.Get("settings.blocked", 0), labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+            panel.blockedText.rectTransform.Place(topLeft, new Vector2(left, RowY(online, 0)), new Vector2(300, rowHeight));
+            panel.unblockAllButton = UIKit.CapsuleButton(c, "UnblockAllButton", "settings.unblockAll", new Vector2(236, rowHeight), false, 24);
+            Control(panel.unblockAllButton.GetComponent<RectTransform>(), left, RowY(online, 0), 236, rowHeight);
+
             Section("Sound", "settings.sound", right, firstSection);
             (Slider, TMP_Text) VolumeRow(string name, string key, int row)
             {
@@ -251,7 +259,9 @@ namespace AlkkagiUIEditor
         private static void BuildSetupPanel(Transform root, MainMenuUI menu)
         {
             const float width = 840, pad = 64, rowHeight = 52, gap = 8, opponentRow = 80;
-            var rulesHeight = UIKit.RuleRows(false) * (rowHeight + gap) - gap;
+            // As many rows as fit a 1080 screen with the card's other parts;
+            // more scroll.
+            var rulesHeight = Mathf.Min(UIKit.RuleRows(false) * (rowHeight + gap) - gap, 10 * (rowHeight + gap) - gap);
             var overlay = UIKit.Image(root, "SetupPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             menu.setupPanel = overlay.gameObject;
@@ -268,7 +278,7 @@ namespace AlkkagiUIEditor
             menu.opponentToggle = UIKit.SegmentedToggle(card.transform, "OpponentToggle",
                 new[] { "opponent.Human", "opponent.AIEasy", "opponent.AINormal", "opponent.AIHard" }, 60);
             menu.opponentToggle.GetComponent<RectTransform>().Place(new Vector2(1, 1), new Vector2(-pad, -144), new Vector2(width - pad * 2 - 150, 60));
-            menu.setupRules = UIKit.RulesPanel(card.transform, "Rules", width - pad * 2, rowHeight, gap, 28, online: false);
+            menu.setupRules = UIKit.RulesPanel(card.transform, "Rules", width - pad * 2, rowHeight, gap, 28, online: false, height: rulesHeight);
             menu.setupRules.GetComponent<RectTransform>().Place(new Vector2(0, 1), new Vector2(pad, -148 - opponentRow), menu.setupRules.GetComponent<RectTransform>().sizeDelta);
 
             menu.setupCancelButton = UIKit.CapsuleButton(card.transform, "CancelButton", "setup.cancel", new Vector2(240, 84), false, 32);

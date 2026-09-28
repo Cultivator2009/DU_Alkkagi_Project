@@ -46,6 +46,8 @@ public class NetworkMatchBridge : MonoBehaviour
     public bool HostGone => gone.Contains(hostId);
     public bool PlayerGone(int playerId) => playerId >= 0 && playerId < roster.Count && gone.Contains(roster.SteamIds[playerId]);
     public ulong SteamIdOf(int playerId) => playerId >= 0 && playerId < roster.Count ? roster.SteamIds[playerId] : 0;
+    // This player's rating in a rated match, or null.
+    public RatingTracker Rating { get; private set; }
 
     // A seat's Steam name (a number while Steam isn't there to ask).
     public string PlayerName(int playerId)
@@ -112,6 +114,7 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         scope = session.Scope("match")
             .Use(NetFilters.From(id => roster.PlayerOf(id) >= 0))
+            .Use(NetFilters.NotBlocked())
             .Use(NetFilters.Authority(() => hostId, () => isHost))
             .On<Msg.RematchRequest>(HandleRematchRequest)
             .On<Msg.ReturnToLobby>(HandleReturnToLobby)
@@ -168,8 +171,10 @@ public class NetworkMatchBridge : MonoBehaviour
         else if (steamId == hostId && !matchResolved)
         {
             // The host runs the match: nothing more can happen on this board.
+            // With two, a win by forfeit; with more, it's just over.
             matchResolved = true;
-            Controller?.Abort();
+            if (roster.Count > 2) Controller?.EndWithoutHost(-1, MatchEndReason.HostLeft);
+            else Controller?.EndWithoutHost(localPlayerId, MatchEndReason.OpponentLeft);
             gameManager.gameState = GameManager.GameState.MatchOver;
         }
         OnPlayerLeft?.Invoke(playerId);
@@ -231,6 +236,9 @@ public class NetworkMatchBridge : MonoBehaviour
 
         if (isHost) InitHost();
         else InitGuest();
+        // Rated: a ranked mode played by its rules, everyone the roster lists
+        // in it. It counts from here: leaving is held as a loss.
+        if (MatchSettings.Current.Rated && roster.Count == gameManager.Sides.Count) Rating = new RatingTracker(Controller, roster.Ratings, localPlayerId);
     }
 
     private void BuildPieceLookup()
@@ -258,6 +266,12 @@ public class NetworkMatchBridge : MonoBehaviour
         controller.OnTurnStarted += _ => BroadcastTurnResult();
         controller.OnMatchEnded += HandleHostMatchEnded;
         controller.OnPlayerOut += HandleHostPlayerOut;
+        // The edge giving way: the shot before it and the crumble go out now,
+        // so the guests see the board go when it goes.
+        controller.OnZoneChanged += () =>
+        {
+            if (controller.Collapsing) BroadcastTurnResult();
+        };
         BoardSounds.OnEmitted += ForwardBoardSound;
         inPlayAtLastResult = new HashSet<char>(pieceLookup.Keys);
         hostInitialized = true;
@@ -317,7 +331,7 @@ public class NetworkMatchBridge : MonoBehaviour
         var result = new Msg.TurnResult
         {
             State = Controller.Snapshot(),
-            Kills = Controller.LastTurnEnd == TurnEnd.Shot ? Controller.Kills.LastShot.ToList() : new List<KillEvent>(),
+            Kills = Controller.LastTurnEnd == TurnEnd.Shot || Controller.LastTurnEnd == TurnEnd.Collapse ? Controller.Kills.LastShot.ToList() : new List<KillEvent>(),
             Removed = inPlayAtLastResult.Where(id => !inPlay.Contains(id)).ToList(),
             Pieces = CurrentTransforms(),
         };
@@ -550,7 +564,8 @@ public class NetworkMatchBridge : MonoBehaviour
             gameManager.gameState = GameManager.GameState.MatchOver;
             return;
         }
-        gameManager.gameState = GameManager.GameState.WaitingForInput;
+        // The edge giving way is no one's turn: no input until the next.
+        gameManager.gameState = controller.Collapsing ? GameManager.GameState.ProcessingTurn : GameManager.GameState.WaitingForInput;
     }
 
     private void HandleGuestLoadGameScene(ulong _, Msg.LoadGameScene message)

@@ -18,6 +18,8 @@ public class PlayerHudPanel : MonoBehaviour
     public Transform stoneRow;
     public GameObject stoneTemplate; // children: "Fill", "Ring" (alive) and "Lost" (dashed ring)
     public Button skipButton;        // shown on this side's own turn, on the screen that plays it
+    public GameObject healthBar;     // a battle of health's: the bar and its fill
+    public Image healthFill;
     [Range(0f, 1f)] public float idleAlpha = 0.8f;
     [Range(0f, 1f)] public float outAlpha = 0.45f;
     public float minStoneSpacing = 4f;
@@ -54,15 +56,18 @@ public class PlayerHudPanel : MonoBehaviour
     }
 
     // outStatus: why this side is out of a match of three or four ("Out",
-    // "Conceded", "Left"), or null while it plays.
-    public void Render(string playerName, string playerNumber, int remaining, int captured, bool isTurn, string outStatus = null)
+    // "Conceded", "Left"), or null while it plays. maxHealth 0: no health
+    // (not a battle of health).
+    public void Render(string playerName, string playerNumber, int remaining, int captured, bool isTurn, string outStatus = null, int health = 0, int maxHealth = 0)
     {
         nameText.text = playerName;
         numberText.text = outStatus == null ? playerNumber : $"{playerNumber} · {outStatus}";
         remainingText.text = remaining.ToString();
         if (shownRemaining >= 0 && remaining < shownRemaining) remainingPulse.Play();
         shownRemaining = remaining;
-        capturedText.text = Loc.Get("hud.captured", captured);
+        capturedText.text = maxHealth > 0 ? $"{Loc.Get("hud.health", health, maxHealth)} · {Loc.Get("hud.captured", captured)}" : Loc.Get("hud.captured", captured);
+        healthBar.SetActive(maxHealth > 0);
+        if (maxHealth > 0) healthFill.rectTransform.anchorMax = new Vector2(Mathf.Clamp01((float)health / maxHealth), 1);
         turnBadge.SetActive(isTurn);
         canvasGroup.alpha = isTurn ? 1f : outStatus != null ? outAlpha : idleAlpha;
 

@@ -186,7 +186,8 @@ namespace AlkkagiUIEditor
 
             UIKit.Label(c, "Title", "match.title", 40, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
                 .rectTransform.Place(TopLeft, new Vector2(pad, -52), new Vector2(RulesCardSize.x - pad * 2, 72));
-            ui.rulesPanel = UIKit.RulesPanel(c, "Rules", RulesCardSize.x - pad * 2, rowHeight, gap, 24, online: true);
+            // Between the title and the caption; more rules than that scroll.
+            ui.rulesPanel = UIKit.RulesPanel(c, "Rules", RulesCardSize.x - pad * 2, rowHeight, gap, 24, online: true, height: RulesCardSize.y - 148 - 96);
             var rules = ui.rulesPanel.GetComponent<RectTransform>();
             rules.Place(TopLeft, new Vector2(pad, -148), rules.sizeDelta);
 
@@ -213,21 +214,25 @@ namespace AlkkagiUIEditor
             // ASCII placeholders: the real Steam name replaces them at runtime.
             slot.nameText = UIKit.Text(filled.transform, "Name", seat == 0 ? "Host" : "Guest", 32, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
             slot.nameText.overflowMode = TextOverflowModes.Ellipsis;
-            slot.nameText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(96, 0), new Vector2(250, 56), new Vector2(0, 0.5f));
+            slot.nameText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(96, 0), new Vector2(200, 56), new Vector2(0, 0.5f));
             // Their rating, once their game has shared it.
             var chip = UIKit.Capsule(filled.transform, "Rating", 44, Theme.HanjiField, Theme.FieldBorder);
-            chip.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(358, 0), new Vector2(98, 44), new Vector2(0, 0.5f));
+            chip.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(304, 0), new Vector2(98, 44), new Vector2(0, 0.5f));
             slot.ratingText = UIKit.Text(chip.transform, "Text", "1000", 24, true, Theme.Ink, TextAlignmentOptions.Center);
             slot.ratingText.rectTransform.Stretch();
             slot.ratingChip = chip.gameObject;
             slot.roleText = UIKit.Text(filled.transform, "Role", $"{Loc.Get(seat == 0 ? "lobby.host" : "lobby.guest")} · {Loc.Get(colorKey)}", 24, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
-            slot.roleText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(472, 0), new Vector2(190, 56), new Vector2(0, 0.5f));
+            slot.roleText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(410, 0), new Vector2(170, 56), new Vector2(0, 0.5f));
             slot.filledView = filled.gameObject;
+            // Anyone else's seat can be blocked (BlockList), the host's too.
+            slot.blockButton = UIKit.CapsuleButton(filled.transform, "BlockButton", "lobby.block", new Vector2(112, 56), false, 24);
+            slot.blockButton.GetComponent<RectTransform>().Place(right, new Vector2(-12, 0), new Vector2(112, 56), right);
+            slot.blockButton.gameObject.SetActive(false);
             if (seat > 0)
             {
                 // The host can send a guest away (public lobbies let anyone in).
-                slot.kickButton = UIKit.CapsuleButton(filled.transform, "KickButton", "lobby.kick", new Vector2(176, 56), false, 24);
-                slot.kickButton.GetComponent<RectTransform>().Place(right, new Vector2(-12, 0), new Vector2(176, 56), right);
+                slot.kickButton = UIKit.CapsuleButton(filled.transform, "KickButton", "lobby.kick", new Vector2(136, 56), false, 24);
+                slot.kickButton.GetComponent<RectTransform>().Place(right, new Vector2(-136, 0), new Vector2(136, 56), right);
                 slot.kickButton.gameObject.SetActive(false);
             }
 

@@ -7,7 +7,8 @@ public enum KillKind : byte
     Kill,     // an opponent's piece knocked out
     Nongae,   // a kill on a shot whose own piece went out too (논개)
     Suicide,  // the shot piece went out and took no opponent with it
-    TeamKill  // the shot knocked out another of the shooter's own pieces
+    TeamKill, // the shot knocked out another of the shooter's own pieces
+    Edge      // fell as the board's edge gave way (ZoneRule): no one's shot
 }
 
 // One piece knocked out, as the kill feed shows it.
@@ -78,6 +79,14 @@ public class KillLog
 
     public void EndShot()
     {
+        if (shooterId < 0)
+        {
+            // The edge giving way: every piece on its own line, no one's.
+            var fell = removed.Select(r => new KillEvent { ShooterId = -1, ShotPieceId = '\0', VictimId = r.id, VictimOwnerId = r.owner, Kind = KillKind.Edge }).ToList();
+            removed.Clear();
+            Record(fell);
+            return;
+        }
         var tradedShotPiece = removed.Any(r => r.id == shotPieceId) && removed.Any(r => r.owner != shooterId);
         var events = new List<KillEvent>();
         foreach (var (id, owner) in removed)
@@ -101,6 +110,7 @@ public class KillLog
         if (events.Count == 0) return;
         foreach (var e in events)
         {
+            if (e.ShooterId < 0 || e.ShooterId >= kills.Length) continue; // no one's (the edge)
             switch (e.Kind)
             {
                 case KillKind.Kill:
@@ -115,7 +125,7 @@ public class KillLog
                     break;
             }
         }
-        if (events.Any(e => e.Kind == KillKind.Nongae)) nongae[events[0].ShooterId]++;
+        if (events.Any(e => e.Kind == KillKind.Nongae) && events[0].ShooterId >= 0) nongae[events[0].ShooterId]++;
         OnShotResolved?.Invoke(events);
     }
 }

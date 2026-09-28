@@ -55,11 +55,30 @@ public enum BothOutRule : byte
     Draw
 }
 
+// What a match is played for (HealthRuleset): alkkagi as it is, or a
+// battle of health where each side has health and a piece off the board
+// costs its worth.
+public enum GameVariant : byte
+{
+    Classic,
+    Health
+}
+
+// A battle of health's two ways (the lobby picks):
+public enum HealthRule : byte
+{
+    Respawn, // A: a piece off the board costs its worth and comes back; a side is out when its health is gone
+    Pool     // B: a piece off the board is gone and costs its worth; a side is out when its health or its pieces are
+}
+
 // Index into MatchSettings.Defs - keep the two in the same order (it's also
 // the order the rows are shown in).
 public enum MatchSettingId : byte
 {
     Mode, // first: the other rules are checked against it
+    Variant,
+    HealthRule,
+    Health,
     BoardType,
     PieceType,
     AimGuide,
@@ -72,6 +91,8 @@ public enum MatchSettingId : byte
     PlacementStyle,
     PlacementSeconds,
     TurnSeconds,
+    Zone,
+    RoundLimit,
     BothOutRule
 }
 
@@ -134,6 +155,13 @@ public sealed class MatchSettings
         // Item joins the list with the item mode.
         new MatchSettingDef(MatchSettingId.Mode, "mode", "match.mode", new[] { (int)MatchMode.Normal, (int)MatchMode.Custom }, (int)MatchMode.Normal,
             v => Loc.Get("mode." + (MatchMode)v), onlineOnly: true),
+        // A battle of health isn't ranked (yet).
+        new MatchSettingDef(MatchSettingId.Variant, "variant", "match.variant", new[] { (int)GameVariant.Classic, (int)GameVariant.Health }, (int)GameVariant.Classic,
+            v => Loc.Get("variant." + (GameVariant)v), ranked: new[] { (int)GameVariant.Classic }),
+        new MatchSettingDef(MatchSettingId.HealthRule, "healthRule", "match.healthRule", new[] { (int)global::HealthRule.Respawn, (int)global::HealthRule.Pool }, (int)global::HealthRule.Respawn,
+            v => Loc.Get("healthRule." + (global::HealthRule)v), s => s.Variant == GameVariant.Health),
+        new MatchSettingDef(MatchSettingId.Health, "health", "match.health", new[] { 6, 8, 10, 12, 15, 20 }, 10,
+            v => Loc.Get("option.health", v), s => s.Variant == GameVariant.Health),
         new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board",
             new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Hexagon, (int)global::BoardType.Cross, (int)global::BoardType.Random }, (int)global::BoardType.Go,
             v => Loc.Get("board." + (global::BoardType)v), isAvailable: (s, v) => v != (int)global::BoardType.Hexagon || s.Seats <= 3),
@@ -162,6 +190,13 @@ public sealed class MatchSettings
             v => Loc.Get("option.seconds", v), s => s.SpawnMode == global::SpawnMode.Placement, ranked: new[] { 60 }),
         new MatchSettingDef(MatchSettingId.TurnSeconds, "turnTime", "match.turnTime", new[] { 0, 10, 15, 20, 30, 60 }, 0,
             v => v == 0 ? Loc.Get("option.noLimit") : Loc.Get("option.seconds", v), ranked: new[] { 10, 15, 20, 30, 60 }, rankedFallback: 30),
+        // The board's edge crumbling in once nothing has gone out for a
+        // while (TurnController), so no one can hold a match by passing.
+        // Ranked: always, and a round limit behind it.
+        new MatchSettingDef(MatchSettingId.Zone, "zone", "match.zone", new[] { 1, 0 }, 1,
+            v => Loc.Get(v == 1 ? "option.on" : "option.off"), ranked: new[] { 1 }),
+        new MatchSettingDef(MatchSettingId.RoundLimit, "roundLimit", "match.roundLimit", new[] { 0, 15, 20, 30, 40 }, 0,
+            v => v == 0 ? Loc.Get("option.noLimit") : Loc.Get("option.rounds", v), ranked: new[] { 20 }),
         new MatchSettingDef(MatchSettingId.BothOutRule, "bothOut", "match.bothOut",
             new[] { (int)global::BothOutRule.ShooterLoses, (int)global::BothOutRule.ShooterWins, (int)global::BothOutRule.Draw }, (int)global::BothOutRule.ShooterLoses,
             v => Loc.Get("bothOut." + (global::BothOutRule)v), ranked: new[] { (int)global::BothOutRule.ShooterLoses }),
@@ -194,6 +229,9 @@ public sealed class MatchSettings
 
     public MatchMode Mode => (MatchMode)Get(MatchSettingId.Mode);
     public bool RankedMode => Mode != MatchMode.Custom;
+    public GameVariant Variant => (GameVariant)Get(MatchSettingId.Variant);
+    public HealthRule HealthRule => (HealthRule)Get(MatchSettingId.HealthRule);
+    public int Health => Get(MatchSettingId.Health);
     public BoardType BoardType => (BoardType)Get(MatchSettingId.BoardType);
     public PieceType PieceType => (PieceType)Get(MatchSettingId.PieceType);
     public bool AimGuide => Get(MatchSettingId.AimGuide) == 1;
@@ -209,6 +247,8 @@ public sealed class MatchSettings
     public PlacementStyle PlacementStyle => (PlacementStyle)Get(MatchSettingId.PlacementStyle);
     public int PlacementSeconds => Get(MatchSettingId.PlacementSeconds);
     public int TurnSeconds => Get(MatchSettingId.TurnSeconds); // 0 = no limit
+    public bool Zone => Get(MatchSettingId.Zone) == 1;
+    public int RoundLimit => Get(MatchSettingId.RoundLimit); // 0 = none
     public BothOutRule BothOutRule => (BothOutRule)Get(MatchSettingId.BothOutRule);
 
     public MatchSettings Clone()

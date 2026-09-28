@@ -87,7 +87,9 @@ public class GameManager : MonoBehaviour
     private void GamePreparation()
     {
         var settings = MatchSettings.Current;
-        Ruleset = new ClassicRuleset(settings.BothOutRule);
+        Ruleset = settings.Variant == GameVariant.Health
+            ? new HealthRuleset(settings.BothOutRule, settings.HealthRule, settings.Health)
+            : new ClassicRuleset(settings.BothOutRule);
         Time.timeScale = GamePace.Speed;
         totalPlayerCnt = MatchRoster.Current != null ? Mathf.Clamp(MatchRoster.Current.Count, 2, MatchRoster.MaxPlayers) : 2;
 
@@ -111,10 +113,13 @@ public class GameManager : MonoBehaviour
         new GameObject("HitEffects").AddComponent<HitEffects>();
         foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>().knocksBoard = pieceSet.KnocksBoard;
 
-        TurnController = new TurnController(Ruleset, Sides, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds)
+        var zone = new ZoneRule { Enabled = settings.Zone, MaxStage = ZoneRule.StagesFor(Board.Active.Shape) };
+        TurnController = new TurnController(Ruleset, Sides, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds, zone, settings.RoundLimit)
         {
             ResolveParked = ResolveParked,
+            Crumble = stage => Board.Crumble(stage, gamePieceScripts),
         };
+        new GameObject("BoardZoneView").AddComponent<BoardZoneView>().Init(Board, TurnController);
         gameState = GameState.WaitingForPlayers;
         if (!IsOnlineMatch && LocalOpponent.IsAI)
         {

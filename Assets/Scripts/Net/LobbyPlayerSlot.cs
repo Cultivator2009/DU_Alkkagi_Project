@@ -14,6 +14,7 @@ public class LobbyPlayerSlot : MonoBehaviour
     public GameObject emptyView;
     public Button inviteButton;
     public Button kickButton; // guests' seats only; LobbySceneUI shows it to the host
+    public Button blockButton; // anyone else's seat: never matched with them again (BlockList)
 
     // rating: null until the player's game has shared it.
     public void ShowPlayer(string playerName, string role, int? rating)

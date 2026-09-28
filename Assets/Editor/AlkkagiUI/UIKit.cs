@@ -498,17 +498,49 @@ namespace AlkkagiUIEditor
 
         // Every match rule (MatchSettings.Defs) as a "label  ◀ value ▶" row,
         // top to bottom inside a width-wide column. Rows bind by setting id, so
-        // a new rule only needs a rebuild to show up.
+        // a new rule only needs a rebuild to show up. MatchSettingsPanel stacks
+        // the rows that apply and scrolls them when there are more than fit
+        // in height.
         // online: the lobby's card, with the online-only rules (seats, the
         // third and fourth sides' pieces); the local setup card leaves them out.
         public static int RuleRows(bool online) => MatchSettings.Defs.Count(d => online || !d.OnlineOnly);
 
-        public static MatchSettingsPanel RulesPanel(Transform parent, string name, float width, float rowHeight, float gap, float labelSize, bool online)
+        public static MatchSettingsPanel RulesPanel(Transform parent, string name, float width, float rowHeight, float gap, float labelSize, bool online, float height)
         {
             var root = Node(name, parent);
-            root.sizeDelta = new Vector2(width, RuleRows(online) * (rowHeight + gap) - gap);
+            root.sizeDelta = new Vector2(width, height);
+            var viewport = Node("Viewport", root).Stretch();
+            viewport.gameObject.AddComponent<RectMask2D>();
+            var hit = viewport.gameObject.AddComponent<Image>(); // takes the wheel and drags over the gaps
+            hit.color = Color.clear;
+            var content = Node("Content", viewport).Place(new Vector2(0, 1), Vector2.zero, new Vector2(width, RuleRows(online) * (rowHeight + gap) - gap), new Vector2(0, 1));
+            var scroll = root.gameObject.AddComponent<ScrollRect>();
+            scroll.content = content;
+            scroll.viewport = viewport;
+            scroll.horizontal = false;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.scrollSensitivity = rowHeight;
+            // A thin bar just outside the rows' right edge, only while they
+            // don't all fit.
+            var track = Image(root, "Scrollbar", Pill, Theme.Divider, raycast: true);
+            track.rectTransform.anchorMin = new Vector2(1, 0);
+            track.rectTransform.anchorMax = new Vector2(1, 1);
+            track.rectTransform.pivot = new Vector2(0, 0.5f);
+            track.rectTransform.anchoredPosition = new Vector2(12, 0);
+            track.rectTransform.sizeDelta = new Vector2(6, 0);
+            var sliding = Node("SlidingArea", track.transform).Stretch();
+            var handle = Image(sliding, "Handle", Pill, Theme.InkFaint, raycast: true);
+            handle.rectTransform.Stretch();
+            var bar = track.gameObject.AddComponent<Scrollbar>();
+            bar.handleRect = handle.rectTransform;
+            bar.targetGraphic = handle;
+            bar.direction = Scrollbar.Direction.BottomToTop;
+            scroll.verticalScrollbar = bar;
+            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
             var panel = root.gameObject.AddComponent<MatchSettingsPanel>();
             panel.modes = online;
+            panel.content = content;
+            panel.rowPitch = rowHeight + gap;
             var stepperWidth = Mathf.Min(360, width * 0.55f);
             var topLeft = new Vector2(0, 1);
 
@@ -516,7 +548,7 @@ namespace AlkkagiUIEditor
             foreach (var def in MatchSettings.Defs.Where(d => online || !d.OnlineOnly))
             {
                 var i = rows.Count;
-                var rowRect = Node(def.Key, root).Place(topLeft, new Vector2(0, -i * (rowHeight + gap)), new Vector2(width, rowHeight));
+                var rowRect = Node(def.Key, content).Place(topLeft, new Vector2(0, -i * (rowHeight + gap)), new Vector2(width, rowHeight));
                 var row = rowRect.gameObject.AddComponent<MatchSettingRow>();
                 row.settingId = def.Id;
                 row.canvasGroup = rowRect.gameObject.AddComponent<CanvasGroup>();

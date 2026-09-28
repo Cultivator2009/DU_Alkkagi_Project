@@ -6,14 +6,19 @@ public enum RatedResult : byte
     Win,
     Loss,
     Draw,
-    NoContest // three or four, and the host left while this side was still in
+    NoContest // (no longer given: a held result from an older build may still say it)
 }
 
 // One rated online match as this screen follows it: who went out when, and
 // from that every side's result against every other. A side beats everyone
 // who went out before it and loses to everyone who outlasted it; sides out
-// on the same flick tie. The host's own events and a guest's messages come
-// in the same order, so every machine reaches the same standings.
+// on the same flick tie. Leaving is going out at that moment: whoever left
+// loses to everyone who stayed longer. So when the host leaves three or
+// four, the match stops there and everyone still in beats the host (and
+// everyone out before) and ties with the others still in. The host's own
+// events and a guest's messages come in the same order, so every machine
+// reaches the same standings - and a host can't take a loss away by
+// walking out.
 public sealed class RatedMatch
 {
     private readonly IReadOnlyList<int> ratings; // at the start, by player id
@@ -60,21 +65,18 @@ public sealed class RatedMatch
     {
         var places = OutPlaces();
         var final = outGroups.Count;
-        for (var i = 0; i < places.Length; i++)
+        var stillIn = Enumerable.Range(0, places.Length).Where(i => !places[i].HasValue).ToList();
+        foreach (var i in stillIn)
         {
-            if (places[i].HasValue) continue;
-            if (reason == MatchEndReason.HostLeft)
-            {
-                // The host went out last; the rest stopped still in, unranked
-                // among themselves.
-                if (i == 0) places[i] = final;
-            }
+            // The host left: out last, the rest still in, level with each other.
+            if (reason == MatchEndReason.HostLeft) places[i] = i == 0 ? final : int.MaxValue;
             else places[i] = i == winnerId ? int.MaxValue : final;
         }
         var changes = Enumerable.Range(0, ratings.Count).Select(i => ChangeFor(i, places)).ToArray();
         RatedResult result;
         if (self == winnerId) result = RatedResult.Win;
-        else if (!places[self].HasValue) result = RatedResult.NoContest;
+        else if (reason == MatchEndReason.HostLeft && self != 0 && places[self] == int.MaxValue)
+            result = stillIn.Count(i => i != 0) == 1 ? RatedResult.Win : RatedResult.Draw;
         else if (winnerId < 0 && reason != MatchEndReason.HostLeft && places[self] == final) result = RatedResult.Draw;
         else result = RatedResult.Loss;
         return (changes, result);
@@ -88,8 +90,8 @@ public sealed class RatedMatch
         return places;
     }
 
-    // Higher places beat lower ones; a side with none (still in when the
-    // match stopped) outlasted everyone placed.
+    // Higher places beat lower ones; a side with none (still in, as
+    // IfLeftNow asks) outlasted everyone placed.
     private int ChangeFor(int playerId, int?[] places)
     {
         var results = new List<(int, float)>();

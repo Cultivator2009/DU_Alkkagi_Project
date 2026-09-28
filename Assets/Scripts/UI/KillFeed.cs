@@ -48,11 +48,14 @@ public class KillFeed : MonoBehaviour
         entries.RemoveAt(index);
     }
 
-    // Kill: 흑 ● ▸ ○ 백. A suicide is only the shooter and their piece.
+    // Kill: 흑 ● ▸ ○ 백. A suicide is only the shooter and their piece. A
+    // piece that fell as the edge gave way: 자기장 ▸ ○ 백.
     private static void Fill(KillFeedEntry entry, KillEvent kill, BoardSetup board, PieceType pieces)
     {
-        entry.shooterName.text = SideStyle.Name(kill.ShooterId, pieces);
-        Icon(entry.shotIcon, entry.shotLetter, kill.ShooterId, kill.ShotPieceId, board, pieces);
+        var edge = kill.Kind == KillKind.Edge;
+        entry.shooterName.text = edge ? Loc.Get("kill.edge") : SideStyle.Name(kill.ShooterId, pieces);
+        entry.shotIcon.gameObject.SetActive(!edge);
+        if (!edge) Icon(entry.shotIcon, entry.shotLetter, kill.ShooterId, kill.ShotPieceId, board, pieces);
 
         var suicide = kill.Kind == KillKind.Suicide;
         entry.arrow.SetActive(!suicide);
@@ -71,8 +74,11 @@ public class KillFeed : MonoBehaviour
             KillKind.TeamKill => "kill.teamKill",
             _ => null,
         };
-        entry.badge.SetActive(badgeKey != null);
+        // A battle of health: what it cost its side, unless there's more to say.
+        var damage = MatchSettings.Current.Variant == GameVariant.Health && badgeKey == null;
+        entry.badge.SetActive(badgeKey != null || damage);
         if (badgeKey != null) entry.badgeText.text = Loc.Get(badgeKey);
+        else if (damage) entry.badgeText.text = Loc.Get("kill.damage", board.Value(kill.VictimId));
     }
 
     // The side's stone, or for a janggi or chess piece its disc with the letter.

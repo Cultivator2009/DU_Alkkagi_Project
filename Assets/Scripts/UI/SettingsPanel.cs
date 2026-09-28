@@ -23,6 +23,8 @@ public class SettingsPanel : MonoBehaviour
     public TMP_Text interfaceValue;
     public KeyBindRow[] keyRows;
     public Button resetButton;
+    public TMP_Text blockedText;      // how many players this one has blocked
+    public Button unblockAllButton;
 
     private static readonly KeyCode[] AllKeys = (KeyCode[])Enum.GetValues(typeof(KeyCode));
     private KeyBindRow capturing;
@@ -64,6 +66,7 @@ public class SettingsPanel : MonoBehaviour
                 Render();
             });
         }
+        unblockAllButton.onClick.AddListener(BlockList.Clear);
         resetButton.onClick.AddListener(() =>
         {
             capturing = null;
@@ -77,6 +80,7 @@ public class SettingsPanel : MonoBehaviour
     {
         Loc.OnLanguageChanged += Render;
         KeyBindings.OnChanged += Render;
+        BlockList.OnChanged += Render;
         Render();
     }
 
@@ -85,6 +89,7 @@ public class SettingsPanel : MonoBehaviour
         capturing = null;
         Loc.OnLanguageChanged -= Render;
         KeyBindings.OnChanged -= Render;
+        BlockList.OnChanged -= Render;
     }
 
     private void Update()
@@ -118,6 +123,10 @@ public class SettingsPanel : MonoBehaviour
         interfaceValue.text = Percent(GameSettings.InterfaceVolume);
         foreach (var row in keyRows)
             row.keyText.text = row == capturing ? Loc.Get("bind.press") : KeyBindings.DisplayName(KeyBindings.Get(row.action));
+        blockedText.text = Loc.Get("settings.blocked", BlockList.Count);
+        unblockAllButton.interactable = BlockList.Count > 0;
+        var group = unblockAllButton.GetComponent<CanvasGroup>();
+        if (group != null) group.alpha = BlockList.Count > 0 ? 1f : fixedAlpha;
     }
 
     private void RenderDisplay()

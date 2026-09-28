@@ -27,6 +27,14 @@ public class LocalizedText : MonoBehaviour
         Loc.OnLanguageChanged -= Refresh;
     }
 
+    // Another string in the same place (a screen that relabels a row).
+    public void Show(string newKey)
+    {
+        if (key == newKey) return;
+        key = newKey;
+        if (text != null) Refresh();
+    }
+
     private void Refresh()
     {
         if (!string.IsNullOrEmpty(key)) text.text = Loc.Get(key);

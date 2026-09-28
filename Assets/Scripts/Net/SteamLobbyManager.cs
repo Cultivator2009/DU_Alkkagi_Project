@@ -30,6 +30,7 @@ public class SteamLobbyManager : MonoBehaviour
     private const string Open = "open";
     private const string Playing = "playing";
     private const string HostNameKey = "host";
+    private const string HostIdKey = "hostId"; // a search can't ask who owns a lobby; the browser drops blocked hosts by this
     private const string VisibilityKey = "vis";
     private const string VisibilityPref = "lobby.visibility";
     private const string RatingKey = "rating"; // member data: each member's own rating, for the seats and the roster
@@ -78,6 +79,7 @@ public class SteamLobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyMemberDataChanged += HandleMemberDataChanged;
         SteamFriends.OnGameLobbyJoinRequested += HandleJoinRequested;
         PlayerRating.OnChanged += ShareRating;
+        BlockList.OnChanged += EnforceBlocks;
     }
 
     private void Start()
@@ -95,6 +97,7 @@ public class SteamLobbyManager : MonoBehaviour
         SteamMatchmaking.OnLobbyMemberDataChanged -= HandleMemberDataChanged;
         SteamFriends.OnGameLobbyJoinRequested -= HandleJoinRequested;
         PlayerRating.OnChanged -= ShareRating;
+        BlockList.OnChanged -= EnforceBlocks;
     }
 
     // Leave explicitly on quit so the other player is told right away;
@@ -126,6 +129,7 @@ public class SteamLobbyManager : MonoBehaviour
         lobby.SetData(ProtocolKey, NetProtocol.Version.ToString());
         lobby.SetData(StateKey, Open);
         lobby.SetData(HostNameKey, SteamClient.Name);
+        lobby.SetData(HostIdKey, SteamClient.SteamId.Value.ToString());
         ApplyVisibility(lobby, visibility);
         WriteSettings(lobby, settings);
     }
@@ -174,7 +178,7 @@ public class SteamLobbyManager : MonoBehaviour
             .WithMaxResults(20);
         if (mode.HasValue) query = query.WithKeyValue(RulePrefix + MatchSettings.Defs[(int)MatchSettingId.Mode].Key, ((int)mode.Value).ToString());
         var lobbies = await query.RequestAsync();
-        return lobbies ?? Array.Empty<Lobby>();
+        return (lobbies ?? Array.Empty<Lobby>()).Where(l => !(ulong.TryParse(l.GetData(HostIdKey), out var host) && BlockList.IsBlocked(host))).ToArray();
     }
 
     // The nearest open public Normal lobby, or failing that a new one to wait
@@ -318,6 +322,23 @@ public class SteamLobbyManager : MonoBehaviour
         if (SceneManager.GetActiveScene().name != "LobbyScene") SceneManager.LoadScene("LobbyScene");
     }
 
+    // No one this player blocked stays in a lobby with them: the host sends
+    // them away; a guest leaves.
+    private void EnforceBlocks()
+    {
+        if (!CurrentLobby.HasValue) return;
+        var lobby = CurrentLobby.Value;
+        var blocked = lobby.Members.Where(m => m.Id.Value != SteamClient.SteamId.Value && BlockList.IsBlocked(m.Id.Value)).ToList();
+        if (blocked.Count == 0) return;
+        if (IsHost)
+        {
+            foreach (var member in blocked) Kick(member.Id.Value);
+            return;
+        }
+        LeaveLobby();
+        OnLobbyFailed?.Invoke("lobby.status.blocked");
+    }
+
     public void LeaveLobby()
     {
         if (!CurrentLobby.HasValue) return;
@@ -339,6 +360,13 @@ public class SteamLobbyManager : MonoBehaviour
             return;
         }
         CurrentLobby = lobby;
+        // Someone this player blocked is in it: not a lobby to be in.
+        if (!IsHost && lobby.Members.Any(m => BlockList.IsBlocked(m.Id.Value)))
+        {
+            LeaveLobby();
+            OnLobbyFailed?.Invoke("lobby.status.blocked");
+            return;
+        }
         ShareRating();
         foreach (var member in lobby.Members)
         {
@@ -353,13 +381,18 @@ public class SteamLobbyManager : MonoBehaviour
         SteamTransport.Instance?.ConnectPeer(friend.Id.Value);
         if (IsHost && kicked.Contains(friend.Id.Value)) NetSession.Current?.Send(friend.Id.Value, new Msg.Kick());
         OnMemberJoined?.Invoke(friend);
+        EnforceBlocks();
     }
 
     private void HandleMemberLeft(Lobby lobby, Friend friend)
     {
         // When the host leaves, Steam hands the lobby to whoever is left: the
         // browser should show the new host's name.
-        if (IsHost) lobby.SetData(HostNameKey, SteamClient.Name);
+        if (IsHost)
+        {
+            lobby.SetData(HostNameKey, SteamClient.Name);
+            lobby.SetData(HostIdKey, SteamClient.SteamId.Value.ToString());
+        }
         OnMemberLeft?.Invoke(friend);
     }
 }

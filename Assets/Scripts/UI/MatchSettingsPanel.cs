@@ -7,6 +7,8 @@ using UnityEngine;
 public class MatchSettingsPanel : MonoBehaviour
 {
     public MatchSettingRow[] rows;
+    public RectTransform content; // the rows' parent, scrolled when they're taller than the panel
+    public float rowPitch = 50;
     // The lobby's card: its mode decides which rules are open, and a rule the
     // mode fixes shows dimmed, without arrows. The local setup has no modes.
     public bool modes;
@@ -57,18 +59,27 @@ public class MatchSettingsPanel : MonoBehaviour
         OnChanged?.Invoke(settings.Clone());
     }
 
+    // A rule the others make moot (the placement style when pieces start
+    // laid out) is left out and the rows below close up; one the mode fixes
+    // shows dimmed, without arrows.
     private void Render()
     {
+        var y = 0f;
         foreach (var row in rows)
         {
             var def = MatchSettings.Defs[(int)row.settingId];
+            var relevant = def.IsRelevant == null || def.IsRelevant(settings);
+            row.gameObject.SetActive(relevant);
+            if (!relevant) continue;
+            ((RectTransform)row.transform).anchoredPosition = new Vector2(0, -y);
+            y += rowPitch;
             var values = Values(def);
             var value = settings.Get(row.settingId);
             var index = Array.IndexOf(values, value);
             var open = values.Length > 1;
-            var relevant = def.IsRelevant == null || def.IsRelevant(settings);
-            row.Render(def.Format(value), index > 0, index < values.Length - 1, editable && open, relevant && open);
+            row.Render(def.Format(value), index > 0, index < values.Length - 1, editable && open, open);
         }
+        if (content != null) content.sizeDelta = new Vector2(content.sizeDelta.x, y);
     }
 
     private int[] Values(MatchSettingDef def) => modes ? settings.Allowed(def) : settings.Available(def);

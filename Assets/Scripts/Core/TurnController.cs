@@ -9,7 +9,8 @@ public enum TurnEnd : byte
     None,    // no turn has finished yet (the opening turn), or a resync
     Shot,
     Timeout,
-    Skipped
+    Skipped,
+    Collapse // not a side's turn: the board's edge gave way and what fell was counted (ZoneRule)
 }
 
 // The turns of a match: whose go it is, the clock, the shot playing out,
@@ -28,6 +29,7 @@ public class TurnController
     // sides): knocked out, conceded or gone. Its turns are skipped.
     public event Action<int, MatchEndReason> OnPlayerOut;
     public event Action OnSidesChanged;                         // score, pieces, health
+    public event Action OnZoneChanged;                          // the edge announced, or giving way (Zone)
 
     public GameManager.GameState State { get; private set; } = GameManager.GameState.Mainmenu;
     public bool HasStarted => State != GameManager.GameState.Mainmenu;
@@ -35,14 +37,21 @@ public class TurnController
     public bool IsMirror { get; private set; }
     public int CurrentPlayerID { get; private set; }
     public int Turn { get; private set; }       // turns begun
-    public int TurnsEnded { get; private set; } // shot or passed
+    public int TurnsEnded { get; private set; } // shot, passed, or the edge giving way
+    public int Round { get; private set; } = 1;  // every side still in has a turn in a round
+    public ZoneRule Zone { get; }
+    public int RoundLimit { get; }               // 0 = none: at its end the side with the most left wins
+    // The board's edge is giving way and what stood on it falling; no one's turn.
+    public bool Collapsing { get; private set; }
+    // Passing is refused once the edge is coming in.
+    public bool MayPass => Zone.AllowsPass;
     public PieceSelector PieceSelector => pieceSelector;
     public TurnEnd LastTurnEnd { get; private set; }
     public int LastPlayerId { get; private set; } = -1; // whose turn last finished
     public KillLog Kills { get; }
     public IReadOnlyList<Side> Sides => sides;
-    // The side whose shot is playing out, or -1.
-    public int Shooter => State == GameManager.GameState.ProcessingTurn ? CurrentPlayerID : -1;
+    // The side whose shot is playing out, or -1 (none, or the edge giving way).
+    public int Shooter => State == GameManager.GameState.ProcessingTurn && !Collapsing ? CurrentPlayerID : -1;
 
     // 0 = no turn timer. The clock runs while the side to move is choosing
     // and aiming, and stops once the stone is flicked.
@@ -62,6 +71,10 @@ public class TurnController
     // Once a shot has stopped and the ruleset has said who's out, before the
     // result: the pieces waiting to come back go back (GameManager).
     public Action ResolveParked { get; set; }
+    // The edge gives way to this step: the board shrinks and whatever stood
+    // on the lost ground is let fall (GameManager, BoardSetup.Crumble). On
+    // a guest too, for the look of it.
+    public Action<int> Crumble { get; set; }
 
     // The pull has been let go: the flick lands on the next physics step, or
     // already has on this frame's, but the state only catches up in
@@ -80,6 +93,9 @@ public class TurnController
     private float shotStartedAt; // real time
     private List<Side> standingAtShot = new List<Side>();
     private bool resolved; // the result is in (not just stopped: Abort)
+    private int outsThisRound;
+    private float collapseStartedAt; // game time: a crumble plays out a moment before anything can be settled
+    private const float CollapseMinSeconds = 0.4f;
     private int winner = -1;
     private MatchEndReason endReason;
 
@@ -88,8 +104,12 @@ public class TurnController
         List<Side> sides,
         List<GamePieceDragAndReleaseForce> gamePieceScripts,
         PieceSelector pieceSelector,
-        int turnSeconds)
+        int turnSeconds,
+        ZoneRule zone = null,
+        int roundLimit = 0)
     {
+        Zone = zone ?? new ZoneRule();
+        RoundLimit = roundLimit;
         this.ruleset = ruleset;
         this.sides = sides;
         this.gamePieceScripts = gamePieceScripts;
@@ -154,7 +174,7 @@ public class TurnController
     // side to move, before its stone is flicked.
     public bool TryPassTurn(int playerId)
     {
-        if (IsMirror || !IsAwaitingShot || ShotReleased || playerId != CurrentPlayerID) return false;
+        if (IsMirror || !IsAwaitingShot || ShotReleased || playerId != CurrentPlayerID || !MayPass) return false;
         PassTurn(TurnEnd.Skipped);
         return true;
     }
@@ -199,6 +219,7 @@ public class TurnController
     public bool PieceOut(GamePieceManager piece)
     {
         Kills.PieceRemoved(piece.pieceID, piece.playerIndex);
+        outsThisRound++;
         return ruleset.OnPieceOut(piece, sides, Shooter);
     }
 
@@ -215,6 +236,11 @@ public class TurnController
             Over = resolved,
             Winner = winner,
             Reason = endReason,
+            Round = Round,
+            QuietRounds = Zone.QuietRounds,
+            ZoneStage = Zone.Stage,
+            ZoneWarned = Zone.Warned,
+            Collapsing = Collapsing,
             Sides = sides.Select(s =>
             {
                 var copy = new Side(s.Id);
@@ -244,7 +270,20 @@ public class TurnController
             Kills.Record(kills);
             OnShotEnded?.Invoke(state.LastPlayer);
         }
+        else if (turnEnded && state.LastTurnEnd == TurnEnd.Collapse) Kills.Record(kills);
         else if (turnEnded) OnTurnPassed?.Invoke(state.LastPlayer, state.LastTurnEnd);
+
+        Round = state.Round;
+        Zone.QuietRounds = state.QuietRounds;
+        Collapsing = state.Collapsing;
+        if (state.ZoneStage != Zone.Stage || state.ZoneWarned != Zone.Warned)
+        {
+            var crumbled = state.ZoneStage != Zone.Stage;
+            Zone.Stage = state.ZoneStage;
+            Zone.Warned = state.ZoneWarned;
+            if (crumbled) Crumble?.Invoke(Zone.Stage);
+            OnZoneChanged?.Invoke();
+        }
 
         var newlyOut = new List<Side>();
         foreach (var remote in state.Sides)
@@ -269,10 +308,19 @@ public class TurnController
             return;
         }
         foreach (var side in newlyOut) OnPlayerOut?.Invoke(side.Id, side.Out.Value);
+        if (Collapsing) State = GameManager.GameState.ProcessingTurn;
         if (!newTurn) return;
         TurnTimeRemaining = TurnSeconds;
         State = GameManager.GameState.WaitingForInput;
         OnTurnStarted?.Invoke(CurrentPlayerID);
+    }
+
+    // The host left: a guest's match ends where it is, the guest deciding
+    // the result it can (NetworkMatchBridge).
+    public void EndWithoutHost(int winnerId, MatchEndReason reason)
+    {
+        if (!IsMirror || resolved) return;
+        EndMatch(winnerId, reason);
     }
 
     // A shot is playing out on the host (this guest's own, sent, or a
@@ -318,9 +366,11 @@ public class TurnController
 
     private void TurnProcess()
     {
+        if (Collapsing && Time.time - collapseStartedAt < CollapseMinSeconds) return;
         foreach (var piece in gamePieceScripts)
             if (!piece.IsSettled) return;
-        if (!selGamePiece.isCancelled && !selGamePiece.isDragging) EndTurn();
+        if (Collapsing) EndCollapse();
+        else if (!selGamePiece.isCancelled && !selGamePiece.isDragging) EndTurn();
     }
 
     private void EndTurn()
@@ -347,6 +397,47 @@ public class TurnController
         }
         foreach (var side in knockedOut) OnPlayerOut?.Invoke(side.Id, MatchEndReason.Knockout);
 
+        if (!TryCrumble()) BeginTurn(NextPlayerIndex());
+    }
+
+    // The turn that the edge was announced for is over: it gives way now.
+    // Whatever stood on the lost ground falls as if on no one's shot.
+    private bool TryCrumble()
+    {
+        if (!Zone.TakeDue()) return false;
+        Collapsing = true;
+        collapseStartedAt = Time.time;
+        shotStartedAt = Time.unscaledTime;
+        selGamePiece = null;
+        Kills.BeginShot(-1, '\0');
+        standingAtShot = sides.Where(s => s.Standing).ToList();
+        State = GameManager.GameState.ProcessingTurn;
+        Crumble?.Invoke(Zone.Stage);
+        OnZoneChanged?.Invoke();
+        return true;
+    }
+
+    // Everything has come to rest on what's left of the board.
+    private void EndCollapse()
+    {
+        Collapsing = false;
+        TurnsEnded++;
+        LastTurnEnd = TurnEnd.Collapse;
+        LastPlayerId = -1;
+        Kills.EndShot();
+
+        var knockedOut = standingAtShot.Where(s => s.Standing && ruleset.IsKnockedOut(s)).ToList();
+        foreach (var side in knockedOut) side.Out = MatchEndReason.Knockout;
+        ResolveParked?.Invoke();
+        OnSidesChanged?.Invoke();
+
+        var standing = sides.Where(s => s.Standing).ToList();
+        if (ruleset.TryGetMatchWinner(standingAtShot, standing, -1, out var matchWinner, out var reason))
+        {
+            EndMatch(matchWinner != null ? matchWinner.Id : -1, reason);
+            return;
+        }
+        foreach (var side in knockedOut) OnPlayerOut?.Invoke(side.Id, MatchEndReason.Knockout);
         BeginTurn(NextPlayerIndex());
     }
 
@@ -374,7 +465,7 @@ public class TurnController
         LastTurnEnd = why;
         LastPlayerId = passer;
         OnTurnPassed?.Invoke(passer, why);
-        BeginTurn(NextPlayerIndex());
+        if (!TryCrumble()) BeginTurn(NextPlayerIndex());
     }
 
     // The next side round that is still standing.
@@ -390,12 +481,34 @@ public class TurnController
 
     private void BeginTurn(int playerIndex)
     {
+        // Round again to the front: a round is over.
+        if (Turn > 0 && playerIndex <= CurrentPlayerID && EndRound()) return;
         selGamePiece = null;
         CurrentPlayerID = sides[playerIndex].Id;
         Turn++;
         TurnTimeRemaining = TurnSeconds;
         State = GameManager.GameState.WaitingForInput;
         OnTurnStarted?.Invoke(CurrentPlayerID);
+    }
+
+    // True if the round limit ended the match: the side with the most left
+    // (health in a battle of health, pieces otherwise) wins, a tie is a draw.
+    private bool EndRound()
+    {
+        Zone.EndRound(outsThisRound);
+        outsThisRound = 0;
+        if (RoundLimit > 0 && Round >= RoundLimit)
+        {
+            var standing = sides.Where(s => s.Standing).ToList();
+            int Left(Side side) => side.HasHealth ? side.Health : side.Pieces;
+            var most = standing.Max(Left);
+            var leaders = standing.Where(s => Left(s) == most).ToList();
+            EndMatch(leaders.Count == 1 ? leaders[0].Id : -1, MatchEndReason.RoundLimit);
+            return true;
+        }
+        Round++;
+        if (Zone.Warned) OnZoneChanged?.Invoke();
+        return false;
     }
 
     private Side Find(int playerId) => playerId >= 0 && playerId < sides.Count ? sides[playerId] : null;

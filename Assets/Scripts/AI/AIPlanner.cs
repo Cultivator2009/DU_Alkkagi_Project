@@ -64,18 +64,22 @@ public class AIPlanner : IDisposable
     private readonly Scene scene;
     private readonly PhysicsScene physics;
     private readonly List<Stand> stands = new List<Stand>();
-    private readonly BoardShape shape; // what's left of the board
+    private readonly BoardShape shape;    // what's left of the board
+    private readonly BoardShape afterShot; // and what will be once this turn is over (the edge may be coming in)
     private readonly BothOutRule bothOutRule;
     private readonly IRuleset ruleset;
     private readonly IReadOnlyList<Side> sides;
 
-    public AIPlanner(BoardSetup board, IEnumerable<GamePieceDragAndReleaseForce> pieces, IRuleset ruleset, IReadOnlyList<Side> sides, BothOutRule rule)
+    // edgeComing: the edge gives way when this turn ends (ZoneRule), so a
+    // piece left on that ground is as good as gone.
+    public AIPlanner(BoardSetup board, IEnumerable<GamePieceDragAndReleaseForce> pieces, IRuleset ruleset, IReadOnlyList<Side> sides, BothOutRule rule, bool edgeComing = false)
     {
         this.ruleset = ruleset;
         this.sides = sides;
         scene = SceneManager.CreateScene("AIPlanner " + Time.frameCount, new CreateSceneParameters(LocalPhysicsMode.Physics3D));
         physics = scene.GetPhysicsScene();
         shape = board.Playable;
+        afterShot = edgeComing ? shape.Inset(ZoneRule.Step) : shape;
         bothOutRule = rule;
 
         Copy(board.Active.gameObject);
@@ -208,8 +212,18 @@ public class AIPlanner : IDisposable
                 lost[stand.Owner].value += stand.Value;
                 continue;
             }
-            // Near the edge is where a piece gets knocked out next.
-            var nearEdge = 1f - Mathf.Clamp01(EdgeMargin(stand.Body.position) / 0.5f);
+            // Near the edge is where a piece gets knocked out next; on
+            // ground about to give way, it's out.
+            var flat = new Vector2(stand.Body.position.x, stand.Body.position.z);
+            if (!afterShot.Contains(flat))
+            {
+                if (mine) mineOut += stand.Value;
+                else theirsOut += stand.Value;
+                lost[stand.Owner].pieces++;
+                lost[stand.Owner].value += stand.Value;
+                continue;
+            }
+            var nearEdge = 1f - Mathf.Clamp01(afterShot.Margin(flat) / 0.5f);
             position += mine ? -0.8f * nearEdge : 0.8f * nearEdge;
         }
 
@@ -283,8 +297,6 @@ public class AIPlanner : IDisposable
 
     // How far from point along direction the board ends.
     private float EdgeDistance(Vector3 point, Vector3 direction) => shape.Exit(new Vector2(point.x, point.z), new Vector2(direction.x, direction.z));
-
-    private float EdgeMargin(Vector3 point) => shape.Margin(new Vector2(point.x, point.z));
 
     private static Vector3 Flat(Vector3 v) => new Vector3(v.x, 0, v.z);
 }

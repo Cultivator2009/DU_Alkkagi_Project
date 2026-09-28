@@ -125,6 +125,9 @@ public static class NetFilters
         }
     };
 
+    // Nothing from a player this one blocked (BlockList).
+    public static NetFilter NotBlocked() => (in NetEnvelope e) => !BlockList.IsBlocked(e.Sender);
+
     // Every message in the console, in the editor and development builds.
     public static NetFilter Trace(string scope) => (in NetEnvelope e) =>
     {

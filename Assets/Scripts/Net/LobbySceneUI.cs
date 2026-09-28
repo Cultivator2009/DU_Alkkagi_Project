@@ -78,6 +78,7 @@ public class LobbySceneUI : MonoBehaviour
             var seat = i;
             seats[i].inviteButton.onClick.AddListener(() => lobbyManager.InviteFriends());
             if (seats[i].kickButton != null) seats[i].kickButton.onClick.AddListener(() => OnClickKick(seat));
+            seats[i].blockButton.onClick.AddListener(() => OnClickBlock(seat));
         }
         leaveButton.onClick.AddListener(OnClickLeave);
         startButton.onClick.AddListener(OnClickStartMatch);
@@ -99,6 +100,7 @@ public class LobbySceneUI : MonoBehaviour
         lobbyManager.OnLobbyDataChanged += Render;
         // Only this lobby's host sends either.
         scope = NetSession.Current?.Scope("lobby")
+            .Use(NetFilters.NotBlocked())
             .Use(NetFilters.Authority(() => lobbyManager.CurrentLobby.HasValue ? lobbyManager.CurrentLobby.Value.Owner.Id.Value : 0, () => lobbyManager.IsHost))
             .On<Msg.LoadGameScene>(HandleLoadGameScene)
             .On<Msg.Kick>(HandleKick);
@@ -193,6 +195,13 @@ public class LobbySceneUI : MonoBehaviour
     {
         var members = SteamLobbyManager.SeatOrder(lobbyManager.CurrentLobby.Value);
         if (seat > 0 && seat < members.Count) lobbyManager.Kick(members[seat].Id.Value);
+    }
+
+    // Blocked: the host sends them away, a guest leaves (SteamLobbyManager).
+    private void OnClickBlock(int seat)
+    {
+        var members = SteamLobbyManager.SeatOrder(lobbyManager.CurrentLobby.Value);
+        if (seat < members.Count) BlockList.Block(members[seat].Id.Value, members[seat].Name);
     }
 
     private void OnClickCopy()
@@ -335,6 +344,7 @@ public class LobbySceneUI : MonoBehaviour
             else
                 slot.ShowEmpty(lobbyManager.IsHost && i == members.Count);
             if (slot.kickButton != null) slot.kickButton.gameObject.SetActive(lobbyManager.IsHost && i > 0 && i < members.Count);
+            slot.blockButton.gameObject.SetActive(i < members.Count && members[i].Id.Value != Steamworks.SteamClient.SteamId.Value);
         }
         SideMark.ShowAll(lobbyView.transform, rules.PieceType);
 

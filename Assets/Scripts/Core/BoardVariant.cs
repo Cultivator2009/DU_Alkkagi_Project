@@ -70,8 +70,10 @@ public class BoardVariant : MonoBehaviour
         var old = transform.Find(SlabName);
         if (old != null)
         {
-            if (Application.isPlaying) Destroy(old.gameObject);
-            else DestroyImmediate(old.gameObject);
+            // Its meshes are its own (made below), not assets: they go with it.
+            var meshes = old.GetComponents<MeshCollider>().Select(c => c.sharedMesh).Append(old.GetComponent<MeshFilter>()?.sharedMesh);
+            foreach (var mesh in meshes.Where(m => m != null).ToList()) Discard(mesh);
+            Discard(old.gameObject);
         }
         var slab = new GameObject(SlabName).transform;
         slab.SetParent(transform, false);
@@ -101,6 +103,12 @@ public class BoardVariant : MonoBehaviour
     }
 
     private const string SlabName = "Slab";
+
+    private static void Discard(Object thing)
+    {
+        if (Application.isPlaying) Destroy(thing);
+        else DestroyImmediate(thing);
+    }
 
     // Tops (submesh 0) and sides (submesh 1). Where rectangular parts
     // overlap, a later one's top leaves out what an earlier one covers, so

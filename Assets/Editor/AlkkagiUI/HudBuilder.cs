@@ -97,6 +97,14 @@ namespace AlkkagiUIEditor
             controller.noticeText = UIKit.Text(notice.transform, "Text", "흑 시간 초과 · 턴을 넘겨요", 24, true, Theme.SealText, TextAlignmentOptions.Center);
             controller.noticeText.rectTransform.Stretch();
             notice.gameObject.SetActive(false);
+
+            // Under the pill, small: the crumbling edge and the round limit.
+            var chip = UIKit.Capsule(root, "StatusChip", 36, Theme.Hanji, Theme.FieldBorder);
+            chip.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -74), new Vector2(300, 36));
+            controller.statusChip = chip.gameObject;
+            controller.statusChipText = UIKit.Text(chip.transform, "Text", "자기장 2단계 · 라운드 5/20", 20, true, Theme.Seal, TextAlignmentOptions.Center);
+            controller.statusChipText.rectTransform.Stretch();
+            chip.gameObject.SetActive(false);
         }
 
         private static PlayerHudPanel BuildPlayerPanel(Transform root, string name, int playerId, Vector2 corner, Vector2 offset, Color stoneFill, Color stoneRing)
@@ -142,6 +150,15 @@ namespace AlkkagiUIEditor
             UIKit.Mark(template, playerId); // copies keep it
             panel.stoneTemplate = template.gameObject;
             panel.stoneTemplate.SetActive(false);
+
+            // A battle of health's bar, between the stones and the line under them.
+            var bar = UIKit.Image(t, "HealthBar", null, Theme.Divider);
+            bar.rectTransform.Place(topLeft, new Vector2(Pad, -284), new Vector2(PanelSize.x - Pad * 2, 8));
+            var fill = UIKit.Image(bar.transform, "Fill", null, Theme.Seal);
+            fill.rectTransform.Stretch(); // PlayerHudPanel narrows it to the health left
+            panel.healthBar = bar.gameObject;
+            panel.healthFill = fill;
+            bar.gameObject.SetActive(false);
 
             panel.capturedText = UIKit.Text(t, "Captured", "잡은 돌 0", 24, false, Theme.InkSoft, TextAlignmentOptions.TopLeft);
             panel.capturedText.rectTransform.Place(topLeft, new Vector2(Pad, -302), new Vector2(PanelSize.x - Pad * 2, 30));
@@ -376,7 +393,8 @@ namespace AlkkagiUIEditor
         {
             var overlay = UIKit.Image(root, "GameOverPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
-            controller.gameOverPanel = overlay.gameObject;
+            var result = overlay.gameObject.AddComponent<ResultScreen>();
+            controller.result = result;
 
             var modal = UIKit.Panel(overlay.transform, "Modal", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             UIKit.Appear(overlay, modal.rectTransform, swish: false); // the seal lands with its own sound
@@ -394,25 +412,29 @@ namespace AlkkagiUIEditor
             slam.delay = 0.12f;
             slam.fade = stamp.gameObject.AddComponent<CanvasGroup>();
             slam.landSound = AssetDatabase.LoadAssetAtPath<SoundBank>("Assets/Resources/SoundBank.asset").stamp;
-            controller.stampText = UIKit.Text(stamp.transform, "Label", "승", 60, true, Theme.SealText, TextAlignmentOptions.Center);
-            controller.stampText.rectTransform.Stretch(10);
-            controller.stampText.enableAutoSizing = true;
-            controller.stampText.fontSizeMin = 28;
-            controller.stampText.fontSizeMax = 60;
+            result.stampText = UIKit.Text(stamp.transform, "Label", "승", 60, true, Theme.SealText, TextAlignmentOptions.Center);
+            result.stampText.rectTransform.Stretch(10);
+            result.stampText.enableAutoSizing = true;
+            result.stampText.fontSizeMin = 28;
+            result.stampText.fontSizeMax = 60;
 
-            controller.resultTitleText = UIKit.Text(m, "Title", "흑 승리", 60, true, Theme.Ink, TextAlignmentOptions.Center);
-            controller.resultTitleText.rectTransform.Place(top, new Vector2(0, -176), new Vector2(680, 76));
-            controller.resultReasonText = UIKit.Text(m, "Reason", "백의 돌이 모두 떨어졌어요", 28, false, Theme.InkSoft, TextAlignmentOptions.Center);
-            controller.resultReasonText.rectTransform.Place(top, new Vector2(0, -252), new Vector2(680, 40));
+            // Online: block or report a player of the match, top right.
+            result.reportButton = UIKit.CapsuleButton(m, "ReportButton", "result.report", new Vector2(176, 52), false, 22);
+            result.reportButton.GetComponent<RectTransform>().Place(new Vector2(1, 1), new Vector2(-32, -32), new Vector2(176, 52), new Vector2(1, 1));
 
-            BuildScoreboard(m, controller);
+            result.resultTitleText = UIKit.Text(m, "Title", "흑 승리", 60, true, Theme.Ink, TextAlignmentOptions.Center);
+            result.resultTitleText.rectTransform.Place(top, new Vector2(0, -176), new Vector2(680, 76));
+            result.resultReasonText = UIKit.Text(m, "Reason", "백의 돌이 모두 떨어졌어요", 28, false, Theme.InkSoft, TextAlignmentOptions.Center);
+            result.resultReasonText.rectTransform.Place(top, new Vector2(0, -252), new Vector2(680, 40));
 
-            controller.matchTimeText = UIKit.Text(m, "MatchTime", "경기 시간 1:23", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
-            controller.matchTimeText.rectTransform.Place(new Vector2(0, 1), new Vector2(60, -732), new Vector2(320, 36));
-            controller.seriesText = UIKit.Text(m, "Series", "연속 전적  흑 1 : 0 백", 26, false, Theme.Ink, TextAlignmentOptions.MidlineRight);
-            controller.seriesText.rectTransform.Place(new Vector2(1, 1), new Vector2(-60, -732), new Vector2(360, 36));
-            controller.statusText = UIKit.Text(m, "Status", "", 26, false, Theme.Seal, TextAlignmentOptions.Center);
-            controller.statusText.rectTransform.Place(top, new Vector2(0, -780), new Vector2(680, 36));
+            BuildScoreboard(m, result);
+
+            result.matchTimeText = UIKit.Text(m, "MatchTime", "경기 시간 1:23", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+            result.matchTimeText.rectTransform.Place(new Vector2(0, 1), new Vector2(60, -732), new Vector2(320, 36));
+            result.seriesText = UIKit.Text(m, "Series", "연속 전적  흑 1 : 0 백", 26, false, Theme.Ink, TextAlignmentOptions.MidlineRight);
+            result.seriesText.rectTransform.Place(new Vector2(1, 1), new Vector2(-60, -732), new Vector2(360, 36));
+            result.statusText = UIKit.Text(m, "Status", "", 26, false, Theme.Seal, TextAlignmentOptions.Center);
+            result.statusText.rectTransform.Place(top, new Vector2(0, -780), new Vector2(680, 36));
 
             // Layout group so the row re-centers when Lobby is hidden locally.
             var buttons = UIKit.Node("Buttons", m).Place(new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(680, 84));
@@ -421,14 +443,61 @@ namespace AlkkagiUIEditor
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childControlWidth = layout.childControlHeight = false;
             layout.childForceExpandWidth = layout.childForceExpandHeight = false;
-            controller.rematchButton = UIKit.CapsuleButton(buttons, "RematchButton", "win.rematch", new Vector2(220, 84), true, 30);
-            controller.rematchLabel = controller.rematchButton.GetComponentInChildren<TMP_Text>();
+            result.rematchButton = UIKit.CapsuleButton(buttons, "RematchButton", "win.rematch", new Vector2(220, 84), true, 30);
+            result.rematchLabel = result.rematchButton.GetComponentInChildren<TMP_Text>();
             // Play again / Rematch / Accept / Waiting - set by the controller.
-            Object.DestroyImmediate(controller.rematchLabel.GetComponent<LocalizedText>());
-            controller.lobbyButton = UIKit.CapsuleButton(buttons, "LobbyButton", "gameover.lobby", new Vector2(210, 84), false, 30);
-            controller.mainMenuButton = UIKit.CapsuleButton(buttons, "MainMenuButton", "win.menu", new Vector2(210, 84), false, 30);
+            Object.DestroyImmediate(result.rematchLabel.GetComponent<LocalizedText>());
+            result.lobbyButton = UIKit.CapsuleButton(buttons, "LobbyButton", "gameover.lobby", new Vector2(210, 84), false, 30);
+            result.mainMenuButton = UIKit.CapsuleButton(buttons, "MainMenuButton", "win.menu", new Vector2(210, 84), false, 30);
 
+            result.reportPanel = BuildReportPanel(overlay.transform);
             overlay.gameObject.SetActive(false);
+        }
+
+        // Over the result: a row per other player - side and Steam name,
+        // Block (or "Blocked"), Report - and Close.
+        private static ReportPanel BuildReportPanel(Transform parent)
+        {
+            const float width = 760, pad = 56, rowHeight = 72, rowGap = 12;
+            var overlay = UIKit.Image(parent, "ReportPanel", null, Theme.Overlay, raycast: true);
+            overlay.rectTransform.Stretch();
+            var panel = overlay.gameObject.AddComponent<ReportPanel>();
+            var height = 150 + 3 * (rowHeight + rowGap) + 90 + 84 + 40;
+            var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, height));
+            var c = card.transform;
+            var top = new Vector2(0.5f, 1);
+            UIKit.Label(c, "Title", "report.title", 44, true, Theme.Ink, TextAlignmentOptions.Center)
+                .rectTransform.Place(top, new Vector2(0, -40), new Vector2(width - pad * 2, 60));
+            panel.rows = new GameObject[3];
+            panel.names = new TMP_Text[3];
+            panel.blockButtons = new Button[3];
+            panel.reportButtons = new Button[3];
+            panel.blockedLabels = new GameObject[3];
+            var right = new Vector2(1, 0.5f);
+            for (var i = 0; i < 3; i++)
+            {
+                var row = UIKit.Panel(c, "Row" + i, new Color(1, 1, 1, 0.55f), Theme.Ink);
+                row.rectTransform.Place(new Vector2(0, 1), new Vector2(pad, -130 - i * (rowHeight + rowGap)), new Vector2(width - pad * 2, rowHeight));
+                panel.rows[i] = row.gameObject;
+                panel.names[i] = UIKit.Text(row.transform, "Name", "백 · Player", 28, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+                panel.names[i].overflowMode = TextOverflowModes.Ellipsis;
+                panel.names[i].rectTransform.Place(new Vector2(0, 0.5f), new Vector2(24, 0), new Vector2(330, 56), new Vector2(0, 0.5f));
+                panel.reportButtons[i] = UIKit.CapsuleButton(row.transform, "ReportButton", "report.report", new Vector2(120, 52), false, 24);
+                panel.reportButtons[i].GetComponent<RectTransform>().Place(right, new Vector2(-12, 0), new Vector2(120, 52), right);
+                panel.blockButtons[i] = UIKit.CapsuleButton(row.transform, "BlockButton", "report.block", new Vector2(120, 52), false, 24);
+                panel.blockButtons[i].GetComponent<RectTransform>().Place(right, new Vector2(-144, 0), new Vector2(120, 52), right);
+                var blocked = UIKit.Label(row.transform, "Blocked", "report.blocked", 24, true, Theme.InkFaint, TextAlignmentOptions.Center);
+                blocked.rectTransform.Place(right, new Vector2(-144, 0), new Vector2(120, 52), right);
+                panel.blockedLabels[i] = blocked.gameObject;
+            }
+            var caption = UIKit.Label(c, "Caption", "report.caption", 22, false, Theme.InkSoft, TextAlignmentOptions.Center);
+            caption.textWrappingMode = TextWrappingModes.Normal;
+            caption.rectTransform.Place(top, new Vector2(0, -130 - 3 * (rowHeight + rowGap) - 8), new Vector2(width - pad * 2, 72));
+            panel.closeButton = UIKit.CapsuleButton(c, "CloseButton", "report.close", new Vector2(240, 84), true, 30);
+            panel.closeButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 40), new Vector2(240, 84), new Vector2(0.5f, 0));
+            overlay.gameObject.SetActive(false);
+            return panel;
         }
 
         // Esc or the Menu button (bottom right, the corner no panel uses):
@@ -477,7 +546,7 @@ namespace AlkkagiUIEditor
             menu.settings = MenuBuilder.BuildSettingsPanel(root, out menu.settingsCloseButton);
         }
 
-        private static void BuildScoreboard(Transform modal, MainGameUIController controller)
+        private static void BuildScoreboard(Transform modal, ResultScreen result)
         {
             var board = UIKit.Panel(modal, "Scoreboard", Theme.HanjiField, Theme.FieldBorder, 1.4f);
             board.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -310), new Vector2(640, 406));
@@ -502,11 +571,11 @@ namespace AlkkagiUIEditor
             // spaces the columns for the number of sides.
             var cells = new TMP_Text[rows.Length][];
             for (var r = 0; r < rows.Length; r++) cells[r] = new TMP_Text[4];
-            controller.scoreColumns = new RectTransform[4];
+            result.scoreColumns = new RectTransform[4];
             for (var player = 0; player < 4; player++)
             {
                 var column = UIKit.Node("Column" + player, b).Place(topLeft, new Vector2(player == 0 ? 400 : 540, 0), new Vector2(columnWidth, 406), new Vector2(0.5f, 1));
-                controller.scoreColumns[player] = column;
+                result.scoreColumns[player] = column;
                 var header = UIKit.Stone(column, "Header", 24, player == 0 ? Theme.StoneBlack : Theme.StoneWhite, player == 0 ? Theme.Ink : Theme.InkMuted, false)
                     .Place(topLeft, new Vector2(columnWidth / 2 - 34, -28), new Vector2(24, 24));
                 UIKit.Mark(header, player);
@@ -521,18 +590,19 @@ namespace AlkkagiUIEditor
                     cells[r][player].rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, RowY(r)), new Vector2(columnWidth, 40), new Vector2(0.5f, 1));
                 }
             }
-            controller.remainingCells = cells[0];
-            controller.killCells = cells[1];
-            controller.nongaeCells = cells[2];
-            controller.suicideCells = cells[3];
-            controller.teamKillCells = cells[4];
-            controller.shotsCells = cells[5];
-            controller.ratingCells = cells[6];
-            controller.ratingLabel = rowLabels[6];
-            controller.scoreRowPitch = RowY(0) - RowY(1);
-            controller.ratingUpColor = Theme.StatusOk;
-            controller.ratingDownColor = Theme.Seal;
-            controller.ratingSameColor = Theme.InkFaint;
+            result.remainingLabel = rowLabels[0].GetComponent<LocalizedText>();
+            result.remainingCells = cells[0];
+            result.killCells = cells[1];
+            result.nongaeCells = cells[2];
+            result.suicideCells = cells[3];
+            result.teamKillCells = cells[4];
+            result.shotsCells = cells[5];
+            result.ratingCells = cells[6];
+            result.ratingLabel = rowLabels[6];
+            result.scoreRowPitch = RowY(0) - RowY(1);
+            result.ratingUpColor = Theme.StatusOk;
+            result.ratingDownColor = Theme.Seal;
+            result.ratingSameColor = Theme.InkFaint;
         }
 
         private static float RowY(int row) => -72 - row * 46;
