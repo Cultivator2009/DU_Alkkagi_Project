@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 
+// Alkkagi as it's played: a piece off the board is gone, and a side with
+// none left is out.
 public class ClassicRuleset : IRuleset
 {
     private readonly BothOutRule bothOutRule;
@@ -10,30 +12,50 @@ public class ClassicRuleset : IRuleset
         this.bothOutRule = bothOutRule;
     }
 
+    public virtual void Begin(IReadOnlyList<Side> sides)
+    {
+    }
+
     public void OnBeforeFlick(GamePieceManager piece)
     {
         // Classic Alkkagi has no pre-flick action. Item modes hook in here.
     }
 
-    public void OnPieceRemoved(GamePieceManager removedPiece, List<PlayersManager> players, int shooterId)
+    public virtual bool OnPieceOut(GamePieceManager piece, IReadOnlyList<Side> sides, int shooterId)
     {
-        players.Find(p => p.ID == removedPiece.playerIndex)?.OnPieceLost();
-        var scorer = ScorerFor(removedPiece.playerIndex, shooterId, players);
-        players.Find(p => p.ID == scorer)?.AddScore(1);
+        var owner = Find(sides, piece.playerIndex);
+        if (owner != null) owner.Pieces = System.Math.Max(0, owner.Pieces - 1);
+        Credit(piece, sides, shooterId);
+        return true;
     }
+
+    // The shooter's score, or for a piece of their own the other side's.
+    protected static void Credit(GamePieceManager piece, IReadOnlyList<Side> sides, int shooterId)
+    {
+        var scorer = Find(sides, ScorerFor(piece.playerIndex, shooterId, sides.Count));
+        if (scorer != null) scorer.Score++;
+    }
+
+    public virtual bool IsKnockedOut(Side side) => side.Pieces <= 0;
+
+    public virtual int Value(GamePieceManager piece) => 1;
+
+    public virtual bool WouldBeKnockedOut(Side side, int piecesLost, int valueLost) => side.Pieces - piecesLost <= 0;
 
     // Who a knocked-out piece counts for: the shooter, unless it was their
     // own. Then, with two sides, the other one (their suicide or team kill is
-    // the opponent's gain, as it always was); with more, no one.
-    public static int ScorerFor(int ownerId, int shooterId, List<PlayersManager> players)
+    // the opponent's gain, as it always was); with more, no one. Nor when
+    // no one shot it (-1).
+    public static int ScorerFor(int ownerId, int shooterId, int sides)
     {
+        if (shooterId < 0) return -1;
         if (ownerId != shooterId) return shooterId;
-        if (players.Count != 2) return -1;
-        var other = players.Find(p => p.ID != ownerId);
-        return other != null ? other.ID : -1;
+        return sides == 2 ? 1 - ownerId : -1;
     }
 
-    public bool TryGetMatchWinner(IReadOnlyList<PlayersManager> standingBefore, IReadOnlyList<PlayersManager> standingAfter, int shooterId, out PlayersManager winner, out MatchEndReason reason)
+    protected static Side Find(IReadOnlyList<Side> sides, int id) => id >= 0 && id < sides.Count ? sides[id] : null;
+
+    public bool TryGetMatchWinner(IReadOnlyList<Side> standingBefore, IReadOnlyList<Side> standingAfter, int shooterId, out Side winner, out MatchEndReason reason)
     {
         winner = null;
         reason = MatchEndReason.Knockout;
@@ -48,10 +70,10 @@ public class ClassicRuleset : IRuleset
         // lobby decides who that favours. A null winner is a draw: the
         // shooter losing leaves a winner only if one other side was in.
         reason = MatchEndReason.BothOut;
-        var others = standingBefore.Where(p => p.ID != shooterId).ToList();
+        var others = standingBefore.Where(p => p.Id != shooterId).ToList();
         winner = bothOutRule switch
         {
-            BothOutRule.ShooterWins => standingBefore.FirstOrDefault(p => p.ID == shooterId),
+            BothOutRule.ShooterWins => standingBefore.FirstOrDefault(p => p.Id == shooterId),
             BothOutRule.Draw => null,
             _ => others.Count == 1 ? others[0] : null,
         };

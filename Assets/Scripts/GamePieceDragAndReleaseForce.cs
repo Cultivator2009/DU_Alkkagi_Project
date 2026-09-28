@@ -32,6 +32,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     private int powerNotch; // tenths of the pull's power reached so far, for the ratchet tick
 
     private Rigidbody rb;
+    private GamePieceManager manager;
     private LineRenderer lr;
     private Camera mainCam;
     private Vector3 mousePosInput;
@@ -54,6 +55,10 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     public Vector3 AimDirection { get; private set; }   // shot direction on the board plane (unit, or zero)
     public Vector3 DragPoint => endPos;                 // where the pull is held, on the board plane
 
+    // Its other components, looked up once: they're asked for every frame.
+    public GamePieceManager Manager => manager != null ? manager : manager = GetComponent<GamePieceManager>();
+    public Rigidbody Body => rb != null ? rb : rb = GetComponent<Rigidbody>();
+
     // Where the pull is measured from and the aim drawn round: the centre of
     // mass (where the flick acts), at the pull's level. Over the foot of
     // anything standing; partway along a chess piece lying down, whose foot
@@ -62,10 +67,16 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     {
         get
         {
-            var centre = rb.worldCenterOfMass;
+            var centre = Body.worldCenterOfMass;
             return new Vector3(centre.x, transform.position.y, centre.z);
         }
     }
+
+    // Off the board until the shot is over, when it comes back (a battle of
+    // health, HealthRuleset). Warped: put back since the host last told the
+    // guests where it is, so they jump it there (NetworkMatchBridge).
+    public bool IsParked { get; private set; }
+    public bool Warped { get; set; }
 
     // True on a local single-player piece and on the network host (who always
     // simulates physics). False on a network guest, whose flicks are only
@@ -172,14 +183,40 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         AimPower = 0;
     }
 
+    public void Park()
+    {
+        isDragging = false;
+        isSelected = false;
+        AimPower = 0;
+        lowVelocityFrameCount = 0;
+        isGamePieceMoving = false; // it counts as stopped while it waits
+        IsParked = true;
+        gameObject.SetActive(false);
+    }
+
+    public void Unpark(Vector3 position, Quaternion rotation)
+    {
+        gameObject.SetActive(true);
+        transform.SetPositionAndRotation(position, rotation);
+        Body.position = position;
+        Body.rotation = rotation;
+        if (!Body.isKinematic)
+        {
+            Body.linearVelocity = Vector3.zero;
+            Body.angularVelocity = Vector3.zero;
+        }
+        IsParked = false;
+        Warped = true;
+    }
+
     // Only ever called on the authoritative simulation (local single-player,
     // or the network host applying its own input or a guest's FlickCommand).
     public void ApplyFlick(Vector3 flickForce)
     {
         if (flickForce.magnitude > maxForce) flickForce = flickForce.normalized * maxForce;
-        var launch = flickForce / referenceMass * Mathf.Pow(referenceMass / rb.mass, massExponent);
-        rb.AddForce(launch, ForceMode.VelocityChange);
-        if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Flick, launch.magnitude, rb.position, GetComponent<GamePieceManager>().playerIndex);
+        var launch = flickForce / referenceMass * Mathf.Pow(referenceMass / Body.mass, massExponent);
+        Body.AddForce(launch, ForceMode.VelocityChange);
+        if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Flick, launch.magnitude, Body.position, Manager.playerIndex);
 
         // The impulse only shows up in linearVelocity after the next physics
         // step, so a resting piece would still read as settled for a frame

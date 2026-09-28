@@ -54,6 +54,7 @@ public class LobbySceneUI : MonoBehaviour
     private float copiedUntil;
     private Steamworks.Data.Lobby[] openLobbies = Array.Empty<Steamworks.Data.Lobby>();
     private bool browsing; // a browser search in flight
+    private NetScope scope;
 
     private void Awake()
     {
@@ -96,7 +97,11 @@ public class LobbySceneUI : MonoBehaviour
         lobbyManager.OnMemberLeft += HandleMemberLeft;
         lobbyManager.OnLobbyFailed += HandleLobbyFailed;
         lobbyManager.OnLobbyDataChanged += Render;
-        SteamTransport.Instance.OnMessageReceived += HandleNetworkMessage;
+        // Only this lobby's host sends either.
+        scope = NetSession.Current?.Scope("lobby")
+            .Use(NetFilters.Authority(() => lobbyManager.CurrentLobby.HasValue ? lobbyManager.CurrentLobby.Value.Owner.Id.Value : 0, () => lobbyManager.IsHost))
+            .On<Msg.LoadGameScene>(HandleLoadGameScene)
+            .On<Msg.Kick>(HandleKick);
         Loc.OnLanguageChanged += Render;
         // Back from a match: open the lobby to new players again.
         if (lobbyManager.IsHost) lobbyManager.SetMatchInProgress(false);
@@ -117,7 +122,7 @@ public class LobbySceneUI : MonoBehaviour
             lobbyManager.OnLobbyFailed -= HandleLobbyFailed;
             lobbyManager.OnLobbyDataChanged -= Render;
         }
-        if (SteamTransport.Instance != null) SteamTransport.Instance.OnMessageReceived -= HandleNetworkMessage;
+        scope?.Dispose();
         Loc.OnLanguageChanged -= Render;
     }
 
@@ -227,7 +232,7 @@ public class LobbySceneUI : MonoBehaviour
         MatchSettings.Picked = lobbyManager.ReadLobbySettings();
         MatchSettings.Current = MatchSettings.Picked.Resolve();
         MatchRoster.Current = lobbyManager.BuildRoster();
-        SteamTransport.Instance.Broadcast(NetMessage.WriteLoadGameScene(MatchSettings.Current, MatchRoster.Current));
+        NetSession.Current.Broadcast(new Msg.LoadGameScene { Settings = MatchSettings.Current, Roster = MatchRoster.Current });
         SceneManager.LoadScene("GameScene");
     }
 
@@ -258,27 +263,20 @@ public class LobbySceneUI : MonoBehaviour
         Render();
     }
 
-    private void HandleNetworkMessage(ulong senderId, byte[] data)
+    private void HandleLoadGameScene(ulong sender, Msg.LoadGameScene message)
     {
-        var lobby = lobbyManager.CurrentLobby;
-        // Only this lobby's host sends either.
-        if (!lobby.HasValue || lobby.Value.Owner.Id.Value != senderId || lobbyManager.IsHost) return;
-        switch (NetMessage.PeekType(data))
-        {
-            case NetMessageType.LoadGameScene:
-                var (settings, roster) = NetMessage.ReadLoadGameScene(data);
-                if (roster.PlayerOf(SteamTransport.Instance.LocalId) < 0) break; // joined too late for this one
-                MatchSettings.Current = settings;
-                MatchRoster.Current = roster;
-                SceneManager.LoadScene("GameScene");
-                break;
-            case NetMessageType.Kick:
-                lobbyManager.LeaveLobby();
-                pendingStatusKey = "lobby.status.kicked";
-                Render();
-                RefreshBrowser();
-                break;
-        }
+        if (message.Roster.PlayerOf(NetSession.Current.LocalId) < 0) return; // joined too late for this one
+        MatchSettings.Current = message.Settings;
+        MatchRoster.Current = message.Roster;
+        SceneManager.LoadScene("GameScene");
+    }
+
+    private void HandleKick(ulong sender, Msg.Kick message)
+    {
+        lobbyManager.LeaveLobby();
+        pendingStatusKey = "lobby.status.kicked";
+        Render();
+        RefreshBrowser();
     }
 
     // ---- Rendering ----

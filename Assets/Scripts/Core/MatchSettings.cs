@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using UnityEngine;
 
@@ -283,24 +282,24 @@ public sealed class MatchSettings
 
     // Id/value pairs, so a peer ignores ids it doesn't know rather than
     // misreading everything after them.
-    public void Write(BinaryWriter writer)
+    public void Write(NetWriter writer)
     {
-        writer.Write((byte)Defs.Length);
+        writer.UInt((uint)Defs.Length);
         foreach (var def in Defs)
         {
-            writer.Write((byte)def.Id);
-            writer.Write(Get(def.Id));
+            writer.Byte((byte)def.Id);
+            writer.Int(Get(def.Id));
         }
     }
 
-    public static MatchSettings Read(BinaryReader reader)
+    public static MatchSettings Read(NetReader reader)
     {
         var settings = new MatchSettings();
-        var count = reader.ReadByte();
-        for (var i = 0; i < count; i++)
+        var count = reader.UInt();
+        for (var i = 0; i < count && !reader.AtEnd; i++)
         {
-            var id = reader.ReadByte();
-            var value = reader.ReadInt32();
+            var id = reader.Byte();
+            var value = reader.Int();
             if (id < Defs.Length) settings.Set((MatchSettingId)id, value);
         }
         return settings;

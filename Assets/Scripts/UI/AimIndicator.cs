@@ -71,7 +71,7 @@ public class AimIndicator : MonoBehaviour
         outline.Set(PieceOutline.Mark.Aim, piece);
 
         var origin = piece.AimOrigin;
-        var stoneRadius = piece.GetComponent<GamePieceManager>().radius;
+        var stoneRadius = piece.Manager.radius;
         var center = ToLocal(origin);
         var power = piece.AimPower;
         outline.AimPower = power;
@@ -126,7 +126,7 @@ public class AimIndicator : MonoBehaviour
     {
         if (CameraRig.Busy || Time.timeScale <= 0 || !Pointer.OnScreen) return null;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
-        return PiecePicker.UnderCursor(worldCamera).FirstOrDefault(p => game.MayPickUp(p.GetComponent<GamePieceManager>().playerIndex));
+        return PiecePicker.UnderCursor(worldCamera).FirstOrDefault(p => game.MayPickUp(p.Manager.playerIndex));
     }
 
     // First contact along the shot, on the board plane: the nearest piece
@@ -142,7 +142,7 @@ public class AimIndicator : MonoBehaviour
             if (other == null || other == piece) continue;
             var to = other.AimOrigin - origin;
             to.y = 0;
-            var otherRadius = other.GetComponent<GamePieceManager>().radius;
+            var otherRadius = other.Manager.radius;
             var reach = radius + otherRadius; // pieces come in sizes
             var along = Vector3.Dot(to, dir);
             if (along <= 0) continue;

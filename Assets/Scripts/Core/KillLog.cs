@@ -18,6 +18,17 @@ public struct KillEvent
     public char VictimId;
     public int VictimOwnerId;
     public KillKind Kind;
+
+    public static void Write(NetWriter w, KillEvent e)
+    {
+        w.Int(e.ShooterId);
+        w.Piece(e.ShotPieceId);
+        w.Piece(e.VictimId);
+        w.Int(e.VictimOwnerId);
+        w.Byte((byte)e.Kind);
+    }
+
+    public static KillEvent Read(NetReader r) => new KillEvent { ShooterId = r.Int(), ShotPieceId = r.Piece(), VictimId = r.Piece(), VictimOwnerId = r.Int(), Kind = (KillKind)r.Byte() };
 }
 
 // Who knocked out what. A piece only ever goes out during a flick, and the

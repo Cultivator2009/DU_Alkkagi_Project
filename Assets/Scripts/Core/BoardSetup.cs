@@ -103,6 +103,8 @@ public class BoardSetup : MonoBehaviour
     private readonly Dictionary<int, Material> stoneMaterials = new Dictionary<int, Material>(); // the third and fourth sides' colours
     private readonly Dictionary<int, Material> sideMaterials = new Dictionary<int, Material>(); // chess and gonggi pieces, every side's
     private readonly Dictionary<char, string> letterKeys = new Dictionary<char, string>(); // janggi and chess pieces, by id
+    private readonly Dictionary<char, Quaternion> spawnRotations = new Dictionary<char, Quaternion>(); // how each piece first stood, facing its side
+    private readonly System.Random respawnRandom = new System.Random();
     private PieceType pieceType;
     private SpriteRenderer[] zoneMarkers;
 
@@ -144,6 +146,7 @@ public class BoardSetup : MonoBehaviour
                 var manager = piece.GetComponent<GamePieceManager>();
                 manager.playerIndex = player;
                 manager.pieceID = PieceId(player, i);
+                spawnRotations[manager.pieceID] = piece.transform.rotation;
                 piece.gameObject.SetActive(true);
                 pieces.Add(piece);
             }
@@ -480,6 +483,17 @@ public class BoardSetup : MonoBehaviour
             if (IsClear(candidate, radius, occupied)) return candidate;
         }
         return OnBoard(zone.center);
+    }
+
+    // A piece coming back (a battle of health): somewhere free in its side's
+    // zone, standing as it first did.
+    public void Respawn(GamePieceDragAndReleaseForce piece, IEnumerable<GamePieceDragAndReleaseForce> pieces)
+    {
+        var manager = piece.Manager;
+        var occupied = pieces.Where(p => p != null && p != piece && !p.IsParked)
+            .Select(p => (p.transform.position, p.Manager.radius)).ToList();
+        var position = RandomFreePosition(manager.playerIndex, manager.radius, occupied, respawnRandom);
+        piece.Unpark(position, spawnRotations.TryGetValue(manager.pieceID, out var rotation) ? rotation : piece.transform.rotation);
     }
 
     // ---- Placement phase view ----

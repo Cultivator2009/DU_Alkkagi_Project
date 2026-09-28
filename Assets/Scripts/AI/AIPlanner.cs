@@ -28,7 +28,8 @@ public struct PlannedShot
 // launch speeds, the same rise limit). Candidates go from each own piece at
 // each opponent piece, dead on and cut a little either way, at the strength
 // that should just clear it off the board, a bit more, and full. A shot scores
-// for the opponent's pieces it knocks out and against its own, the match
+// for what the opponent's pieces it knocks out are worth and against its
+// own (IRuleset.Value: a piece each, or what it costs in health), the match
 // result above all; after that, opponents left near the edge and its own
 // kept away from it.
 public class AIPlanner : IDisposable
@@ -46,6 +47,7 @@ public class AIPlanner : IDisposable
         public GamePieceDragAndReleaseForce Source;
         public Rigidbody Body;
         public int Owner;
+        public int Value;
         public float Radius;
         public float MaxRise;
         public bool Out;
@@ -64,9 +66,13 @@ public class AIPlanner : IDisposable
     private readonly List<Stand> stands = new List<Stand>();
     private readonly Bounds surface;
     private readonly BothOutRule bothOutRule;
+    private readonly IRuleset ruleset;
+    private readonly IReadOnlyList<Side> sides;
 
-    public AIPlanner(BoardSetup board, IEnumerable<GamePieceDragAndReleaseForce> pieces, BothOutRule rule)
+    public AIPlanner(BoardSetup board, IEnumerable<GamePieceDragAndReleaseForce> pieces, IRuleset ruleset, IReadOnlyList<Side> sides, BothOutRule rule)
     {
+        this.ruleset = ruleset;
+        this.sides = sides;
         scene = SceneManager.CreateScene("AIPlanner " + Time.frameCount, new CreateSceneParameters(LocalPhysicsMode.Physics3D));
         physics = scene.GetPhysicsScene();
         surface = board.SurfaceBounds;
@@ -75,13 +81,14 @@ public class AIPlanner : IDisposable
         Copy(board.Active.gameObject);
         foreach (var piece in pieces)
         {
-            if (piece == null) continue;
-            var manager = piece.GetComponent<GamePieceManager>();
+            if (piece == null || piece.IsParked) continue;
+            var manager = piece.Manager;
             stands.Add(new Stand
             {
                 Source = piece,
                 Body = Copy(piece.gameObject).GetComponent<Rigidbody>(),
                 Owner = manager.playerIndex,
+                Value = ruleset.Value(manager),
                 Radius = manager.radius,
                 MaxRise = piece.maxRiseSpeed,
             });
@@ -186,7 +193,8 @@ public class AIPlanner : IDisposable
 
     private float Score(int player)
     {
-        int mineOut = 0, theirsOut = 0, mineLeft = 0, theirsLeft = 0;
+        var lost = new (int pieces, int value)[sides.Count];
+        float mineOut = 0, theirsOut = 0;
         var position = 0f;
         foreach (var stand in stands)
         {
@@ -194,21 +202,24 @@ public class AIPlanner : IDisposable
             var mine = stand.Owner == player;
             if (stand.Out)
             {
-                if (mine) mineOut++;
-                else theirsOut++;
+                if (mine) mineOut += stand.Value;
+                else theirsOut += stand.Value;
+                lost[stand.Owner].pieces++;
+                lost[stand.Owner].value += stand.Value;
                 continue;
             }
-            if (mine) mineLeft++;
-            else theirsLeft++;
             // Near the edge is where a piece gets knocked out next.
             var nearEdge = 1f - Mathf.Clamp01(EdgeMargin(stand.Body.position) / 0.5f);
             position += mine ? -0.8f * nearEdge : 0.8f * nearEdge;
         }
 
         var score = 10f * theirsOut - 12f * mineOut + position;
-        if (theirsLeft == 0 && mineLeft > 0) score += 1000;
-        else if (mineLeft == 0 && theirsLeft > 0) score -= 1000;
-        else if (mineLeft == 0 && theirsLeft == 0)
+        bool Gone(Side side) => ruleset.WouldBeKnockedOut(side, lost[side.Id].pieces, lost[side.Id].value);
+        var mineGone = Gone(sides[player]);
+        var theirsGone = sides.Where(s => s.Id != player && s.Standing).All(Gone);
+        if (theirsGone && !mineGone) score += 1000;
+        else if (mineGone && !theirsGone) score -= 1000;
+        else if (mineGone)
             score += bothOutRule == BothOutRule.ShooterWins ? 1000 : bothOutRule == BothOutRule.Draw ? -50 : -1000;
         return score;
     }

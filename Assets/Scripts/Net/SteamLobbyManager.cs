@@ -123,7 +123,7 @@ public class SteamLobbyManager : MonoBehaviour
         kicked.Clear();
         lobby.SetJoinable(true);
         lobby.SetData(GameKey, GameId);
-        lobby.SetData(ProtocolKey, NetMessage.ProtocolVersion.ToString());
+        lobby.SetData(ProtocolKey, NetProtocol.Version.ToString());
         lobby.SetData(StateKey, Open);
         lobby.SetData(HostNameKey, SteamClient.Name);
         ApplyVisibility(lobby, visibility);
@@ -167,7 +167,7 @@ public class SteamLobbyManager : MonoBehaviour
     {
         var query = SteamMatchmaking.LobbyList
             .WithKeyValue(GameKey, GameId)
-            .WithKeyValue(ProtocolKey, NetMessage.ProtocolVersion.ToString())
+            .WithKeyValue(ProtocolKey, NetProtocol.Version.ToString())
             .WithKeyValue(StateKey, Open)
             .WithSlotsAvailable(1)
             .FilterDistanceWorldwide()
@@ -200,12 +200,12 @@ public class SteamLobbyManager : MonoBehaviour
     public static MatchSettings RulesOf(Lobby lobby) => MatchSettings.FromPairs(key => lobby.GetData(RulePrefix + key));
 
     // Steam lobbies can't eject anyone, so the host asks the guest's game to
-    // leave (NetMessage.Kick), and asks again if they come back.
+    // leave (Msg.Kick), and asks again if they come back.
     public void Kick(ulong memberId)
     {
         if (!IsHost) return;
         kicked.Add(memberId);
-        SteamTransport.Instance?.Send(memberId, NetMessage.WriteKick());
+        NetSession.Current?.Send(memberId, new Msg.Kick());
     }
 
     // Match rules live in lobby data: only the owner may write them, every
@@ -331,9 +331,9 @@ public class SteamLobbyManager : MonoBehaviour
         // A code or an invite can lead to a lobby from another build (or
         // another game on the shared test app): its messages wouldn't read.
         var version = lobby.GetData(ProtocolKey);
-        if (!lobby.IsOwnedBy(SteamClient.SteamId) && version != NetMessage.ProtocolVersion.ToString())
+        if (!lobby.IsOwnedBy(SteamClient.SteamId) && version != NetProtocol.Version.ToString())
         {
-            Debug.LogWarning($"Leaving lobby {lobby.Id}: protocol '{version}', this build speaks {NetMessage.ProtocolVersion}.");
+            Debug.LogWarning($"Leaving lobby {lobby.Id}: protocol '{version}', this build speaks {NetProtocol.Version}.");
             lobby.Leave();
             OnLobbyFailed?.Invoke("lobby.status.version");
             return;
@@ -351,7 +351,7 @@ public class SteamLobbyManager : MonoBehaviour
     private void HandleMemberJoined(Lobby lobby, Friend friend)
     {
         SteamTransport.Instance?.ConnectPeer(friend.Id.Value);
-        if (IsHost && kicked.Contains(friend.Id.Value)) SteamTransport.Instance?.Send(friend.Id.Value, NetMessage.WriteKick());
+        if (IsHost && kicked.Contains(friend.Id.Value)) NetSession.Current?.Send(friend.Id.Value, new Msg.Kick());
         OnMemberJoined?.Invoke(friend);
     }
 

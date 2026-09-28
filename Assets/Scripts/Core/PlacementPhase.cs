@@ -10,14 +10,41 @@ public struct PlacedStone
     public float Z;
 }
 
-// The placement phase as one player may see it (NetMessage.PlacementState).
+// The placement phase as one player may see it (Msg.PlacementState).
 public class PlacementSnapshot
 {
     public int Placer;
     public bool Done;
-    public float[] Clocks;
-    public bool[] Ready;
-    public List<PlacedStone> Stones;
+    public float[] Clocks = new float[0];
+    public bool[] Ready = new bool[0];
+    public List<PlacedStone> Stones = new List<PlacedStone>();
+
+    public void Write(NetWriter w)
+    {
+        w.Int(Placer);
+        w.Bool(Done);
+        w.List(Enumerable.Range(0, Clocks.Length).ToList(), (x, i) =>
+        {
+            x.Float(Clocks[i]);
+            x.Bool(Ready[i]);
+        });
+        w.List(Stones, (x, stone) =>
+        {
+            x.Piece(stone.PieceId);
+            x.Float(stone.X);
+            x.Float(stone.Z);
+        });
+    }
+
+    public static PlacementSnapshot Read(NetReader r)
+    {
+        var state = new PlacementSnapshot { Placer = r.Int(), Done = r.Bool() };
+        var players = r.List(x => (clock: x.Float(), ready: x.Bool()));
+        state.Clocks = players.Select(p => p.clock).ToArray();
+        state.Ready = players.Select(p => p.ready).ToArray();
+        state.Stones = r.List(x => new PlacedStone { PieceId = x.Piece(), X = x.Float(), Z = x.Float() });
+        return state;
+    }
 }
 
 // Before the first turn under SpawnMode.Placement, each side puts its own

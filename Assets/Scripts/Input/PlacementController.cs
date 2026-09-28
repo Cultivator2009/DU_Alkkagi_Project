@@ -64,7 +64,7 @@ public class PlacementController : MonoBehaviour
         }
         // The stone being moved, or the one a press here would pick up.
         var under = dragging != null ? dragging : StoneUnderCursor();
-        var movable = under != null && under.GetComponent<GamePieceManager>().playerIndex == player && phase.CanMoveStones && (dragging != null || !IsPointerOverUI());
+        var movable = under != null && under.Manager.playerIndex == player && phase.CanMoveStones && (dragging != null || !IsPointerOverUI());
         PieceOutline.For(mainCamera).Set(PieceOutline.Mark.Hover, movable ? under : null);
         var board = gameManager.Board;
         if (!TryGetBoardPoint(board, player, out var point)) return;
@@ -74,7 +74,7 @@ public class PlacementController : MonoBehaviour
             var hit = StoneUnderCursor();
             if (hit != null)
             {
-                var manager = hit.GetComponent<GamePieceManager>();
+                var manager = hit.Manager;
                 if (manager.playerIndex == player && phase.CanMoveStones) dragging = hit;
             }
             else
@@ -88,12 +88,12 @@ public class PlacementController : MonoBehaviour
         // A pan or the free look drops the stone where it is.
         if (Input.GetMouseButton(0) && !CameraRig.Busy)
         {
-            dragging.transform.position = board.ClampToZone(player, point, dragging.GetComponent<GamePieceManager>().radius);
+            dragging.transform.position = board.ClampToZone(player, point, dragging.Manager.radius);
             return;
         }
         // Released: keep it there if the spot is clear, otherwise the next
         // view refresh puts it back where it was.
-        var id = dragging.GetComponent<GamePieceManager>().pieceID;
+        var id = dragging.Manager.pieceID;
         var position = dragging.transform.position;
         dragging = null;
         Place(phase, player, id, position);
@@ -110,7 +110,7 @@ public class PlacementController : MonoBehaviour
         foreach (var piece in gameManager.gamePieceScripts)
         {
             if (piece == dragging) continue;
-            var id = piece.GetComponent<GamePieceManager>().pieceID;
+            var id = piece.Manager.pieceID;
             var visible = phase.IsVisibleTo(id, viewer);
             if (piece.gameObject.activeSelf != visible) piece.gameObject.SetActive(visible);
             if (visible && phase.TryGetPosition(id, out var position)) piece.transform.position = position;

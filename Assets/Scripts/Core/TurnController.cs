@@ -12,23 +12,37 @@ public enum TurnEnd : byte
     Skipped
 }
 
+// The turns of a match: whose go it is, the clock, the shot playing out,
+// and what the ruleset makes of it. On the authority (a local game, the
+// network host) it runs the match; on a network guest it's a mirror that
+// takes the host's MatchState over (ApplyRemote). Either way its events
+// are the match as the screen should tell it - the HUD, the rating and
+// the network host listen to them and nothing else.
 public class TurnController
 {
-    public event Action<PlayersManager> OnTurnStarted;
-    public event Action<PlayersManager> OnTurnEnded;            // after a shot
-    public event Action<PlayersManager, TurnEnd> OnTurnPassed;  // timed out or skipped, nothing moved
-    public event Action<PlayersManager, MatchEndReason> OnMatchEnded; // winner null = draw
+    public event Action<int> OnTurnStarted;                     // the side to move
+    public event Action<int> OnShotEnded;                       // the side that shot, once everything has stopped
+    public event Action<int, TurnEnd> OnTurnPassed;             // timed out or skipped, nothing moved
+    public event Action<int, MatchEndReason> OnMatchEnded;      // winner -1: no one (a draw, or the host left)
     // A side is out while the match goes on without it (three or four
     // sides): knocked out, conceded or gone. Its turns are skipped.
     public event Action<int, MatchEndReason> OnPlayerOut;
+    public event Action OnSidesChanged;                         // score, pieces, health
 
     public GameManager.GameState State { get; private set; } = GameManager.GameState.Mainmenu;
     public bool HasStarted => State != GameManager.GameState.Mainmenu;
+    // A network guest's copy of the host's turns: it never decides anything.
+    public bool IsMirror { get; private set; }
     public int CurrentPlayerID { get; private set; }
+    public int Turn { get; private set; }       // turns begun
+    public int TurnsEnded { get; private set; } // shot or passed
     public PieceSelector PieceSelector => pieceSelector;
     public TurnEnd LastTurnEnd { get; private set; }
     public int LastPlayerId { get; private set; } = -1; // whose turn last finished
     public KillLog Kills { get; }
+    public IReadOnlyList<Side> Sides => sides;
+    // The side whose shot is playing out, or -1.
+    public int Shooter => State == GameManager.GameState.ProcessingTurn ? CurrentPlayerID : -1;
 
     // 0 = no turn timer. The clock runs while the side to move is choosing
     // and aiming, and stops once the stone is flicked.
@@ -36,7 +50,7 @@ public class TurnController
     public float TurnTimeRemaining { get; private set; }
     public bool IsAwaitingShot => State == GameManager.GameState.WaitingForInput || State == GameManager.GameState.WaitingForEndTurn;
     // The shot has played out long enough that it may be fast-forwarded (GamePace).
-    public bool MayFastForward => State == GameManager.GameState.ProcessingTurn && Time.unscaledTime - shotStartedAt >= GamePace.FastForwardAfter;
+    public bool MayFastForward => !IsMirror && State == GameManager.GameState.ProcessingTurn && Time.unscaledTime - shotStartedAt >= GamePace.FastForwardAfter;
 
     // Online the host's clock also times the guests' turns, but a guest's
     // flick reaches the host a network trip after it was let go. A guest's
@@ -44,6 +58,10 @@ public class TurnController
     // just in time still counts. Set by NetworkMatchBridge on the host.
     public int HostPlayerId { get; set; } = -1;
     public float RemoteGraceSeconds { get; set; }
+
+    // Once a shot has stopped and the ruleset has said who's out, before the
+    // result: the pieces waiting to come back go back (GameManager).
+    public Action ResolveParked { get; set; }
 
     // The pull has been let go: the flick lands on the next physics step, or
     // already has on this frame's, but the state only catches up in
@@ -54,28 +72,30 @@ public class TurnController
                                  && (selGamePiece.isOnfire || (!selGamePiece.isDragging && !selGamePiece.isCancelled));
 
     private readonly IRuleset ruleset;
-    private readonly List<PlayersManager> players;
+    private readonly List<Side> sides;
     private readonly List<GamePieceDragAndReleaseForce> gamePieceScripts;
     private readonly PieceSelector pieceSelector;
 
     private GamePieceDragAndReleaseForce selGamePiece;
     private float shotStartedAt; // real time
-    private readonly HashSet<int> forfeited = new HashSet<int>(); // conceded or gone
-    private List<PlayersManager> standingAtShot = new List<PlayersManager>();
+    private List<Side> standingAtShot = new List<Side>();
+    private bool resolved; // the result is in (not just stopped: Abort)
+    private int winner = -1;
+    private MatchEndReason endReason;
 
     public TurnController(
         IRuleset ruleset,
-        List<PlayersManager> players,
+        List<Side> sides,
         List<GamePieceDragAndReleaseForce> gamePieceScripts,
         PieceSelector pieceSelector,
         int turnSeconds)
     {
         this.ruleset = ruleset;
-        this.players = players;
+        this.sides = sides;
         this.gamePieceScripts = gamePieceScripts;
         this.pieceSelector = pieceSelector;
         TurnSeconds = turnSeconds;
-        Kills = new KillLog(players.Count);
+        Kills = new KillLog(sides.Count);
     }
 
     public void StartMatch()
@@ -88,14 +108,15 @@ public class TurnController
     {
         if (TurnSeconds > 0 && IsAwaitingShot && !ShotReleased)
         {
-            TurnTimeRemaining -= GamePace.ClockDelta;
+            TurnTimeRemaining = Mathf.Max(IsMirror ? 0 : float.MinValue, TurnTimeRemaining - GamePace.ClockDelta);
             var grace = HostPlayerId >= 0 && CurrentPlayerID != HostPlayerId ? RemoteGraceSeconds : 0;
-            if (TurnTimeRemaining <= -grace)
+            if (!IsMirror && TurnTimeRemaining <= -grace)
             {
                 PassTurn(TurnEnd.Timeout);
                 return;
             }
         }
+        if (IsMirror) return; // the host's MatchState moves it on
 
         switch (State)
         {
@@ -112,15 +133,13 @@ public class TurnController
     }
 
     // A flick that didn't come from local input - the network guest's
-    // FlickCommand, applied on the host. It goes through the same turn flow
-    // as a local flick: before this existed the host simulated the guest's
-    // shot but its turn state never left WaitingForInput, so the guest's
-    // turn could never end. Only accepted for the side to move, while this
+    // Flick, applied on the host, or the AI's. It goes through the same turn
+    // flow as a local flick. Only accepted for the side to move, while this
     // controller is waiting for input.
     public bool TryApplyExternalFlick(GamePieceDragAndReleaseForce piece, Vector3 force)
     {
-        if (State != GameManager.GameState.WaitingForInput || piece == null) return false;
-        var pieceManager = piece.GetComponent<GamePieceManager>();
+        if (IsMirror || State != GameManager.GameState.WaitingForInput || piece == null) return false;
+        var pieceManager = piece.Manager;
         if (pieceManager.playerIndex != CurrentPlayerID) return false;
 
         if (selGamePiece != null) selGamePiece.isCancelled = false;
@@ -131,11 +150,11 @@ public class TurnController
         return true;
     }
 
-    // The skip-turn button (or the guest's PassCommand on the host). Only for
-    // the side to move, before its stone is flicked.
+    // The skip-turn button (or the guest's Pass on the host). Only for the
+    // side to move, before its stone is flicked.
     public bool TryPassTurn(int playerId)
     {
-        if (!IsAwaitingShot || ShotReleased || playerId != CurrentPlayerID) return false;
+        if (IsMirror || !IsAwaitingShot || ShotReleased || playerId != CurrentPlayerID) return false;
         PassTurn(TurnEnd.Skipped);
         return true;
     }
@@ -150,21 +169,22 @@ public class TurnController
     // and skips it.
     public void Forfeit(int playerId, MatchEndReason reason)
     {
-        if (State == GameManager.GameState.MatchOver || !forfeited.Add(playerId)) return;
-        var standing = players.Where(IsStanding).ToList();
+        var side = Find(playerId);
+        if (IsMirror || State == GameManager.GameState.MatchOver || side == null || !side.Standing) return;
+        side.Out = reason;
+        var standing = sides.Where(s => s.Standing).ToList();
+        OnSidesChanged?.Invoke();
         if (standing.Count <= 1)
         {
-            State = GameManager.GameState.MatchOver;
-            OnMatchEnded?.Invoke(standing.FirstOrDefault(), reason);
+            EndMatch(standing.Count == 1 ? standing[0].Id : -1, reason);
             return;
         }
         OnPlayerOut?.Invoke(playerId, reason);
         if (playerId == CurrentPlayerID && IsAwaitingShot && !ShotReleased) PassTurn(TurnEnd.Skipped);
     }
 
-    // Still in the match: pieces on the board, and not conceded or gone.
-    public bool IsStanding(int playerId) => IsStanding(players.Find(p => p.ID == playerId));
-    private bool IsStanding(PlayersManager player) => player != null && player.totalPieceCnt > 0 && !forfeited.Contains(player.ID);
+    // Still in the match: not knocked out, conceded or gone.
+    public bool IsStanding(int playerId) => Find(playerId)?.Standing ?? false;
 
     // Stops the match without a ruleset result, e.g. when the online
     // opponent leaves. Whoever called it reports the outcome.
@@ -172,6 +192,97 @@ public class TurnController
     {
         State = GameManager.GameState.MatchOver;
     }
+
+    // A piece went into the death trigger (GameManager). True: it's gone for
+    // good; false: it's parked until the shot is over (the ruleset brings it
+    // back).
+    public bool PieceOut(GamePieceManager piece)
+    {
+        Kills.PieceRemoved(piece.pieceID, piece.playerIndex);
+        return ruleset.OnPieceOut(piece, sides, Shooter);
+    }
+
+    // The match as the host sends it (MatchState).
+    public MatchState Snapshot()
+    {
+        return new MatchState
+        {
+            Turn = Turn,
+            TurnsEnded = TurnsEnded,
+            CurrentPlayer = CurrentPlayerID,
+            LastTurnEnd = LastTurnEnd,
+            LastPlayer = LastPlayerId,
+            Over = resolved,
+            Winner = winner,
+            Reason = endReason,
+            Sides = sides.Select(s =>
+            {
+                var copy = new Side(s.Id);
+                copy.CopyFrom(s);
+                return copy;
+            }).ToList(),
+        };
+    }
+
+    // ---- Mirror (network guest) ----
+
+    public void BecomeMirror() => IsMirror = true;
+
+    // The host's word on the match, with the kill feed of the shot that
+    // ended the turn before. What changed is told through the same events
+    // the host's own controller raised, in the same order.
+    public void ApplyRemote(MatchState state, IReadOnlyList<KillEvent> kills)
+    {
+        if (!IsMirror || State == GameManager.GameState.MatchOver) return;
+        var newTurn = state.Turn != Turn;
+        var turnEnded = state.TurnsEnded != TurnsEnded;
+        TurnsEnded = state.TurnsEnded;
+        LastTurnEnd = state.LastTurnEnd;
+        LastPlayerId = state.LastPlayer;
+        if (turnEnded && state.LastTurnEnd == TurnEnd.Shot)
+        {
+            Kills.Record(kills);
+            OnShotEnded?.Invoke(state.LastPlayer);
+        }
+        else if (turnEnded) OnTurnPassed?.Invoke(state.LastPlayer, state.LastTurnEnd);
+
+        var newlyOut = new List<Side>();
+        foreach (var remote in state.Sides)
+        {
+            var side = Find(remote.Id);
+            if (side == null) continue;
+            if (side.Standing && !remote.Standing) newlyOut.Add(remote);
+            side.CopyFrom(remote);
+        }
+        OnSidesChanged?.Invoke();
+
+        Turn = state.Turn;
+        CurrentPlayerID = state.CurrentPlayer;
+        if (state.Over)
+        {
+            // Two sides: a side's end is the match's, not a PlayerOut.
+            resolved = true;
+            winner = state.Winner;
+            endReason = state.Reason;
+            State = GameManager.GameState.MatchOver;
+            OnMatchEnded?.Invoke(state.Winner, state.Reason);
+            return;
+        }
+        foreach (var side in newlyOut) OnPlayerOut?.Invoke(side.Id, side.Out.Value);
+        if (!newTurn) return;
+        TurnTimeRemaining = TurnSeconds;
+        State = GameManager.GameState.WaitingForInput;
+        OnTurnStarted?.Invoke(CurrentPlayerID);
+    }
+
+    // A shot is playing out on the host (this guest's own, sent, or a
+    // snapshot of anyone's): the clock stops until the next turn.
+    public void MirrorShotUnderway()
+    {
+        if (IsMirror && IsAwaitingShot) State = GameManager.GameState.ProcessingTurn;
+    }
+
+    // ---- Authority ----
 
     private void InputReady()
     {
@@ -192,7 +303,7 @@ public class TurnController
         }
         else if (!selGamePiece.isDragging)
         {
-            BeginShot(selGamePiece.GetComponent<GamePieceManager>());
+            BeginShot(selGamePiece.Manager);
             State = GameManager.GameState.ProcessingTurn;
         }
     }
@@ -202,43 +313,50 @@ public class TurnController
         shotStartedAt = Time.unscaledTime;
         ruleset.OnBeforeFlick(piece);
         Kills.BeginShot(CurrentPlayerID, piece.pieceID);
-        standingAtShot = players.Where(IsStanding).ToList();
+        standingAtShot = sides.Where(s => s.Standing).ToList();
     }
 
     private void TurnProcess()
     {
-        var allSettled = true;
         foreach (var piece in gamePieceScripts)
-        {
-            if (piece.IsSettled) continue;
-            allSettled = false;
-            break;
-        }
-
-        if (!selGamePiece.isCancelled && !selGamePiece.isDragging && allSettled)
-        {
-            EndTurn();
-        }
+            if (!piece.IsSettled) return;
+        if (!selGamePiece.isCancelled && !selGamePiece.isDragging) EndTurn();
     }
 
     private void EndTurn()
     {
-        var finishedPlayer = players.Find(p => p.ID == CurrentPlayerID);
+        var shooter = CurrentPlayerID;
+        TurnsEnded++;
         LastTurnEnd = TurnEnd.Shot;
-        LastPlayerId = CurrentPlayerID;
+        LastPlayerId = shooter;
+        sides[shooter].Shots++;
         Kills.EndShot();
-        OnTurnEnded?.Invoke(finishedPlayer);
 
-        var standing = players.Where(IsStanding).ToList();
-        if (ruleset.TryGetMatchWinner(standingAtShot, standing, CurrentPlayerID, out var winner, out var reason))
+        // Who this shot put out; their pieces waiting to come back don't.
+        var knockedOut = standingAtShot.Where(s => s.Standing && ruleset.IsKnockedOut(s)).ToList();
+        foreach (var side in knockedOut) side.Out = MatchEndReason.Knockout;
+        ResolveParked?.Invoke();
+        OnShotEnded?.Invoke(shooter);
+        OnSidesChanged?.Invoke();
+
+        var standing = sides.Where(s => s.Standing).ToList();
+        if (ruleset.TryGetMatchWinner(standingAtShot, standing, shooter, out var matchWinner, out var reason))
         {
-            State = GameManager.GameState.MatchOver;
-            OnMatchEnded?.Invoke(winner, reason);
+            EndMatch(matchWinner != null ? matchWinner.Id : -1, reason);
             return;
         }
-        foreach (var knockedOut in standingAtShot.Except(standing)) OnPlayerOut?.Invoke(knockedOut.ID, MatchEndReason.Knockout);
+        foreach (var side in knockedOut) OnPlayerOut?.Invoke(side.Id, MatchEndReason.Knockout);
 
         BeginTurn(NextPlayerIndex());
+    }
+
+    private void EndMatch(int winnerId, MatchEndReason reason)
+    {
+        resolved = true;
+        winner = winnerId;
+        endReason = reason;
+        State = GameManager.GameState.MatchOver;
+        OnMatchEnded?.Invoke(winnerId, reason);
     }
 
     // Nothing moved, so there's no winner to check: straight to the next side.
@@ -251,9 +369,10 @@ public class TurnController
             selGamePiece.isSelected = false;
             selGamePiece.isCancelled = false;
         }
-        var passer = players.Find(p => p.ID == CurrentPlayerID);
+        var passer = CurrentPlayerID;
+        TurnsEnded++;
         LastTurnEnd = why;
-        LastPlayerId = CurrentPlayerID;
+        LastPlayerId = passer;
         OnTurnPassed?.Invoke(passer, why);
         BeginTurn(NextPlayerIndex());
     }
@@ -261,21 +380,23 @@ public class TurnController
     // The next side round that is still standing.
     private int NextPlayerIndex()
     {
-        var current = players.FindIndex(p => p.ID == CurrentPlayerID);
-        for (var step = 1; step <= players.Count; step++)
+        for (var step = 1; step <= sides.Count; step++)
         {
-            var index = (current + step) % players.Count;
-            if (IsStanding(players[index])) return index;
+            var index = (CurrentPlayerID + step) % sides.Count;
+            if (sides[index].Standing) return index;
         }
-        return (current + 1) % players.Count;
+        return (CurrentPlayerID + 1) % sides.Count;
     }
 
     private void BeginTurn(int playerIndex)
     {
         selGamePiece = null;
-        CurrentPlayerID = players[playerIndex].ID;
+        CurrentPlayerID = sides[playerIndex].Id;
+        Turn++;
         TurnTimeRemaining = TurnSeconds;
         State = GameManager.GameState.WaitingForInput;
-        OnTurnStarted?.Invoke(players[playerIndex]);
+        OnTurnStarted?.Invoke(CurrentPlayerID);
     }
+
+    private Side Find(int playerId) => playerId >= 0 && playerId < sides.Count ? sides[playerId] : null;
 }

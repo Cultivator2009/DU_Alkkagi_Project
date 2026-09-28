@@ -39,7 +39,7 @@ public class PlacementHud : MonoBehaviour
         var gameManager = GameManager.manager;
         var phase = gameManager != null ? gameManager.Placement : null;
         var show = phase != null && !phase.Done && gameManager.gameState == GameManager.GameState.Placement && Controller != null;
-        var players = gameManager != null ? gameManager.playersList.Count : 2;
+        var players = gameManager != null ? gameManager.Sides.Count : 2;
         if (panel.activeSelf != show)
         {
             panel.SetActive(show);

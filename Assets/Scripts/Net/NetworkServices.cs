@@ -5,7 +5,7 @@ using UnityEngine;
 // and a friend's lobby invite can be accepted - before the player ever
 // opens the lobby. If Steam isn't running, SteamTransport logs and stays
 // not-ready; local play doesn't depend on it. With Steam up, the player's
-// rating loads here too.
+// rating loads here too, and the message bus (NetSession) opens over it.
 public static class NetworkServices
 {
     public static void EnsureCreated()
@@ -15,6 +15,7 @@ public static class NetworkServices
             var transport = new GameObject("SteamTransport").AddComponent<SteamTransport>();
             if (transport.IsReady) PlayerRating.Load(transport.LocalId);
         }
+        if (NetSession.Current == null && SteamTransport.Instance.IsReady) NetSession.Current = new NetSession(SteamTransport.Instance);
         if (SteamLobbyManager.Instance == null) new GameObject("SteamLobbyManager").AddComponent<SteamLobbyManager>();
     }
 }

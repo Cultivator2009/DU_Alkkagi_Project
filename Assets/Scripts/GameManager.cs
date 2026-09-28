@@ -20,13 +20,15 @@ public class GameManager : MonoBehaviour
 
     public GameState gameState;
     public List<GamePieceDragAndReleaseForce> gamePieceScripts = new List<GamePieceDragAndReleaseForce>();
-    public List<PlayersManager> playersList = new List<PlayersManager>();
+    // Index-aligned with player ids: 0 is black (or Cho, or chess's white).
+    public List<Side> Sides { get; } = new List<Side>();
 
     public int totalPlayerCnt = 2; // two locally; online, whoever the host's roster lists (MatchRoster)
 
     public GameObject[] vcams = null;
 
     public IRuleset Ruleset { get; private set; }
+    private readonly List<GamePieceDragAndReleaseForce> parked = new List<GamePieceDragAndReleaseForce>(); // off the board, coming back
     public TurnController TurnController { get; private set; }
     public BoardSetup Board { get; private set; }
     public PlacementPhase Placement { get; private set; }
@@ -76,8 +78,8 @@ public class GameManager : MonoBehaviour
         }
 
         if (TurnController == null || !TurnController.HasStarted) return;
-        if (SkipLocalTurnProcessing) return; // a network guest's state is driven by NetworkMatchBridge instead
-        TurnController.Tick();
+        TurnController.Tick(); // a network guest's only runs its clock
+        if (SkipLocalTurnProcessing) return; // and its game state follows the host (NetworkMatchBridge)
         gameState = TurnController.State;
         if (GamePace.FastForwarding && gameState != GameState.ProcessingTurn) GamePace.SetFastForward(false); // the shot is over
     }
@@ -89,15 +91,7 @@ public class GameManager : MonoBehaviour
         Time.timeScale = GamePace.Speed;
         totalPlayerCnt = MatchRoster.Current != null ? Mathf.Clamp(MatchRoster.Current.Count, 2, MatchRoster.MaxPlayers) : 2;
 
-        var playersParentOb = new GameObject("Players");
-        for (var playerIndex = 0; playerIndex < totalPlayerCnt; playerIndex++)
-        {
-            var playersOb = new GameObject("P" + (playerIndex + 1));
-            playersOb.transform.SetParent(playersParentOb.transform);
-            var playersObComp = playersOb.AddComponent<PlayersManager>();
-            playersObComp.ID = playerIndex;
-            playersList.Add(playersObComp);
-        }
+        for (var playerIndex = 0; playerIndex < totalPlayerCnt; playerIndex++) Sides.Add(new Side(playerIndex));
 
         // Host and guest spawn from the same settings, so both boards get the
         // same stones with the same ids.
@@ -105,10 +99,9 @@ public class GameManager : MonoBehaviour
         foreach (var gamePieceScript in Board.Spawn(settings, totalPlayerCnt))
         {
             gamePieceScripts.Add(gamePieceScript);
-            var pieceManager = gamePieceScript.GetComponent<GamePieceManager>();
-            var owner = playersList.Find(p => p.ID == pieceManager.playerIndex);
-            if (owner != null) owner.totalPieceCnt++;
+            Sides[gamePieceScript.Manager.playerIndex].Pieces++;
         }
+        Ruleset.Begin(Sides);
 
         vcams = GameObject.FindGameObjectsWithTag("vcam");
         // Lives in GameScene, so it goes with the match.
@@ -118,7 +111,10 @@ public class GameManager : MonoBehaviour
         var knocksBoard = settings.PieceType == PieceType.ChessPieces || settings.PieceType == PieceType.GonggiStones;
         foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>().knocksBoard = knocksBoard;
 
-        TurnController = new TurnController(Ruleset, playersList, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds);
+        TurnController = new TurnController(Ruleset, Sides, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds)
+        {
+            ResolveParked = ResolveParked,
+        };
         gameState = GameState.WaitingForPlayers;
         if (!IsOnlineMatch && LocalOpponent.IsAI)
         {
@@ -134,7 +130,9 @@ public class GameManager : MonoBehaviour
         if (!IsOnlineMatch) BeginMatch(hotSeat: !VersusAI);
     }
 
-    private static bool IsOnlineMatch => SteamLobbyManager.Instance != null && SteamLobbyManager.Instance.CurrentLobby.HasValue;
+    // NetworkBootstrap adds the bridge as GameScene loads into a lobby, before
+    // the match is prepared. (A test harness can add one of its own.)
+    private static bool IsOnlineMatch => FindAnyObjectByType<NetworkMatchBridge>() != null;
 
     // Placement first if the rules ask for it, then the first turn. Runs on
     // the authority only: the local game, or the network host.
@@ -167,7 +165,7 @@ public class GameManager : MonoBehaviour
     private void StartPlacement(bool hotSeat, bool authority)
     {
         var pieces = gamePieceScripts.Select(p => p.GetComponent<GamePieceManager>());
-        Placement = new PlacementPhase(Board, pieces, playersList.Count, MatchSettings.Current, hotSeat, authority);
+        Placement = new PlacementPhase(Board, pieces, Sides.Count, MatchSettings.Current, hotSeat, authority);
         Board.BeginPlacement(gamePieceScripts);
         gameState = GameState.Placement;
     }
@@ -183,6 +181,43 @@ public class GameManager : MonoBehaviour
         gamePieceScripts.Remove(piece);
     }
 
+    // A piece went off the board (DeathTrigger), on the authority: the
+    // ruleset says whether it's gone or comes back once the shot is over.
+    public void PieceOut(GamePieceDragAndReleaseForce piece)
+    {
+        var manager = piece.Manager;
+        if (manager.isDestroyed || TurnController == null || TurnController.IsMirror) return;
+        manager.isDestroyed = true;
+        if (TurnController.PieceOut(manager))
+        {
+            RemovePiece(piece);
+            Destroy(piece.gameObject);
+            return;
+        }
+        piece.Park();
+        parked.Add(piece);
+    }
+
+    // The shot is over and the ruleset has said who's out: the pieces of the
+    // sides still in come back into their zones, the others' are gone.
+    private void ResolveParked()
+    {
+        foreach (var piece in parked)
+        {
+            var side = Sides[piece.Manager.playerIndex];
+            if (!side.Standing)
+            {
+                side.Pieces = Mathf.Max(0, side.Pieces - 1);
+                RemovePiece(piece);
+                Destroy(piece.gameObject);
+                continue;
+            }
+            Board.Respawn(piece, gamePieceScripts);
+            piece.Manager.isDestroyed = false;
+        }
+        parked.Clear();
+    }
+
     // Call before leaving GameScene. This manager outlives the scene
     // (DontDestroyOnLoad) and GamePreparation only ever appends, so without a
     // reset the next match would inherit the previous one's players, pieces
@@ -192,8 +227,9 @@ public class GameManager : MonoBehaviour
         TurnController = null;
         Placement = null;
         Board = null;
-        playersList.Clear();
+        Sides.Clear();
         gamePieceScripts.Clear();
+        parked.Clear();
         vcams = null;
         AIPlayerId = -1;
         SkipLocalTurnProcessing = false;

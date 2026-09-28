@@ -6,34 +6,25 @@ using Steamworks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-// Bridges the local, mode-agnostic TurnController/ClassicRuleset core (built
-// for hot-seat play) onto a host-authoritative network match of two to four
-// players. Only the host ever runs TurnController; each guest is a thin
-// client that renders host snapshots and forwards its own turn's flick as a
-// FlickCommand. Who plays which side is the host's MatchRoster, sent with
-// LoadGameScene: the host is player 0.
+// Bridges the local TurnController/ruleset core onto a host-authoritative
+// network match of two to four players. Only the host runs the match; each
+// guest's TurnController is a mirror of it (TurnController.ApplyRemote),
+// so the HUD and the rating hear the same events on every screen. A guest
+// renders the host's snapshots and forwards its own turn's flick. Who plays
+// which side is the host's MatchRoster, sent with LoadGameScene: the host
+// is player 0.
 //
-// Absent entirely for local single-player/hot-seat play - GamePreparation
-// only needs this component when a Steam lobby is active.
+// Messages go through a scope of NetSession: only from this match's
+// players, each only the way its route goes (NetFilters).
+//
+// Absent entirely for local play - NetworkBootstrap adds it when a Steam
+// lobby is active.
 public class NetworkMatchBridge : MonoBehaviour
 {
     private const int SnapshotIntervalFixedFrames = 3;
     // How long past zero a guest's turn runs on the host's clock (see
     // TurnController.RemoteGraceSeconds): a round trip on a slow relay.
     private const float GuestFlickGraceSeconds = 0.5f;
-
-    // On a guest, TurnController.Tick() never runs (see GameManager.
-    // SkipLocalTurnProcessing), so TurnController's own events never fire
-    // past the initial StartMatch. UI that needs to reflect turn/score/
-    // match-over state on both host and guest should use these instead.
-    public event Action<int> OnGuestTurnChanged;
-    public event Action<int, MatchEndReason> OnGuestMatchEnded;
-    // Guest-side stand-in for TurnController.OnTurnEnded: shooterId just shot.
-    public event Action<int> OnGuestTurnEnded;
-    // Guest-side stand-in for TurnController.OnTurnPassed.
-    public event Action<int, TurnEnd> OnGuestTurnPassed;
-    // Guest-side stand-in for TurnController.OnPlayerOut.
-    public event Action<int, MatchEndReason> OnPlayerOut;
 
     // A player quit, dropped or timed out. Before the result the host
     // forfeits their side; a guest whose host left can't go on. Afterwards it
@@ -54,11 +45,17 @@ public class NetworkMatchBridge : MonoBehaviour
     public bool OpponentGone => OthersPresent == 0;
     public bool HostGone => gone.Contains(hostId);
     public bool PlayerGone(int playerId) => playerId >= 0 && playerId < roster.Count && gone.Contains(roster.SteamIds[playerId]);
+    public ulong SteamIdOf(int playerId) => playerId >= 0 && playerId < roster.Count ? roster.SteamIds[playerId] : 0;
 
-    // A seat's Steam name.
-    public string PlayerName(int playerId) => playerId >= 0 && playerId < roster.Count ? new Friend(roster.SteamIds[playerId]).Name : string.Empty;
+    // A seat's Steam name (a number while Steam isn't there to ask).
+    public string PlayerName(int playerId)
+    {
+        if (playerId < 0 || playerId >= roster.Count) return string.Empty;
+        return SteamClient.IsValid ? new Friend(roster.SteamIds[playerId]).Name : Loc.Get("player.number", playerId + 1);
+    }
 
-    private ISessionTransport transport;
+    private NetSession session;
+    private NetScope scope;
     private SteamLobbyManager lobby;
     private GameManager gameManager;
     private MatchRoster roster;
@@ -76,51 +73,73 @@ public class NetworkMatchBridge : MonoBehaviour
     private readonly HashSet<ulong> wantsRematch = new HashSet<ulong>();
 
     private Dictionary<char, GamePieceDragAndReleaseForce> pieceLookup;
-    private Dictionary<char, int> ownerAtTurnStart;
+    private HashSet<char> inPlayAtLastResult; // host: the pieces the guests last heard of
     private PieceSelector guestSelector;
-    private int guestKnownCurrentPlayerId;
     private bool awaitingTurnResult;
     private bool sentFastForward; // on the host: what the guests were last told
-    private bool guestTurnsStarted;
-    private float guestClockRemaining;
-    private bool guestClockRunning;
     private readonly Dictionary<char, Vector3> snapshotTargetPosition = new Dictionary<char, Vector3>();
     private readonly Dictionary<char, Quaternion> snapshotTargetRotation = new Dictionary<char, Quaternion>();
 
     private IEnumerable<ulong> Guests => roster.SteamIds.Skip(1);
+    private TurnController Controller => gameManager.TurnController;
 
     private void Start()
     {
-        transport = SteamTransport.Instance;
+        session = NetSession.Current;
         lobby = SteamLobbyManager.Instance;
         gameManager = GameManager.manager;
 
-        if (transport == null || lobby == null || !lobby.CurrentLobby.HasValue)
+        if (session == null || lobby == null || !lobby.CurrentLobby.HasValue)
         {
             enabled = false; // no active Steam lobby - this is a local match, stay dormant
             return;
         }
 
-        localId = transport.LocalId;
+        localId = session.LocalId;
         roster = MatchRoster.Current ?? lobby.BuildRoster();
         hostId = roster.SteamIds[0];
         isHost = hostId == localId;
         localPlayerId = Mathf.Max(0, roster.PlayerOf(localId));
         gameManager.SkipLocalTurnProcessing = !isHost;
-        transport.OnMessageReceived += HandleMessage;
-        transport.OnPeerDisconnected += PlayerDeparted;
+        OpenScope();
+        session.Transport.OnPeerDisconnected += PlayerDeparted;
         lobby.OnMemberLeft += HandleMemberLeft;
 
         StartCoroutine(WaitForTurnControllerThenInit());
     }
 
+    private void OpenScope()
+    {
+        scope = session.Scope("match")
+            .Use(NetFilters.From(id => roster.PlayerOf(id) >= 0))
+            .Use(NetFilters.Authority(() => hostId, () => isHost))
+            .On<Msg.RematchRequest>(HandleRematchRequest)
+            .On<Msg.ReturnToLobby>(HandleReturnToLobby)
+            // The host's
+            .On<Msg.ClientReady>(HandleClientReady)
+            .On<Msg.Flick>(HandleFlick)
+            .On<Msg.Pass>(HandlePass)
+            .On<Msg.PlaceRequest>(HandlePlaceRequest)
+            .On<Msg.PlacementReady>(HandlePlacementReady)
+            .On<Msg.Concede>((sender, _) => Controller.Concede(roster.PlayerOf(sender)))
+            // The guests'
+            .On<Msg.StartMatch>((_, m) => ApplyGuestRole(m.PlayerId, m.Owners))
+            .On<Msg.PlacementState>(HandleGuestPlacementState)
+            .On<Msg.PieceSnapshot>(HandleGuestSnapshot)
+            .On<Msg.BoardSound>((_, m) =>
+            {
+                if (BoardSounds.Instance != null) BoardSounds.Instance.PlayRemote(m.Sound);
+            })
+            .On<Msg.TurnResult>(HandleGuestTurnResult)
+            .On<Msg.MatchStateUpdate>((_, m) => Controller.ApplyRemote(m.State, Array.Empty<KillEvent>()))
+            .On<Msg.FastForward>((_, m) => HostFastForwarding = m.On)
+            .On<Msg.LoadGameScene>(HandleGuestLoadGameScene);
+    }
+
     private void OnDestroy()
     {
-        if (transport != null)
-        {
-            transport.OnMessageReceived -= HandleMessage;
-            transport.OnPeerDisconnected -= PlayerDeparted;
-        }
+        scope?.Dispose();
+        if (session != null) session.Transport.OnPeerDisconnected -= PlayerDeparted;
         if (lobby != null) lobby.OnMemberLeft -= HandleMemberLeft;
         BoardSounds.OnEmitted -= ForwardBoardSound;
     }
@@ -150,7 +169,7 @@ public class NetworkMatchBridge : MonoBehaviour
         {
             // The host runs the match: nothing more can happen on this board.
             matchResolved = true;
-            gameManager.TurnController?.Abort();
+            Controller?.Abort();
             gameManager.gameState = GameManager.GameState.MatchOver;
         }
         OnPlayerLeft?.Invoke(playerId);
@@ -161,16 +180,32 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         if (OpponentGone || LocalWantsRematch) return;
         wantsRematch.Add(localId);
-        transport.Broadcast(NetMessage.WriteRematchRequest());
+        session.Broadcast(new Msg.RematchRequest());
         OnRematchStateChanged?.Invoke();
         TryStartRematch();
     }
 
     public void ReturnToLobby()
     {
-        transport.Broadcast(NetMessage.WriteReturnToLobby());
+        session.Broadcast(new Msg.ReturnToLobby());
         gameManager.EndMatch();
         SceneManager.LoadScene("LobbyScene");
+    }
+
+    private void HandleRematchRequest(ulong sender, Msg.RematchRequest _)
+    {
+        wantsRematch.Add(sender);
+        OnRematchStateChanged?.Invoke();
+        TryStartRematch();
+    }
+
+    private void HandleReturnToLobby(ulong sender, Msg.ReturnToLobby _)
+    {
+        gone.Add(sender);
+        wantsRematch.Remove(sender);
+        OnPlayerReturnedToLobby?.Invoke(roster.PlayerOf(sender));
+        OnRematchStateChanged?.Invoke();
+        TryStartRematch();
     }
 
     // The host owns scene flow: once everyone still here has asked, it
@@ -183,21 +218,14 @@ public class NetworkMatchBridge : MonoBehaviour
         if (present.Count < 2 || !present.All(wantsRematch.Contains)) return;
         MatchRoster.Current = lobby.RosterOf(present); // their ratings after this match
         MatchSettings.Current = MatchSettings.Picked.Resolve(); // Random rolls again
-        transport.Broadcast(NetMessage.WriteLoadGameScene(MatchSettings.Current, MatchRoster.Current));
+        session.Broadcast(new Msg.LoadGameScene { Settings = MatchSettings.Current, Roster = MatchRoster.Current });
         gameManager.EndMatch();
         SceneManager.LoadScene("GameScene");
     }
 
     private IEnumerator WaitForTurnControllerThenInit()
     {
-        if (isHost)
-        {
-            while (gameManager.TurnController == null) yield return null;
-        }
-        else
-        {
-            while (gameManager.gamePieceScripts == null || gameManager.gamePieceScripts.Count == 0) yield return null;
-        }
+        while (Controller == null || gameManager.gamePieceScripts.Count == 0) yield return null;
 
         BuildPieceLookup();
 
@@ -210,7 +238,7 @@ public class NetworkMatchBridge : MonoBehaviour
         pieceLookup = new Dictionary<char, GamePieceDragAndReleaseForce>();
         foreach (var piece in gameManager.gamePieceScripts)
         {
-            var id = piece.GetComponent<GamePieceManager>().pieceID;
+            var id = piece.Manager.pieceID;
             // Every message addresses pieces by this id - a duplicate silently
             // merges two pieces into one lookup entry and desyncs the match.
             if (pieceLookup.TryGetValue(id, out var existing))
@@ -223,15 +251,15 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void InitHost()
     {
-        var controller = gameManager.TurnController;
+        var controller = Controller;
         controller.PieceSelector.LocalPlayerId = localPlayerId;
         controller.HostPlayerId = localPlayerId;
         controller.RemoteGraceSeconds = GuestFlickGraceSeconds;
-        controller.OnTurnStarted += HandleHostTurnStarted;
+        controller.OnTurnStarted += _ => BroadcastTurnResult();
         controller.OnMatchEnded += HandleHostMatchEnded;
         controller.OnPlayerOut += HandleHostPlayerOut;
         BoardSounds.OnEmitted += ForwardBoardSound;
-        ownerAtTurnStart = SnapshotOwners();
+        inPlayAtLastResult = new HashSet<char>(pieceLookup.Keys);
         hostInitialized = true;
         TryBeginMatch();
     }
@@ -253,10 +281,9 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void Forfeit(int playerId)
     {
-        var controller = gameManager.TurnController;
-        controller.Forfeit(playerId, MatchEndReason.OpponentLeft);
+        Controller.Forfeit(playerId, MatchEndReason.OpponentLeft);
         // Mid-placement GameManager isn't following the controller yet.
-        if (controller.State == GameManager.GameState.MatchOver) gameManager.gameState = GameManager.GameState.MatchOver;
+        if (Controller.State == GameManager.GameState.MatchOver) gameManager.gameState = GameManager.GameState.MatchOver;
     }
 
     // Each guest its own view: hidden placement leaves out the other sides'
@@ -268,7 +295,7 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void SendPlacementStateTo(ulong guestId)
     {
-        transport.Send(guestId, NetMessage.WritePlacementState(gameManager.Placement.SnapshotFor(roster.PlayerOf(guestId))));
+        session.Send(guestId, new Msg.PlacementState { State = gameManager.Placement.SnapshotFor(roster.PlayerOf(guestId)) });
     }
 
     // The guests' pieces never collide, so they hear the host's. Not a
@@ -278,82 +305,106 @@ public class NetworkMatchBridge : MonoBehaviour
         foreach (var id in Guests.Where(id => !gone.Contains(id)))
         {
             if (sound.Kind == BoardSound.Flick && sound.Owner == roster.PlayerOf(id)) continue;
-            transport.Send(id, NetMessage.WriteBoardSound(sound), reliable: false);
+            session.Send(id, new Msg.BoardSound { Sound = sound });
         }
     }
 
-    private Dictionary<char, int> SnapshotOwners()
+    // The match, the last shot's kill feed, what went for good since the
+    // guests last heard, and where everything is.
+    private Msg.TurnResult CurrentResult()
     {
-        var dict = new Dictionary<char, int>();
-        foreach (var piece in gameManager.gamePieceScripts)
+        var inPlay = new HashSet<char>(gameManager.gamePieceScripts.Select(p => p.Manager.pieceID));
+        var result = new Msg.TurnResult
         {
-            var pm = piece.GetComponent<GamePieceManager>();
-            dict[pm.pieceID] = pm.playerIndex;
-        }
-        return dict;
+            State = Controller.Snapshot(),
+            Kills = Controller.LastTurnEnd == TurnEnd.Shot ? Controller.Kills.LastShot.ToList() : new List<KillEvent>(),
+            Removed = inPlayAtLastResult.Where(id => !inPlay.Contains(id)).ToList(),
+            Pieces = CurrentTransforms(),
+        };
+        inPlayAtLastResult = inPlay;
+        return result;
     }
 
-    // Every piece gone since the turn started, and who it counts for: the
-    // side whose turn it was knocked it out.
-    private List<RemovedPieceEntry> ComputeRemovedSinceTurnStart()
-    {
-        var currentIds = new HashSet<char>(gameManager.gamePieceScripts.Select(p => p.GetComponent<GamePieceManager>().pieceID));
-        var shooter = gameManager.TurnController.LastPlayerId;
-        var removed = new List<RemovedPieceEntry>();
-        foreach (var kv in ownerAtTurnStart)
-        {
-            if (currentIds.Contains(kv.Key)) continue;
-            removed.Add(new RemovedPieceEntry { PieceId = kv.Key, ScoredForPlayerId = ClassicRuleset.ScorerFor(kv.Value, shooter, gameManager.playersList) });
-        }
-        return removed;
-    }
+    private void BroadcastTurnResult() => session.Broadcast(CurrentResult());
 
-    private void HandleHostTurnStarted(PlayersManager player)
-    {
-        var removed = ComputeRemovedSinceTurnStart();
-        var turnEnd = gameManager.TurnController.LastTurnEnd;
-        var kills = turnEnd == TurnEnd.Shot ? gameManager.TurnController.Kills.LastShot : new List<KillEvent>();
-        transport.Broadcast(NetMessage.WriteTurnResult(player.ID, turnEnd, false, -1, MatchEndReason.Knockout, removed, kills, CurrentTransforms()));
-        ownerAtTurnStart = SnapshotOwners();
-    }
-
-    private void HandleHostMatchEnded(PlayersManager winner, MatchEndReason reason)
+    private void HandleHostMatchEnded(int winner, MatchEndReason reason)
     {
         matchResolved = true;
-        var removed = ComputeRemovedSinceTurnStart();
-        var winnerId = winner != null ? winner.ID : -1; // -1: draw
-        transport.Broadcast(NetMessage.WriteTurnResult(-1, TurnEnd.Shot, true, winnerId, reason, removed, gameManager.TurnController.Kills.LastShot, CurrentTransforms()));
+        BroadcastTurnResult();
     }
 
+    // A side conceding or leaving mid-turn; a knockout goes with the turn's
+    // result, after the shot's kill feed.
     private void HandleHostPlayerOut(int playerId, MatchEndReason reason)
     {
-        transport.Broadcast(NetMessage.WritePlayerOut(playerId, reason));
+        if (reason != MatchEndReason.Knockout) session.Broadcast(new Msg.MatchStateUpdate { State = Controller.Snapshot() });
     }
 
+    // A resync: the match as it is, told again to one guest.
     private void SendCurrentTurnTo(ulong targetId)
     {
-        var controller = gameManager.TurnController;
-        transport.Send(targetId, NetMessage.WriteTurnResult(controller.CurrentPlayerID, TurnEnd.None, false, -1, MatchEndReason.Knockout, new List<RemovedPieceEntry>(), new List<KillEvent>(), CurrentTransforms()));
+        session.Send(targetId, new Msg.TurnResult
+        {
+            State = Controller.Snapshot(),
+            Pieces = CurrentTransforms(),
+            Removed = pieceLookup.Keys.Where(id => pieceLookup[id] == null).ToList(),
+        });
     }
 
     // The physics pose, not transform: with interpolation on, transform is
-    // the render pose, which lags or overshoots the simulated one.
+    // the render pose, which lags or overshoots the simulated one. A piece
+    // put back since the last word jumps there on the guests.
     private List<PieceTransform> CurrentTransforms()
     {
-        return gameManager.gamePieceScripts
-            .Where(piece => piece != null)
-            .Select(piece =>
-            {
-                var rb = piece.GetComponent<Rigidbody>();
-                return new PieceTransform { PieceId = piece.GetComponent<GamePieceManager>().pieceID, Position = rb.position, Rotation = rb.rotation };
-            })
-            .ToList();
+        var transforms = new List<PieceTransform>(gameManager.gamePieceScripts.Count);
+        foreach (var piece in gameManager.gamePieceScripts)
+        {
+            if (piece == null) continue;
+            var body = piece.Body;
+            var flags = (byte)((piece.IsParked ? PieceTransform.Parked : 0) | (piece.Warped ? PieceTransform.Warped : 0));
+            piece.Warped = false;
+            transforms.Add(new PieceTransform { PieceId = piece.Manager.pieceID, Position = body.position, Rotation = body.rotation, Flags = flags });
+        }
+        return transforms;
     }
 
-    private void SendStartMatchTo(ulong targetId)
+    private void HandleClientReady(ulong sender, Msg.ClientReady _)
     {
-        var owners = SnapshotOwners().Select(kv => new PieceOwnerEntry { PieceId = kv.Key, PlayerId = kv.Value }).ToList();
-        transport.Send(targetId, NetMessage.WriteStartMatch(roster.PlayerOf(targetId), owners));
+        var owners = gameManager.gamePieceScripts.Select(p => new PieceOwnerEntry { PieceId = p.Manager.pieceID, PlayerId = p.Manager.playerIndex }).ToList();
+        session.Send(sender, new Msg.StartMatch { PlayerId = roster.PlayerOf(sender), Owners = owners });
+        readyGuests.Add(sender);
+        TryBeginMatch();
+    }
+
+    private void HandleFlick(ulong sender, Msg.Flick message)
+    {
+        // Unity-null once it's gone: a lagging guest board can still name a
+        // piece that's already out. Only the sender's own pieces.
+        pieceLookup.TryGetValue(message.PieceId, out var piece);
+        if (piece != null && (piece.IsParked || piece.Manager.playerIndex != roster.PlayerOf(sender))) piece = null;
+        var controller = Controller;
+        // Rejected while idle means the guest disagrees about the board or
+        // whose turn it is - resend the current state so its view and input
+        // line up again. (Mid-turn rejections need nothing: the turn's own
+        // TurnResult will arrive.)
+        if (!controller.TryApplyExternalFlick(piece, message.Force) && controller.State == GameManager.GameState.WaitingForInput) SendCurrentTurnTo(sender);
+    }
+
+    private void HandlePass(ulong sender, Msg.Pass _)
+    {
+        if (!Controller.TryPassTurn(roster.PlayerOf(sender)) && Controller.State == GameManager.GameState.WaitingForInput) SendCurrentTurnTo(sender);
+    }
+
+    private void HandlePlaceRequest(ulong sender, Msg.PlaceRequest message)
+    {
+        var phase = gameManager.Placement;
+        // Rejected: resend, so the guest's optimistic stone goes back.
+        if (phase != null && !phase.TryPlace(roster.PlayerOf(sender), message.PieceId, new Vector3(message.X, 0, message.Z))) SendPlacementStateTo(sender);
+    }
+
+    private void HandlePlacementReady(ulong sender, Msg.PlacementReady _)
+    {
+        if (gameManager.Placement != null && !gameManager.Placement.TryReady(roster.PlayerOf(sender))) SendPlacementStateTo(sender);
     }
 
     private void FixedUpdate()
@@ -364,27 +415,27 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private void HostFixedUpdate()
     {
-        if (gameManager.TurnController == null) return;
+        if (Controller == null) return;
         if (gameManager.gameState != GameManager.GameState.ProcessingTurn) return;
 
         snapshotTickCounter++;
         if (snapshotTickCounter < SnapshotIntervalFixedFrames) return;
         snapshotTickCounter = 0;
-        transport.Broadcast(NetMessage.WritePieceSnapshot(CurrentTransforms()), reliable: false);
+        session.Broadcast(new Msg.PieceSnapshot { Pieces = CurrentTransforms() });
     }
 
     // ---- Guest ----
 
     private void InitGuest()
     {
+        Controller.BecomeMirror();
         guestSelector = new PieceSelector(gameManager.gamePieceScripts) { LocalPlayerId = null };
-        transport.Send(hostId, NetMessage.WriteClientReady());
+        session.Send(hostId, new Msg.ClientReady());
     }
 
     private void ApplyGuestRole(int assignedPlayerId, List<PieceOwnerEntry> hostOwners)
     {
         localPlayerId = assignedPlayerId;
-        guestKnownCurrentPlayerId = gameManager.playersList[0].ID; // host always starts
 
         // Every side spawns from the host's settings, so the stone sets must
         // match exactly; if they don't, the builds disagree about the rules.
@@ -395,7 +446,7 @@ public class NetworkMatchBridge : MonoBehaviour
         {
             var pieceId = kv.Key;
             var piece = kv.Value;
-            var rb = piece.GetComponent<Rigidbody>();
+            var rb = piece.Body;
             // Kinematic bodies don't support ContinuousDynamic; set the mode
             // first so the switch doesn't warn. Interpolate keeps the
             // MovePosition-driven motion smooth between physics steps.
@@ -406,8 +457,8 @@ public class NetworkMatchBridge : MonoBehaviour
             piece.OnFlickRequested += force =>
             {
                 awaitingTurnResult = true;
-                guestClockRunning = false;
-                transport.Send(hostId, NetMessage.WriteFlickCommand(pieceId, force));
+                Controller.MirrorShotUnderway();
+                session.Send(hostId, new Msg.Flick { PieceId = pieceId, Force = force });
             };
         }
 
@@ -421,17 +472,16 @@ public class NetworkMatchBridge : MonoBehaviour
         if (isHost && hostInitialized && GamePace.FastForwarding != sentFastForward)
         {
             sentFastForward = GamePace.FastForwarding;
-            transport.Broadcast(NetMessage.WriteFastForward(sentFastForward));
+            session.Broadcast(new Msg.FastForward { On = sentFastForward });
         }
         if (isHost || pieceLookup == null || guestSelector == null || !guestSelector.LocalPlayerId.HasValue) return;
-        if (guestClockRunning) guestClockRemaining = Mathf.Max(0, guestClockRemaining - GamePace.ClockDelta);
 
         // Turns only; not while placing stones or after the result.
         if (gameManager.gameState != GameManager.GameState.WaitingForInput) return;
         // One flick per turn: after sending it, wait for the host's verdict
         // (the TurnResult that ends the turn) before accepting another.
         if (awaitingTurnResult) return;
-        var picked = guestSelector.TrySelect(guestKnownCurrentPlayerId);
+        var picked = guestSelector.TrySelect(Controller.CurrentPlayerID);
         if (picked != null) picked.isDragging = true;
     }
 
@@ -445,78 +495,76 @@ public class NetworkMatchBridge : MonoBehaviour
         var t = 15f * Time.fixedDeltaTime;
         foreach (var kv in pieceLookup)
         {
-            if (kv.Value == null || !snapshotTargetPosition.TryGetValue(kv.Key, out var targetPos)) continue;
-            var rb = kv.Value.GetComponent<Rigidbody>();
+            if (kv.Value == null || !kv.Value.gameObject.activeSelf || !snapshotTargetPosition.TryGetValue(kv.Key, out var targetPos)) continue;
+            var rb = kv.Value.Body;
             rb.MovePosition(Vector3.Lerp(rb.position, targetPos, t));
             rb.MoveRotation(Quaternion.Slerp(rb.rotation, snapshotTargetRotation[kv.Key], t));
         }
     }
 
-    private void HandleGuestSnapshot(byte[] data)
+    private void HandleGuestSnapshot(ulong _, Msg.PieceSnapshot message)
     {
-        guestClockRunning = false; // a shot is in flight
-        foreach (var t in NetMessage.ReadPieceSnapshot(data))
+        Controller.MirrorShotUnderway(); // a shot is in flight
+        ApplyTransforms(message.Pieces);
+    }
+
+    // Parked pieces hide; one put back jumps there.
+    private void ApplyTransforms(List<PieceTransform> transforms)
+    {
+        foreach (var t in transforms)
         {
             snapshotTargetPosition[t.PieceId] = t.Position;
             snapshotTargetRotation[t.PieceId] = t.Rotation;
+            if (!pieceLookup.TryGetValue(t.PieceId, out var piece) || piece == null) continue;
+            var shown = !t.Is(PieceTransform.Parked);
+            if (piece.gameObject.activeSelf != shown) piece.gameObject.SetActive(shown);
+            if (!shown || !t.Is(PieceTransform.Warped)) continue;
+            piece.transform.SetPositionAndRotation(t.Position, t.Rotation);
+            piece.Body.position = t.Position;
+            piece.Body.rotation = t.Rotation;
         }
     }
 
-    private void HandleGuestTurnResult(byte[] data)
+    private void HandleGuestTurnResult(ulong _, Msg.TurnResult message)
     {
-        var (nextPlayerId, turnEnd, matchOver, winnerPlayerId, reason, removed, kills, finalTransforms) = NetMessage.ReadTurnResult(data);
         awaitingTurnResult = false;
         HostFastForwarding = false; // the shot is over
-        var finishedPlayerId = guestKnownCurrentPlayerId;
-        if (turnEnd == TurnEnd.Shot) OnGuestTurnEnded?.Invoke(finishedPlayerId);
-        else if (turnEnd != TurnEnd.None) OnGuestTurnPassed?.Invoke(finishedPlayerId, turnEnd);
-        gameManager.TurnController.Kills.Record(kills);
 
-        foreach (var entry in removed)
+        foreach (var id in message.Removed)
         {
-            if (!pieceLookup.TryGetValue(entry.PieceId, out var piece)) continue;
-            pieceLookup.Remove(entry.PieceId);
+            if (!pieceLookup.TryGetValue(id, out var piece)) continue;
+            pieceLookup.Remove(id);
+            if (piece == null) continue;
             gameManager.gamePieceScripts.Remove(piece);
-            var scorer = gameManager.playersList.Find(p => p.ID == entry.ScoredForPlayerId);
-            scorer?.AddScore(1);
             Destroy(piece.gameObject);
         }
-
         // The host's settled board is the truth; GuestFixedUpdate eases every
         // piece onto it whatever the snapshots did or didn't deliver.
-        foreach (var t in finalTransforms)
-        {
-            snapshotTargetPosition[t.PieceId] = t.Position;
-            snapshotTargetRotation[t.PieceId] = t.Rotation;
-        }
+        ApplyTransforms(message.Pieces);
 
-        if (matchOver)
+        var controller = Controller;
+        controller.ApplyRemote(message.State, message.Kills);
+        if (controller.State == GameManager.GameState.MatchOver)
         {
             matchResolved = true;
-            guestClockRunning = false;
             gameManager.gameState = GameManager.GameState.MatchOver;
-            OnGuestMatchEnded?.Invoke(winnerPlayerId, reason);
             return;
         }
-
-        // A new turn restarts the countdown; a resync (None, after the opening
-        // turn) leaves it running.
-        if (turnEnd != TurnEnd.None || !guestTurnsStarted)
-        {
-            guestTurnsStarted = true;
-            guestClockRemaining = MatchSettings.Current.TurnSeconds;
-            guestClockRunning = true;
-        }
         gameManager.gameState = GameManager.GameState.WaitingForInput;
-        guestKnownCurrentPlayerId = nextPlayerId;
-        OnGuestTurnChanged?.Invoke(nextPlayerId);
     }
 
-    // The turn clock as this guest last heard it; null while nothing counts
-    // down (no timer, a shot in flight, or the match is over).
-    public float? GuestTurnTimeRemaining => !isHost && guestClockRunning && MatchSettings.Current.TurnSeconds > 0 ? guestClockRemaining : (float?)null;
+    private void HandleGuestLoadGameScene(ulong _, Msg.LoadGameScene message)
+    {
+        // A rematch, or the host starting a new match from the lobby while
+        // this guest was still on the game-over screen.
+        if (message.Roster.PlayerOf(localId) < 0) return; // left out: this player went back to the lobby
+        MatchSettings.Current = message.Settings;
+        MatchRoster.Current = message.Roster;
+        gameManager.EndMatch();
+        SceneManager.LoadScene("GameScene");
+    }
 
-    public bool GuestCanPass => !isHost && !awaitingTurnResult && guestKnownCurrentPlayerId == localPlayerId
+    public bool GuestCanPass => !isHost && !awaitingTurnResult && Controller != null && Controller.CurrentPlayerID == localPlayerId
                                 && gameManager.gameState == GameManager.GameState.WaitingForInput;
 
     // Skip-turn on a guest: the host decides, and its TurnResult ends the turn.
@@ -530,8 +578,8 @@ public class NetworkMatchBridge : MonoBehaviour
             piece.isSelected = false;
         }
         awaitingTurnResult = true;
-        guestClockRunning = false;
-        transport.Send(hostId, NetMessage.WritePassCommand());
+        Controller.MirrorShotUnderway();
+        session.Send(hostId, new Msg.Pass());
     }
 
     // Placement on a guest shows at once (the mirror applies the same rules);
@@ -540,132 +588,23 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         if (isHost || gameManager.Placement == null) return;
         if (!gameManager.Placement.TryPlace(localPlayerId, pieceId, position)) return;
-        transport.Send(hostId, NetMessage.WritePlaceRequest(pieceId, position));
+        session.Send(hostId, new Msg.PlaceRequest { PieceId = pieceId, X = position.x, Z = position.z });
     }
 
-    // The host decides; its PlayerOut (or, with two, the result) follows.
+    // The host decides; its MatchState (or, with two, the result) follows.
     public void RequestConcede()
     {
-        if (!isHost && !matchResolved) transport.Send(hostId, NetMessage.WriteConcede());
+        if (!isHost && !matchResolved) session.Send(hostId, new Msg.Concede());
     }
 
     public void RequestPlacementReady()
     {
-        if (!isHost) transport.Send(hostId, NetMessage.WritePlacementReady());
+        if (!isHost) session.Send(hostId, new Msg.PlacementReady());
     }
 
-    private void HandleGuestPlacementState(byte[] data)
+    private void HandleGuestPlacementState(ulong _, Msg.PlacementState message)
     {
         if (gameManager.Placement == null) gameManager.BeginGuestPlacement();
-        gameManager.Placement.Apply(NetMessage.ReadPlacementState(data));
-    }
-
-    // ---- Shared message dispatch ----
-
-    private void HandleMessage(ulong senderId, byte[] data)
-    {
-        var senderPlayer = roster.PlayerOf(senderId);
-        if (senderPlayer < 0) return; // not in this match
-        var type = NetMessage.PeekType(data);
-
-        switch (type)
-        {
-            case NetMessageType.RematchRequest:
-                wantsRematch.Add(senderId);
-                OnRematchStateChanged?.Invoke();
-                TryStartRematch();
-                return;
-            case NetMessageType.ReturnToLobby:
-                gone.Add(senderId);
-                wantsRematch.Remove(senderId);
-                OnPlayerReturnedToLobby?.Invoke(senderPlayer);
-                OnRematchStateChanged?.Invoke();
-                TryStartRematch();
-                return;
-        }
-
-        if (isHost)
-        {
-            switch (type)
-            {
-                case NetMessageType.ClientReady:
-                    SendStartMatchTo(senderId);
-                    readyGuests.Add(senderId);
-                    TryBeginMatch();
-                    break;
-                case NetMessageType.FlickCommand:
-                    var (pieceId, force) = NetMessage.ReadFlickCommand(data);
-                    // Unity-null once DeathTrigger destroyed it: a lagging guest
-                    // board can still name a piece that's already gone. Only
-                    // the sender's own pieces.
-                    pieceLookup.TryGetValue(pieceId, out var piece);
-                    if (piece != null && piece.GetComponent<GamePieceManager>().playerIndex != senderPlayer) piece = null;
-                    var controller = gameManager.TurnController;
-                    if (!controller.TryApplyExternalFlick(piece, force) && controller.State == GameManager.GameState.WaitingForInput)
-                    {
-                        // Rejected while idle means the guest disagrees about the
-                        // board or whose turn it is - resend the current state so
-                        // its view and input line up again. (Mid-turn rejections
-                        // need nothing: the turn's own TurnResult will arrive.)
-                        SendCurrentTurnTo(senderId);
-                    }
-                    break;
-                case NetMessageType.PassCommand:
-                    if (!gameManager.TurnController.TryPassTurn(senderPlayer) && gameManager.TurnController.State == GameManager.GameState.WaitingForInput)
-                        SendCurrentTurnTo(senderId);
-                    break;
-                case NetMessageType.PlaceRequest:
-                    var (placeId, x, z) = NetMessage.ReadPlaceRequest(data);
-                    var phase = gameManager.Placement;
-                    // Rejected: resend, so the guest's optimistic stone goes back.
-                    if (phase != null && !phase.TryPlace(senderPlayer, placeId, new Vector3(x, 0, z))) SendPlacementStateTo(senderId);
-                    break;
-                case NetMessageType.Concede:
-                    gameManager.TurnController.Concede(senderPlayer);
-                    break;
-                case NetMessageType.PlacementReady:
-                    if (gameManager.Placement != null && !gameManager.Placement.TryReady(senderPlayer)) SendPlacementStateTo(senderId);
-                    break;
-            }
-            return;
-        }
-
-        if (senderId != hostId) return; // the rest comes from the host only
-        switch (type)
-        {
-            case NetMessageType.StartMatch:
-                var (assignedPlayerId, owners) = NetMessage.ReadStartMatch(data);
-                ApplyGuestRole(assignedPlayerId, owners);
-                break;
-            case NetMessageType.PlacementState:
-                HandleGuestPlacementState(data);
-                break;
-            case NetMessageType.PieceSnapshot:
-                HandleGuestSnapshot(data);
-                break;
-            case NetMessageType.BoardSound:
-                if (BoardSounds.Instance != null) BoardSounds.Instance.PlayRemote(NetMessage.ReadBoardSound(data));
-                break;
-            case NetMessageType.TurnResult:
-                HandleGuestTurnResult(data);
-                break;
-            case NetMessageType.PlayerOut:
-                var (outPlayer, outReason) = NetMessage.ReadPlayerOut(data);
-                OnPlayerOut?.Invoke(outPlayer, outReason);
-                break;
-            case NetMessageType.FastForward:
-                HostFastForwarding = NetMessage.ReadFastForward(data);
-                break;
-            case NetMessageType.LoadGameScene:
-                // A rematch, or the host starting a new match from the lobby
-                // while this guest was still on the game-over screen.
-                var (settings, nextRoster) = NetMessage.ReadLoadGameScene(data);
-                if (nextRoster.PlayerOf(localId) < 0) break; // left out: this player went back to the lobby
-                MatchSettings.Current = settings;
-                MatchRoster.Current = nextRoster;
-                gameManager.EndMatch();
-                SceneManager.LoadScene("GameScene");
-                break;
-        }
+        gameManager.Placement.Apply(message.State);
     }
 }

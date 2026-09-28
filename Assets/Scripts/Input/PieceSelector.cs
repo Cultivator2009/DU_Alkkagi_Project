@@ -28,7 +28,7 @@ public class PieceSelector
         {
             if (!piece.isSelected || KeyBindings.Down(GameAction.CancelAim)) continue;
 
-            var playerIndex = piece.GetComponent<GamePieceManager>().playerIndex;
+            var playerIndex = piece.Manager.playerIndex;
             var mayTake = playerIndex == currentPlayerID && (!LocalPlayerId.HasValue || playerIndex == LocalPlayerId.Value);
             if (mayTake && (picked == null || piece.PickRank < picked.PickRank)) picked = piece;
         }

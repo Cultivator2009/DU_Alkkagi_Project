@@ -17,7 +17,7 @@ public class MainGameUIController : MonoBehaviour
     public UIPulse turnPulse;   // a punch as the turn changes
     public TMP_Text turnText;
     public SideMark turnStone;
-    public PlayerHudPanel[] playerPanels; // index-aligned with GameManager.playersList (0 = black), four
+    public PlayerHudPanel[] playerPanels; // index-aligned with GameManager.Sides (0 = black), four
     public float hudMargin = 28;
     [Range(0.3f, 1f)] public float compactScale = 0.58f; // the side panels when three or four play
     public float compactGap = 16;
@@ -75,9 +75,7 @@ public class MainGameUIController : MonoBehaviour
     private TurnController turnController;
     private NetworkMatchBridge networkBridge;
     private int currentPlayerId;
-    private readonly int[] shots = new int[MatchRoster.MaxPlayers];
     private readonly Dictionary<int, MatchEndReason> outSides = new Dictionary<int, MatchEndReason>(); // out while the match went on
-    private int lastShooterId = -1;
     private float matchStartTime;
     private float matchEndTime;
     private int? winnerPlayerId; // set once the result is in; -1 = draw
@@ -136,10 +134,9 @@ public class MainGameUIController : MonoBehaviour
         turnController = gameManager.TurnController;
         Subscribe(turnController);
 
-        // Only present on a networked match (see NetworkBootstrap) - a guest's
-        // TurnController never ticks, so its own events never fire past the
-        // initial StartMatch and the bridge's events carry turn/score updates
-        // instead.
+        // Only present on a networked match (see NetworkBootstrap). A guest's
+        // TurnController mirrors the host's, so its events are the match's
+        // there too; the bridge only adds who left and who wants a rematch.
         networkBridge = FindAnyObjectByType<NetworkMatchBridge>();
         if (networkBridge != null) SubscribeNetwork(networkBridge);
 
@@ -195,7 +192,7 @@ public class MainGameUIController : MonoBehaviour
     }
 
     public bool IsOnline => networkBridge != null;
-    private static int PlayerCount => GameManager.manager.playersList.Count;
+    private static int PlayerCount => GameManager.manager.Sides.Count;
     private static bool VersusAI => GameManager.manager.VersusAI;
     // The side this screen plays, when it plays just one: online, or against the AI.
     private int? OwnSide => networkBridge != null ? networkBridge.LocalPlayerId : VersusAI ? 1 - GameManager.manager.AIPlayerId : (int?)null;
@@ -343,7 +340,6 @@ public class MainGameUIController : MonoBehaviour
 
     private float? TurnTimeRemaining()
     {
-        if (networkBridge != null && !networkBridge.IsHost) return networkBridge.GuestTurnTimeRemaining;
         if (turnController.TurnSeconds <= 0 || !turnController.IsAwaitingShot) return null;
         return turnController.TurnTimeRemaining;
     }
@@ -393,9 +389,9 @@ public class MainGameUIController : MonoBehaviour
     private void Subscribe(TurnController controller)
     {
         controller.OnTurnStarted += HandleTurnStarted;
-        controller.OnTurnEnded += HandleTurnEnded;
-        controller.OnTurnPassed += HandleTurnPassed;
-        controller.OnMatchEnded += HandleMatchEnded;
+        controller.OnSidesChanged += Render;
+        controller.OnTurnPassed += ShowPassNotice;
+        controller.OnMatchEnded += ShowResult;
         controller.OnPlayerOut += HandlePlayerOut;
         controller.Kills.OnShotResolved += HandleKills;
     }
@@ -403,20 +399,15 @@ public class MainGameUIController : MonoBehaviour
     private void Unsubscribe(TurnController controller)
     {
         controller.OnTurnStarted -= HandleTurnStarted;
-        controller.OnTurnEnded -= HandleTurnEnded;
-        controller.OnTurnPassed -= HandleTurnPassed;
-        controller.OnMatchEnded -= HandleMatchEnded;
+        controller.OnSidesChanged -= Render;
+        controller.OnTurnPassed -= ShowPassNotice;
+        controller.OnMatchEnded -= ShowResult;
         controller.OnPlayerOut -= HandlePlayerOut;
         controller.Kills.OnShotResolved -= HandleKills;
     }
 
     private void SubscribeNetwork(NetworkMatchBridge bridge)
     {
-        bridge.OnGuestTurnChanged += HandleGuestTurnChanged;
-        bridge.OnGuestTurnEnded += HandleGuestTurnEnded;
-        bridge.OnGuestTurnPassed += ShowPassNotice;
-        bridge.OnGuestMatchEnded += ShowResult;
-        bridge.OnPlayerOut += HandlePlayerOut;
         bridge.OnPlayerLeft += HandlePlayerLeft;
         bridge.OnPlayerReturnedToLobby += HandlePlayerReturnedToLobby;
         bridge.OnRematchStateChanged += Render;
@@ -424,19 +415,14 @@ public class MainGameUIController : MonoBehaviour
 
     private void UnsubscribeNetwork(NetworkMatchBridge bridge)
     {
-        bridge.OnGuestTurnChanged -= HandleGuestTurnChanged;
-        bridge.OnGuestTurnEnded -= HandleGuestTurnEnded;
-        bridge.OnGuestTurnPassed -= ShowPassNotice;
-        bridge.OnGuestMatchEnded -= ShowResult;
-        bridge.OnPlayerOut -= HandlePlayerOut;
         bridge.OnPlayerLeft -= HandlePlayerLeft;
         bridge.OnPlayerReturnedToLobby -= HandlePlayerReturnedToLobby;
         bridge.OnRematchStateChanged -= Render;
     }
 
-    private void HandleTurnStarted(PlayersManager player)
+    private void HandleTurnStarted(int playerId)
     {
-        currentPlayerId = player.ID;
+        currentPlayerId = playerId;
         rated?.TurnStarted();
         turnPulse.Play();
         AnnounceTurn();
@@ -456,17 +442,9 @@ public class MainGameUIController : MonoBehaviour
         foreach (var piece in GameManager.manager.gamePieceScripts)
         {
             if (piece == null) continue;
-            var manager = piece.GetComponent<GamePieceManager>();
+            var manager = piece.Manager;
             if (manager.playerIndex == currentPlayerId) HitEffects.Instance.PlayTurn(piece.transform.position, manager.radius, index++);
         }
-    }
-
-    // Host and local only; a guest counts through HandleGuestTurnEnded.
-    private void HandleTurnEnded(PlayersManager player)
-    {
-        shots[player.ID]++;
-        lastShooterId = player.ID;
-        Render();
     }
 
     // A guest's KillLog records the host's events, so this fires there too.
@@ -475,11 +453,6 @@ public class MainGameUIController : MonoBehaviour
         int? localPlayer = networkBridge != null ? networkBridge.LocalPlayerId : (int?)null;
         killFeed.Add(events, GameManager.manager.Board, MatchSettings.Current.PieceType, localPlayer);
         if (events.Any(e => e.Kind == KillKind.Kill || e.Kind == KillKind.Nongae)) GameAudio.PlayInterface(GameAudio.Bank.kill, 0.8f);
-    }
-
-    private void HandleTurnPassed(PlayersManager player, TurnEnd why)
-    {
-        ShowPassNotice(player.ID, why);
     }
 
     private void ShowPassNotice(int playerId, TurnEnd why)
@@ -510,26 +483,6 @@ public class MainGameUIController : MonoBehaviour
         }
         ShowNotice(Loc.Get("hud.outNotice." + reason, ColorName(playerId)));
         Render();
-    }
-
-    private void HandleMatchEnded(PlayersManager winner, MatchEndReason reason)
-    {
-        ShowResult(winner != null ? winner.ID : -1, reason);
-    }
-
-    private void HandleGuestTurnChanged(int playerId)
-    {
-        currentPlayerId = playerId;
-        rated?.TurnStarted();
-        turnPulse.Play();
-        AnnounceTurn();
-        Render();
-    }
-
-    private void HandleGuestTurnEnded(int shooterId)
-    {
-        shots[shooterId]++;
-        lastShooterId = shooterId;
     }
 
     // The host rules on anyone else leaving (their side forfeits, and its
@@ -584,11 +537,11 @@ public class MainGameUIController : MonoBehaviour
         else
             foreach (var panel in playerPanels) panel.skipButton.gameObject.SetActive(false);
 
-        for (var i = 0; i < playerPanels.Length && i < gameManager.playersList.Count; i++)
+        for (var i = 0; i < playerPanels.Length && i < gameManager.Sides.Count; i++)
         {
             var isTurn = playing && i == currentPlayerId;
             var outStatus = outSides.TryGetValue(i, out var why) ? Loc.Get("hud.out." + why) : null;
-            playerPanels[i].Render(ColorName(i), PlayerLabel(i), CountPieces(i), gameManager.playersList[i].score, isTurn, outStatus);
+            playerPanels[i].Render(ColorName(i), PlayerLabel(i), CountPieces(i), gameManager.Sides[i].Score, isTurn, outStatus);
         }
 
         if (winnerPlayerId.HasValue) RenderGameOver(gameManager);
@@ -629,7 +582,7 @@ public class MainGameUIController : MonoBehaviour
             MatchEndReason.HostLeft => Loc.Get("reason.hostLeft"),
             MatchEndReason.BothOut when winner < 0 => Loc.Get("reason.bothOutDraw"),
             MatchEndReason.BothOut when MatchSettings.Current.BothOutRule == BothOutRule.ShooterWins => Loc.Get("reason.bothOutWin", ColorName(winner)),
-            MatchEndReason.BothOut => Loc.Get("reason.bothOut", ColorName(lastShooterId >= 0 ? lastShooterId : loser)),
+            MatchEndReason.BothOut => Loc.Get("reason.bothOut", ColorName(turnController.LastPlayerId >= 0 ? turnController.LastPlayerId : loser)),
             MatchEndReason.Knockout when multi => Loc.Get("reason.lastStanding", ColorName(winner)),
             _ when multi => Loc.Get("reason.othersGone"),
             MatchEndReason.OpponentLeft => Loc.Get("reason.opponentLeft"),
@@ -645,7 +598,7 @@ public class MainGameUIController : MonoBehaviour
             nongaeCells[i].text = kills.Nongae(i).ToString();
             suicideCells[i].text = kills.Suicides(i).ToString();
             teamKillCells[i].text = kills.TeamKills(i).ToString();
-            shotsCells[i].text = shots[i].ToString();
+            shotsCells[i].text = gameManager.Sides[i].Shots.ToString();
             ratingCells[i].gameObject.SetActive(ratingChanges != null);
             if (ratingChanges != null) ratingCells[i].text = RatingCell(rated.Rating(i), ratingChanges[i]);
         }
@@ -734,13 +687,8 @@ public class MainGameUIController : MonoBehaviour
         return MatchSeries.Played > 0 ? Loc.Get("series.panel", number, MatchSeries.Wins(playerId)) : number;
     }
 
-    // Counted from the live pieces rather than PlayersManager.totalPieceCnt:
-    // a network guest only receives removals (NetworkMatchBridge drops them
-    // from gamePieceScripts), its totalPieceCnt never decrements.
-    private static int CountPieces(int playerId)
-    {
-        return GameManager.manager.gamePieceScripts.Count(piece => piece != null && piece.GetComponent<GamePieceManager>().playerIndex == playerId);
-    }
+    // The host's count on a guest too (MatchState).
+    private static int CountPieces(int playerId) => GameManager.manager.Sides[playerId].Pieces;
 
     private static bool IsOnlineMatch()
     {

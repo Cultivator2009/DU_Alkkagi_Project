@@ -53,7 +53,7 @@ public class AIOpponent : MonoBehaviour
         // Leave a second and a half of a timed turn for the shot itself.
         var budget = turns.TurnSeconds > 0 ? Mathf.Max(0.3f, turns.TurnTimeRemaining - thinkSeconds - 1.5f) : 4f;
         PlannedShot? shot = null;
-        planner = new AIPlanner(gameManager.Board, gameManager.gamePieceScripts, MatchSettings.Current.BothOutRule);
+        planner = new AIPlanner(gameManager.Board, gameManager.gamePieceScripts, gameManager.Ruleset, gameManager.Sides, MatchSettings.Current.BothOutRule);
         yield return planner.Plan(playerId, level, budget, s => shot = s);
         planner.Dispose();
         planner = null;
@@ -92,7 +92,7 @@ public class AIOpponent : MonoBehaviour
             var occupied = new List<(Vector3 position, float radius)>();
             foreach (var piece in gameManager.gamePieceScripts)
             {
-                var manager = piece.GetComponent<GamePieceManager>();
+                var manager = piece.Manager;
                 if (phase.TryGetPosition(manager.pieceID, out var at)) occupied.Add((at, manager.radius));
             }
             phase.TryPlace(playerId, next.pieceID, gameManager.Board.RandomFreePosition(playerId, next.radius, occupied, random));

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 // Who plays an online match, in seat order: the host is player 0, the others
@@ -31,26 +30,18 @@ public sealed class MatchRoster
     // -1 when that player isn't in this match.
     public int PlayerOf(ulong steamId) => steamIds.IndexOf(steamId);
 
-    public void Write(BinaryWriter writer)
+    public void Write(NetWriter writer)
     {
-        writer.Write((byte)steamIds.Count);
-        for (var i = 0; i < steamIds.Count; i++)
+        writer.List(Enumerable.Range(0, steamIds.Count).ToList(), (w, i) =>
         {
-            writer.Write(steamIds[i]);
-            writer.Write(ratings[i]);
-        }
+            w.ULong(steamIds[i]);
+            w.Int(ratings[i]);
+        });
     }
 
-    public static MatchRoster Read(BinaryReader reader)
+    public static MatchRoster Read(NetReader reader)
     {
-        var count = reader.ReadByte();
-        var ids = new List<ulong>(count);
-        var ratings = new List<int>(count);
-        for (var i = 0; i < count; i++)
-        {
-            ids.Add(reader.ReadUInt64());
-            ratings.Add(reader.ReadInt32());
-        }
-        return new MatchRoster(ids, ratings);
+        var seats = reader.List(r => (id: r.ULong(), rating: r.Int())).Take(MaxPlayers).ToList();
+        return new MatchRoster(seats.Select(s => s.id), seats.Select(s => s.rating));
     }
 }
