@@ -1138,7 +1138,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxForce: 50
+  maxForce: 35.36
   maxDragDistance: 1
   minShotPower: 0.03
   settleVelocityThreshold: 0.05
@@ -10426,7 +10426,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxForce: 50
+  maxForce: 35.36
   maxDragDistance: 1
   minShotPower: 0.03
   settleVelocityThreshold: 0.05
@@ -10450,7 +10450,7 @@ Rigidbody:
   serializedVersion: 5
   m_Mass: 3
   m_LinearDamping: 0
-  m_AngularDamping: 4
+  m_AngularDamping: 1.8
   m_CenterOfMass: {x: 0, y: 0, z: 0}
   m_InertiaTensor: {x: 1, y: 1, z: 1}
   m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
@@ -12509,7 +12509,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxForce: 50
+  maxForce: 35.36
   maxDragDistance: 1
   minShotPower: 0.03
   settleVelocityThreshold: 0.05
@@ -14115,7 +14115,7 @@ MonoBehaviour:
   chessLineup: 000102020303040405050505
   chessBalance: 0.3
   gonggiWeight: 1.45
-  gonggiBalance: 0.22
+  gonggiBalance: 0.3
   gap: 0.02
   zoneColor: {r: 0.18, g: 0.14, b: 0.1, a: 0.1}
   activeZoneColor: {r: 0.7, g: 0.19, b: 0.16, a: 0.22}
@@ -16723,7 +16723,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxForce: 50
+  maxForce: 35.36
   maxDragDistance: 1
   minShotPower: 0.03
   settleVelocityThreshold: 0.05
@@ -17100,7 +17100,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: db0856980f3032a43a727f45da49d3e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxForce: 50
+  maxForce: 35.36
   maxDragDistance: 1
   minShotPower: 0.03
   settleVelocityThreshold: 0.05

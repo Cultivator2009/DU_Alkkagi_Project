@@ -376,12 +376,11 @@ internal static class BoardBuilder
     }
 
     // Like the chess template, with the shot inside a gonggi stone in its
-    // physics. Loose shot soaks up a knock (a dead-blow hammer is filled
-    // with it for that): the stone bounces off nothing and nothing bounces
-    // off it, and Minimum makes that so whatever it meets. And it drags on
-    // the shell's spin - like a raw egg, which spins slowly and stops soon -
-    // so the stone's spin dies away quickly. Mass and its low centre are
-    // set at spawn (BoardSetup).
+    // physics. Loose shot soaks up part of a knock (a dead-blow hammer is
+    // filled with it for that): it bounces less than a glass stone. And it
+    // drags on the shell's spin - like a raw egg, which spins slowly and
+    // stops soon - so the stone's spin dies away sooner. Mass and its low
+    // centre are set at spawn (BoardSetup).
     private static GamePieceDragAndReleaseForce BuildGonggiTemplate(BoardSetup setup)
     {
         var templates = setup.blackTemplate.transform.parent;
@@ -404,13 +403,15 @@ internal static class BoardBuilder
         var collider = piece.gameObject.AddComponent<MeshCollider>();
         collider.convex = true;
         collider.sharedMaterial = GonggiPhysics(stone);
-        piece.GetComponent<Rigidbody>().angularDamping = 4f;
+        piece.GetComponent<Rigidbody>().angularDamping = 1.8f;
 
         piece.gameObject.SetActive(false);
         return piece;
     }
 
-    // Plastic on the board slides as a stone does; it just doesn't bounce.
+    // Plastic on the board slides as a stone does; it bounces less. With no
+    // bounce at all (as at first) a knocked stone went on with the one
+    // that hit it instead of being knocked away.
     private static PhysicsMaterial GonggiPhysics(PhysicsMaterial stone)
     {
         var path = $"{GonggiDir}/Gonggi.physicMaterial";
@@ -423,8 +424,8 @@ internal static class BoardBuilder
         material.dynamicFriction = stone.dynamicFriction;
         material.staticFriction = stone.staticFriction;
         material.frictionCombine = stone.frictionCombine;
-        material.bounciness = 0f;
-        material.bounceCombine = PhysicsMaterialCombine.Minimum;
+        material.bounciness = 0.4f;
+        material.bounceCombine = PhysicsMaterialCombine.Average;
         EditorUtility.SetDirty(material);
         return material;
     }

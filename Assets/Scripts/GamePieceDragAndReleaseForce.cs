@@ -6,10 +6,11 @@ using UnityEngine;
 [RequireComponent(typeof(LineRenderer))]
 public class GamePieceDragAndReleaseForce : MonoBehaviour
 {
-    public float maxForce = 50f;
-    // Pull-back distance (world units) that reads as 100% power. 1.0 keeps
-    // the previous feel exactly: the scene used forceMultiplier 50 x
-    // distance, capped at maxForce 50.
+    // A full-power flick. 50 until friction became real (improved patch
+    // friction, half what PhysX's default gave): 50 / sqrt(2) sends every
+    // piece as far as before, a little slower.
+    public float maxForce = 35.36f;
+    // Pull-back distance (world units) that reads as 100% power.
     public float maxDragDistance = 1f;
     // Releasing below this is treated as a cancel rather than a wasted turn.
     public float minShotPower = 0.03f;

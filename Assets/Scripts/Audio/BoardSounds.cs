@@ -31,7 +31,7 @@ public class BoardSounds : MonoBehaviour
     public static BoardSounds Instance { get; private set; }
     public static event Action<BoardSoundEvent> OnEmitted; // on the authority, for the network host to forward
 
-    public float fullHitSpeed = 12f;         // m/s for a full-volume knock
+    public float fullHitSpeed = 8.5f;        // m/s for a full-volume knock (about a full-power hit)
     public float guestDelaySeconds = 0.06f;  // about how far a guest's view trails the host's snapshots
     public int maxSoundsPerStep = 4;         // a break into a cluster stays a clatter, not a roar
 
@@ -91,7 +91,7 @@ public class BoardSounds : MonoBehaviour
         switch (kind)
         {
             case BoardSound.Fall: return 0.8f;
-            case BoardSound.Flick: return Mathf.Clamp01(0.35f + speed / 25f);
+            case BoardSound.Flick: return Mathf.Clamp01(0.35f + speed / 17.7f);
             case BoardSound.Topple: return 0.1f + 0.6f * Mathf.Pow(Mathf.Clamp01(speed / 3f), 0.6f);
             default: return 0.15f + 0.85f * Mathf.Pow(Mathf.Clamp01(speed / fullHitSpeed), 0.6f);
         }

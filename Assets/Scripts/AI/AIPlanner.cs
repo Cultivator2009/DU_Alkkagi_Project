@@ -34,9 +34,10 @@ public struct PlannedShot
 // kept away from it.
 public class AIPlanner : IDisposable
 {
-    // Both measured on the board: a flicked piece slows at about 17.5 m/s²,
-    // and one piece hitting another square passes on about 70% of its speed.
-    private const float Deceleration = 17.5f;
+    // Both measured on the board: a flicked piece slows at about 8.8 m/s²
+    // (the friction, 0.875 g), and one piece hitting another square passes
+    // on about 70% of its speed.
+    private const float Deceleration = 8.8f;
     private const float Restitution = 0.4f;
     private const int MaxSteps = 250;        // 5 s of play; nearly every shot has settled by then
     private const float OutHeight = -0.3f;

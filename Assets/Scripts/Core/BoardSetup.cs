@@ -68,8 +68,10 @@ public class BoardSetup : MonoBehaviour
     // a glass stone's 4.5 or so.
     public float gonggiWeight = 1.45f;
     // Its centre of mass, up its height: the shot lies in the bottom (a
-    // plastic shell of even thickness alone would have it a third up).
-    [Range(0.1f, 0.5f)] public float gonggiBalance = 0.22f;
+    // plastic shell of even thickness alone would have it a third up). Low
+    // enough that a flick slides it, high enough that a hard knock now and
+    // then leaves it over on its side.
+    [Range(0.1f, 0.5f)] public float gonggiBalance = 0.3f;
 
     // The chess board's squares, 5.7 cm as at a tournament. Two sides on it
     // start on real squares: chess pieces where chess puts them (the first
@@ -313,10 +315,9 @@ public class BoardSetup : MonoBehaviour
     }
 
     // Gonggi stones in the go stones' colours. The shot inside is the
-    // template's doing (BoardBuilder): its knocks are dead - nothing
-    // bounces off it, a piece that hits it square goes on with it - and a
-    // spin soon dies, the shot dragging behind the shell. Here: the weight
-    // of the shot, low down, so it rocks back onto its foot.
+    // template's doing (BoardBuilder): its knocks are duller than a stone's
+    // and a spin soon dies, the shot dragging behind the shell. Here: the
+    // weight of the shot, low down.
     private GamePieceDragAndReleaseForce SpawnGonggi(int player, int index, Vector3 position, Transform parent)
     {
         var piece = Instantiate(gonggiTemplate, position, Facing(player), parent);
