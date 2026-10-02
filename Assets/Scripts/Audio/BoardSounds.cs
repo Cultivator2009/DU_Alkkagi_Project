@@ -8,7 +8,8 @@ public enum BoardSound : byte
     Hinge, // a piece meeting a board hinge
     Flick,
     Fall,  // a piece going over the edge
-    Topple // a standing piece (chess) knocking down onto the board, a gonggi stone landing
+    Topple, // a standing piece (chess) knocking down onto the board, a gonggi stone landing
+    Shatter // a piece breaking as it falls past the edge (PieceShatter)
 }
 
 public struct BoardSoundEvent
@@ -18,6 +19,7 @@ public struct BoardSoundEvent
     public float Pan;    // -1 left .. 1 right
     public int Owner;    // whose piece flicked, -1 for the rest
     public Vector3 Position;
+    public char Piece;   // which piece breaks (Shatter), '\0' for the rest
 }
 
 // The board's sounds for one match. The physics authority (a local game, or
@@ -58,12 +60,13 @@ public class BoardSounds : MonoBehaviour
 
     public static float Pan(Vector3 position) => Mathf.Clamp(position.x / 1.5f * 0.6f, -1f, 1f);
 
-    // speed: how hard it happened, in m/s.
-    public void Emit(BoardSound kind, float speed, Vector3 at, int owner = -1)
+    // speed: how hard it happened, in m/s. A piece breaking always goes
+    // off (and over to a guest), however many knocks share its step.
+    public void Emit(BoardSound kind, float speed, Vector3 at, int owner = -1, char piece = '\0')
     {
-        if (soundsThisStep >= maxSoundsPerStep) return;
+        if (kind != BoardSound.Shatter && soundsThisStep >= maxSoundsPerStep) return;
         soundsThisStep++;
-        var sound = new BoardSoundEvent { Kind = kind, Volume = Loudness(kind, speed), Pan = Pan(at), Owner = owner, Position = at };
+        var sound = new BoardSoundEvent { Kind = kind, Volume = Loudness(kind, speed), Pan = Pan(at), Owner = owner, Position = at, Piece = piece };
         Play(sound);
         OnEmitted?.Invoke(sound);
     }
@@ -91,6 +94,7 @@ public class BoardSounds : MonoBehaviour
         switch (kind)
         {
             case BoardSound.Fall: return 0.8f;
+            case BoardSound.Shatter: return 0.7f;
             case BoardSound.Flick: return Mathf.Clamp01(0.35f + speed / 17.7f);
             case BoardSound.Topple: return 0.1f + 0.6f * Mathf.Pow(Mathf.Clamp01(speed / 3f), 0.6f);
             default: return 0.15f + 0.85f * Mathf.Pow(Mathf.Clamp01(speed / fullHitSpeed), 0.6f);
@@ -106,11 +110,13 @@ public class BoardSounds : MonoBehaviour
             else if (sound.Kind == BoardSound.Fall) effects.PlayFall(sound.Position);
             else if (sound.Kind == BoardSound.Flick) effects.PlayFlick(sound.Position, sound.Volume);
         }
+        if (sound.Kind == BoardSound.Shatter) Shatter(sound.Piece);
         var bank = GameAudio.Bank;
         var clip = sound.Kind switch
         {
             BoardSound.Hit => hit,
             BoardSound.Topple => hit,
+            BoardSound.Shatter => hit,
             BoardSound.Hinge => bank.hingeHit,
             BoardSound.Flick => bank.flick,
             _ => bank.fall,
@@ -119,6 +125,20 @@ public class BoardSounds : MonoBehaviour
         // volley of hits from sounding like one sample repeated.
         var pitch = UnityEngine.Random.Range(0.95f, 1.05f) + (sound.Kind == BoardSound.Hit ? 0.08f * sound.Volume : 0f);
         if (sound.Kind == BoardSound.Topple) pitch *= 0.72f; // a whole piece on the board is deeper than a knock
+        if (sound.Kind == BoardSound.Shatter) pitch *= 0.8f;
         GameAudio.PlayBoard(clip, sound.Volume, pitch, sound.Pan);
+    }
+
+    // The piece breaks and goes from view. It still falls on, unseen, to
+    // be counted out (DeathTrigger); a guest's goes when the host's turn
+    // result says so.
+    private static void Shatter(char id)
+    {
+        var gameManager = GameManager.manager;
+        if (gameManager == null) return;
+        var piece = gameManager.gamePieceScripts.Find(p => p != null && p.Manager.pieceID == id);
+        if (piece == null || !piece.gameObject.activeInHierarchy) return;
+        PieceShatter.Break(piece);
+        foreach (var renderer in piece.GetComponentsInChildren<Renderer>()) renderer.enabled = false;
     }
 }

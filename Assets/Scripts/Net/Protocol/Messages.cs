@@ -185,6 +185,7 @@ public static class Msg
             w.Byte((byte)Sound.Kind);
             w.Byte((byte)Mathf.RoundToInt(Mathf.Clamp01(Sound.Volume) * 255));
             w.Vector3(Sound.Position);
+            w.Piece(Sound.Piece);
         }
 
         public void Read(NetReader r)
@@ -192,7 +193,8 @@ public static class Msg
             var kind = (global::BoardSound)r.Byte();
             var volume = r.Byte() / 255f;
             var position = r.Vector3();
-            Sound = new BoardSoundEvent { Kind = kind, Volume = volume, Pan = BoardSounds.Pan(position), Owner = -1, Position = position };
+            var piece = r.Piece();
+            Sound = new BoardSoundEvent { Kind = kind, Volume = volume, Pan = BoardSounds.Pan(position), Owner = -1, Position = position, Piece = piece };
         }
     }
 

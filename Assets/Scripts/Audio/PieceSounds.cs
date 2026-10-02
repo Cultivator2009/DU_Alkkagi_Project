@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// One piece's knocks, hinge hits, fall and (a chess piece's) topples, heard
+// One piece's knocks, hinge hits, fall, break and (a chess piece's) topples, heard
 // on the physics authority and passed to BoardSounds. On a network guest the
 // pieces are kinematic: nothing collides and this stays quiet (the host's
 // sounds come over).
@@ -12,9 +12,12 @@ public class PieceSounds : MonoBehaviour
     public bool knocksBoard;         // a chess piece or gonggi stone: coming down on the board is heard too
     public float minToppleSpeed = 0.5f;
     public float fallHeight = -0.1f; // below the board surface: it went over the edge
+    public float shatterHeight = -0.2f; // a little further down, still beside the edge in view: it breaks (PieceShatter)
 
     private Rigidbody body;
+    private char id;
     private bool fallen;
+    private bool shattered;
     // A go stone is eight colliders, so one knock can arrive as several
     // collider pairs at once: one sound per other piece (or hinge) at a time.
     private readonly Dictionary<Collider, float> lastHit = new Dictionary<Collider, float>();
@@ -22,6 +25,7 @@ public class PieceSounds : MonoBehaviour
     private void Awake()
     {
         body = GetComponent<Rigidbody>();
+        id = GetComponent<GamePieceManager>().pieceID;
     }
 
     private void OnCollisionEnter(Collision collision)
@@ -66,8 +70,15 @@ public class PieceSounds : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (fallen || body.isKinematic || body.position.y > fallHeight || BoardSounds.Instance == null) return;
-        fallen = true;
-        BoardSounds.Instance.Emit(BoardSound.Fall, 0f, body.position);
+        if (shattered || body.isKinematic || BoardSounds.Instance == null) return;
+        var y = body.position.y;
+        if (!fallen && y <= fallHeight)
+        {
+            fallen = true;
+            BoardSounds.Instance.Emit(BoardSound.Fall, 0f, body.position);
+        }
+        if (y > shatterHeight) return;
+        shattered = true;
+        BoardSounds.Instance.Emit(BoardSound.Shatter, 0f, body.position, piece: id);
     }
 }
