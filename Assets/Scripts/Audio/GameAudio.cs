@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// Plays the SoundBank's clips through a small pool of 2D sources. Board
+// Plays the SoundBank's sounds through a small pool of 2D sources. Board
 // sounds follow the master volume only (AudioListener); interface sounds are
 // scaled by GameSettings.InterfaceVolume as well. The host object is made on
 // first use and outlives scenes.
@@ -22,14 +22,15 @@ public static class GameAudio
     }
 
     // pan: -1 left .. 1 right, so a hit on the left of the board sounds there.
-    public static void PlayBoard(AudioClip clip, float volume, float pitch = 1f, float pan = 0f)
+    // strength: which take (SoundSet.Pick), 0 a tap .. 1 full power.
+    public static void PlayBoard(SoundSet set, float volume, float pitch = 1f, float pan = 0f, float strength = 0.5f)
     {
-        Play(clip, volume, pitch, pan);
+        Play(set?.Pick(strength), volume, pitch, pan);
     }
 
-    public static void PlayInterface(AudioClip clip, float volume = 1f, float pitch = 1f)
+    public static void PlayInterface(SoundSet set, float volume = 1f, float pitch = 1f, float strength = 0.5f)
     {
-        Play(clip, volume * GameSettings.InterfaceVolume, pitch, 0f);
+        Play(set?.Pick(strength), volume * GameSettings.InterfaceVolume, pitch, 0f);
     }
 
     private static void Play(AudioClip clip, float volume, float pitch, float pan)

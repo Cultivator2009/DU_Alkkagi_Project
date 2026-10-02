@@ -44,15 +44,33 @@ public class ResultScreen : MonoBehaviour
     private int seconds;
     private bool ratingRowShown = true; // as built
     private float nextRender; // a ranked series: its countdown to the next game, and its end as it comes in
+    private int countedDown;  // the last of the countdown's final seconds heard
+    private const int CountdownSeconds = 3;
 
     public bool IsShown => gameObject.activeSelf;
 
     private void Update()
     {
         var series = hud != null && hud.Bridge != null ? hud.Bridge.Series : null;
-        if (series == null || Time.unscaledTime < nextRender) return;
+        if (series == null) return;
+        CountDown(hud.Bridge.NextGameAt);
+        if (Time.unscaledTime < nextRender) return;
         nextRender = Time.unscaledTime + 0.25f;
         Render();
+    }
+
+    // The next game's last seconds, one knock each.
+    private void CountDown(float nextGameAt)
+    {
+        var left = nextGameAt < 0 ? 0 : Mathf.CeilToInt(nextGameAt - Time.realtimeSinceStartup);
+        if (left < 1 || left > CountdownSeconds)
+        {
+            countedDown = 0;
+            return;
+        }
+        if (left == countedDown) return;
+        countedDown = left;
+        GameAudio.PlayInterface(GameAudio.Bank.countdown, 0.8f, left == 1 ? 1.12f : 1f);
     }
 
     private void Awake()

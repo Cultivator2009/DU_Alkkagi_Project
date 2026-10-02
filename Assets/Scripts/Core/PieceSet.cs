@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -15,7 +14,7 @@ public sealed class PieceSet
     public Color[] Letters;    // the letter on a lettered piece (janggi, chess)
     public bool Standing;      // topples and rolls: the camera frames the board from further back
     public bool KnocksBoard;   // lands with a knock of its own (PieceSounds)
-    public Func<SoundBank, AudioClip> Hit;
+    public string Sound;       // the pieces' material in sound names: "hit_" + Sound (SoundBank.Get)
 
     private static readonly Color StoneBlack = new Color32(0x15, 0x15, 0x15, 0xFF);
     private static readonly Color StoneWhite = new Color32(0xF7, 0xF7, 0xF7, 0xFF);
@@ -34,7 +33,7 @@ public sealed class PieceSet
     private static readonly Color ChessBlack = new Color32(0x2B, 0x24, 0x20, 0xFF); // ebony
 
     // Black and white go stones, and the third and fourth sides' dyed ones.
-    private static PieceSet Stones(PieceType type, Func<SoundBank, AudioClip> hit, bool knocks) => new PieceSet
+    private static PieceSet Stones(PieceType type, string sound, bool knocks) => new PieceSet
     {
         Type = type,
         SideKeys = new[] { "player.black", "player.white", "player.blue", "player.red" },
@@ -42,14 +41,14 @@ public sealed class PieceSet
         Rings = new[] { InkRing, MutedRing, BlueRing, RedRing },
         Letters = new[] { Cho, Han, JanggiBlue, JanggiBlack },
         KnocksBoard = knocks,
-        Hit = hit,
+        Sound = sound,
     };
 
     private static readonly Dictionary<PieceType, PieceSet> sets = new Dictionary<PieceType, PieceSet>
     {
-        { PieceType.GoStones, Stones(PieceType.GoStones, bank => bank.stoneHit, false) },
+        { PieceType.GoStones, Stones(PieceType.GoStones, "go", false) },
         // Gonggi stones rattle, and land with a knock.
-        { PieceType.GonggiStones, Stones(PieceType.GonggiStones, bank => bank.gonggiHit, true) },
+        { PieceType.GonggiStones, Stones(PieceType.GonggiStones, "gonggi", true) },
         // Cho (green, moves first, like black) and Han (red); the third and
         // fourth sides carry Cho's and Han's letters in blue and black.
         {
@@ -60,7 +59,7 @@ public sealed class PieceSet
                 Fills = new[] { JanggiWood, JanggiWood, JanggiWood, JanggiWood },
                 Rings = new[] { Cho, Han, JanggiBlue, JanggiBlack },
                 Letters = new[] { Cho, Han, JanggiBlue, JanggiBlack },
-                Hit = bank => bank.woodHit,
+                Sound = "janggi",
             }
         },
         // Chess's white moves first, as in chess.
@@ -74,7 +73,7 @@ public sealed class PieceSet
                 Letters = new[] { InkRing, ChessWhite, ChessWhite, ChessWhite },
                 Standing = true,
                 KnocksBoard = true,
-                Hit = bank => bank.woodHit,
+                Sound = "chess",
             }
         },
     };

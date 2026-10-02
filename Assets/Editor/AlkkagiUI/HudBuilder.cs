@@ -431,7 +431,7 @@ namespace AlkkagiUIEditor
             slam.playOnEnable = true;
             slam.delay = 0.12f;
             slam.fade = stamp.gameObject.AddComponent<CanvasGroup>();
-            slam.landSound = AssetDatabase.LoadAssetAtPath<SoundBank>("Assets/Resources/SoundBank.asset").stamp;
+            slam.landSound = "stamp";
             result.stampText = UIKit.Text(stamp.transform, "Label", "승", 60, true, Theme.SealText, TextAlignmentOptions.Center);
             result.stampText.rectTransform.Stretch(10);
             result.stampText.enableAutoSizing = true;

@@ -54,7 +54,7 @@ public class PieceSounds : MonoBehaviour
         }
         else if (collision.collider.name == BoardVariant.WallName)
         {
-            kind = BoardSound.Hit; // wood on wood, like a knock
+            kind = BoardSound.Wall;
             key = collision.collider;
         }
         else if (knocksBoard)

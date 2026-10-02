@@ -1965,7 +1965,7 @@ MonoBehaviour:
   playOnEnable: 0
   slam: 0
   fade: {fileID: 0}
-  landSound: {fileID: 0}
+  landSound: 
   landVolume: 1
 --- !u!1 &503710128886943951
 GameObject:
@@ -9067,7 +9067,7 @@ MonoBehaviour:
   playOnEnable: 0
   slam: 0
   fade: {fileID: 0}
-  landSound: {fileID: 0}
+  landSound: 
   landVolume: 1
 --- !u!1 &2001566310849875299
 GameObject:
@@ -18708,7 +18708,7 @@ MonoBehaviour:
   playOnEnable: 0
   slam: 0
   fade: {fileID: 0}
-  landSound: {fileID: 0}
+  landSound: 
   landVolume: 1
 --- !u!1 &3881026785339978681
 GameObject:
@@ -22688,7 +22688,7 @@ MonoBehaviour:
   playOnEnable: 0
   slam: 0
   fade: {fileID: 0}
-  landSound: {fileID: 0}
+  landSound: 
   landVolume: 1
 --- !u!1 &4707240660181679411
 GameObject:
@@ -23565,7 +23565,7 @@ MonoBehaviour:
   playOnEnable: 0
   slam: 0
   fade: {fileID: 0}
-  landSound: {fileID: 0}
+  landSound: 
   landVolume: 1
 --- !u!1 &4895392492534379372
 GameObject:
@@ -31713,7 +31713,7 @@ MonoBehaviour:
   playOnEnable: 1
   slam: 1
   fade: {fileID: 5192068680809897506}
-  landSound: {fileID: 8300000, guid: ec19102e96bef4d26876047e0ba64d0b, type: 3}
+  landSound: stamp
   landVolume: 1
 --- !u!225 &5192068680809897506
 CanvasGroup:
@@ -46997,7 +46997,7 @@ MonoBehaviour:
   playOnEnable: 0
   slam: 0
   fade: {fileID: 0}
-  landSound: {fileID: 0}
+  landSound: 
   landVolume: 1
 --- !u!1 &9210282766807259694
 GameObject:

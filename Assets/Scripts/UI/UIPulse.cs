@@ -12,7 +12,7 @@ public class UIPulse : MonoBehaviour
     public bool playOnEnable;
     public bool slam;
     public CanvasGroup fade;  // slam: faded in on the way down, if set
-    public AudioClip landSound;
+    public string landSound;  // slam: the sound it lands with (SoundBank key), if any
     public float landVolume = 1f;
 
     private float startedAt = -1;
@@ -73,6 +73,6 @@ public class UIPulse : MonoBehaviour
     {
         if (landed) return;
         landed = true;
-        if (landSound != null) GameAudio.PlayInterface(landSound, landVolume);
+        if (!string.IsNullOrEmpty(landSound)) GameAudio.PlayInterface(GameAudio.Bank.Get(landSound), landVolume);
     }
 }

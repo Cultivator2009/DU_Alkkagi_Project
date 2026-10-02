@@ -475,8 +475,16 @@ public class MainGameUIController : MonoBehaviour
     // The edge announced for this turn, or giving way now.
     private void HandleZoneChanged()
     {
-        if (turnController.Zone.Warned) ShowNotice(Loc.Get("hud.zoneWarn"));
-        else if (turnController.Collapsing) ShowNotice(Loc.Get("hud.zoneCrumbled"));
+        if (turnController.Zone.Warned)
+        {
+            ShowNotice(Loc.Get("hud.zoneWarn"));
+            GameAudio.PlayInterface(GameAudio.Bank.zoneWarn, 0.8f);
+        }
+        else if (turnController.Collapsing)
+        {
+            ShowNotice(Loc.Get("hud.zoneCrumbled"));
+            GameAudio.PlayBoard(GameAudio.Bank.crumble, 0.9f);
+        }
         Render();
     }
 

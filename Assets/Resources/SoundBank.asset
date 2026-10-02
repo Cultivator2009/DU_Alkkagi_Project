@@ -12,22 +12,230 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c3a891abdb2eb4772a713da66b82c1ce, type: 3}
   m_Name: SoundBank
   m_EditorClassIdentifier: Assembly-CSharp::SoundBank
-  stoneHit: {fileID: 8300000, guid: 250f2fdfb4e4f49658532efa6f0126b7, type: 3}
-  woodHit: {fileID: 8300000, guid: e3b6851aeb96040ceaa447f86b8cb203, type: 3}
-  hingeHit: {fileID: 8300000, guid: 43a0df44831854c5b8750113b4eba970, type: 3}
-  flick: {fileID: 8300000, guid: f8491711fa7ff4b08befbcc3a6257633, type: 3}
-  fall: {fileID: 8300000, guid: 2c40b1e3800c34cf1965bda2b547cff9, type: 3}
-  place: {fileID: 8300000, guid: a426e5c751ecf4ed4a03a907fc6f81bf, type: 3}
-  gonggiHit: {fileID: 8300000, guid: ffec3c8ff2c244c25be360b1ad3f2436, type: 3}
-  click: {fileID: 8300000, guid: 5a2b217670a9742a1af8d0ef2367dcf6, type: 3}
-  tick: {fileID: 8300000, guid: dd9d0b1e8cf544fc7a8a5d86d0e22b7d, type: 3}
-  turn: {fileID: 8300000, guid: 223e1affce31d4a97bcfbc4dcfd05220, type: 3}
-  kill: {fileID: 8300000, guid: ced802c2b6f9c4a289b7daa8be1956c7, type: 3}
-  win: {fileID: 8300000, guid: 21432f65e565446948319d75b473b07f, type: 3}
-  lose: {fileID: 8300000, guid: afbe258cea2bb4e2187484adcb7f8b8e, type: 3}
-  draw: {fileID: 8300000, guid: b7d036940783a43a88fd4ccb7a856e42, type: 3}
-  start: {fileID: 8300000, guid: f03d9e660269b4f3eaa2c94152718c9f, type: 3}
-  notch: {fileID: 8300000, guid: ead0607494c0a4eb6a06da9e284d6ff1, type: 3}
-  cancel: {fileID: 8300000, guid: ef8e14ffbfbc64a0e916ed0a7fdd44b6, type: 3}
-  stamp: {fileID: 8300000, guid: ec19102e96bef4d26876047e0ba64d0b, type: 3}
-  open: {fileID: 8300000, guid: 9eda2d428512446058580c66e890f63b, type: 3}
+  sets:
+  - key: cancel
+    any:
+    - {fileID: 8300000, guid: ef8e14ffbfbc64a0e916ed0a7fdd44b6, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: click
+    any:
+    - {fileID: 8300000, guid: 5a2b217670a9742a1af8d0ef2367dcf6, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: countdown
+    any:
+    - {fileID: 8300000, guid: c11458174205a4dd2b97c5021fb28b46, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: crumble
+    any:
+    - {fileID: 8300000, guid: b60423b74589c4eb09c1baf2a5e1f2a3, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: damage
+    any: []
+    soft:
+    - {fileID: 8300000, guid: 83991211c2a7147af9a0f793ca4a8a26, type: 3}
+    mid:
+    - {fileID: 8300000, guid: 2163eea8f9886469e9cfd26593398df7, type: 3}
+    hard:
+    - {fileID: 8300000, guid: ba64b6c42e8e84685a2cf6799e19e72a, type: 3}
+  - key: draw
+    any:
+    - {fileID: 8300000, guid: b7d036940783a43a88fd4ccb7a856e42, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: fall
+    any:
+    - {fileID: 8300000, guid: 2c40b1e3800c34cf1965bda2b547cff9, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: flick
+    any:
+    - {fileID: 8300000, guid: f8491711fa7ff4b08befbcc3a6257633, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: hinge
+    any:
+    - {fileID: 8300000, guid: 43a0df44831854c5b8750113b4eba970, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: hit_chess
+    any: []
+    soft:
+    - {fileID: 8300000, guid: 02f5983f5200e4d8a8377d029bf35181, type: 3}
+    - {fileID: 8300000, guid: 837f3aeae22e14c139a7c1094ffa3757, type: 3}
+    mid:
+    - {fileID: 8300000, guid: c09fad908dcac4529a5d818bc9e24d89, type: 3}
+    - {fileID: 8300000, guid: ea6b63bb8c8d64b0cabe5f54bfe7f674, type: 3}
+    hard:
+    - {fileID: 8300000, guid: 2dbeadde1411c48098cd68069abeacde, type: 3}
+    - {fileID: 8300000, guid: 24918219361b245e0a5647e334191d3a, type: 3}
+  - key: hit_go
+    any: []
+    soft:
+    - {fileID: 8300000, guid: d0db5d2f2e4ee4efc9aa559b8d092f72, type: 3}
+    - {fileID: 8300000, guid: 81091894be29b4296beacf9eaf894adc, type: 3}
+    mid:
+    - {fileID: 8300000, guid: 250f2fdfb4e4f49658532efa6f0126b7, type: 3}
+    - {fileID: 8300000, guid: 0b8910ce2ac134858bf1357da54b64e5, type: 3}
+    hard:
+    - {fileID: 8300000, guid: 287d268c4b39e4e7381ed88d31190c85, type: 3}
+    - {fileID: 8300000, guid: a64e9cf2b04b448f5a604a02d75459e5, type: 3}
+  - key: hit_gonggi
+    any: []
+    soft:
+    - {fileID: 8300000, guid: 7a2acd75f4fde4b80aa8a2285bcdbaaa, type: 3}
+    - {fileID: 8300000, guid: e4ffe80ced8df48d4bff286899919a6d, type: 3}
+    mid:
+    - {fileID: 8300000, guid: ffec3c8ff2c244c25be360b1ad3f2436, type: 3}
+    - {fileID: 8300000, guid: 2bcca751d24084aa5b6e174cfab6b091, type: 3}
+    hard:
+    - {fileID: 8300000, guid: 1a5f6d5bc30ec4b6598946080d06a250, type: 3}
+    - {fileID: 8300000, guid: f0c6b6c52cb9940f2927cab492b5fb3c, type: 3}
+  - key: hit_janggi
+    any: []
+    soft:
+    - {fileID: 8300000, guid: 4545342c84f8c4caf974e4ae61ec6006, type: 3}
+    - {fileID: 8300000, guid: 443cc5fa59fdc47de8e0f0b84e876ede, type: 3}
+    mid:
+    - {fileID: 8300000, guid: e3b6851aeb96040ceaa447f86b8cb203, type: 3}
+    - {fileID: 8300000, guid: 9635b61e3b60749829dbea0f9e7deee3, type: 3}
+    hard:
+    - {fileID: 8300000, guid: 4400a5e5df0c947cbab1ae23caa8d66a, type: 3}
+    - {fileID: 8300000, guid: 23ad4d14111c940fea717b68f7d597d7, type: 3}
+  - key: kill
+    any:
+    - {fileID: 8300000, guid: ced802c2b6f9c4a289b7daa8be1956c7, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: land_chess
+    any:
+    - {fileID: 8300000, guid: e6a3b2713e44c41d48d54a3ba1ae7736, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: land_gonggi
+    any:
+    - {fileID: 8300000, guid: be2711618f68f4619893295e39b0d012, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: lose
+    any:
+    - {fileID: 8300000, guid: afbe258cea2bb4e2187484adcb7f8b8e, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: notch
+    any:
+    - {fileID: 8300000, guid: ead0607494c0a4eb6a06da9e284d6ff1, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: open
+    any:
+    - {fileID: 8300000, guid: 9eda2d428512446058580c66e890f63b, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: place
+    any:
+    - {fileID: 8300000, guid: a426e5c751ecf4ed4a03a907fc6f81bf, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: shatter_chess
+    any:
+    - {fileID: 8300000, guid: d5b384ac1da36429a86c58dadaedd6f7, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: shatter_go
+    any:
+    - {fileID: 8300000, guid: e22ba5ba082dc417dbd3fd98ba2044dd, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: shatter_gonggi
+    any:
+    - {fileID: 8300000, guid: da49fd0f85b7e423eb6a82495e6d5b45, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: shatter_janggi
+    any:
+    - {fileID: 8300000, guid: 6b2700d3ca4b64ff5af4aff46061eef4, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: stamp
+    any:
+    - {fileID: 8300000, guid: ec19102e96bef4d26876047e0ba64d0b, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: start
+    any:
+    - {fileID: 8300000, guid: f03d9e660269b4f3eaa2c94152718c9f, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: tick
+    any:
+    - {fileID: 8300000, guid: dd9d0b1e8cf544fc7a8a5d86d0e22b7d, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: turn
+    any:
+    - {fileID: 8300000, guid: 223e1affce31d4a97bcfbc4dcfd05220, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: wall_chess
+    any:
+    - {fileID: 8300000, guid: 74517843356b64b36a27a2c33e43d365, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: wall_go
+    any:
+    - {fileID: 8300000, guid: d32bb13d57ffc42cdaa20d1bd3561be6, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: wall_gonggi
+    any:
+    - {fileID: 8300000, guid: 12fcfdd50a3074eaaad79407cde8b4bf, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: wall_janggi
+    any:
+    - {fileID: 8300000, guid: 935f093ad1d8a469e9e2097ccce7074b, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: win
+    any:
+    - {fileID: 8300000, guid: 21432f65e565446948319d75b473b07f, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: zone_warn
+    any:
+    - {fileID: 8300000, guid: 6f4ce96375c214148a4471f447d7a477, type: 3}
+    soft: []
+    mid: []
+    hard: []
