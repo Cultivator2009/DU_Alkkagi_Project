@@ -164,7 +164,7 @@ public sealed class MatchSettings
             v => Loc.Get("option.health", v), s => s.Variant == GameVariant.Health),
         new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board",
             new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Hexagon, (int)global::BoardType.Cross, (int)global::BoardType.Random }, (int)global::BoardType.Go,
-            v => Loc.Get("board." + (global::BoardType)v), isAvailable: (s, v) => v != (int)global::BoardType.Hexagon || s.Seats <= 3),
+            v => Loc.Get("board." + (global::BoardType)v), isAvailable: (s, v) => BoardFits((global::BoardType)v, s.Seats)),
         new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces, (int)global::PieceType.ChessPieces, (int)global::PieceType.GonggiStones, (int)global::PieceType.Random }, (int)global::PieceType.GoStones,
             v => Loc.Get("pieces." + (global::PieceType)v)),
         new MatchSettingDef(MatchSettingId.AimGuide, "aimGuide", "match.aimGuide", new[] { 1, 0 }, 1,
@@ -251,6 +251,18 @@ public sealed class MatchSettings
     public int RoundLimit => Get(MatchSettingId.RoundLimit); // 0 = none
     public BothOutRule BothOutRule => (BothOutRule)Get(MatchSettingId.BothOutRule);
 
+    // Whether a board is fair to this many sides: every side sits as the
+    // others do. Three round a rectangle leave one with no one across from
+    // it; four on the janggi board have the hinges across two sides' way
+    // and along the others'; the hexagon has no edge for a fourth.
+    public static bool BoardFits(BoardType board, int players) => board switch
+    {
+        BoardType.Go or BoardType.Chess => players != 3,
+        BoardType.Janggi => players <= 2,
+        BoardType.Hexagon => players <= 3,
+        _ => true,
+    };
+
     public MatchSettings Clone()
     {
         var copy = new MatchSettings();
@@ -291,12 +303,15 @@ public sealed class MatchSettings
     }
 
     // A copy with Random rolled. The host rolls once per match and sends the
-    // result, so every machine plays the same board.
-    public MatchSettings Resolve()
+    // result, so every machine plays the same board. players: how many
+    // actually play (a lobby needn't be full), when it's not Seats.
+    public MatchSettings Resolve(int players = 0)
     {
         var copy = Clone();
-        if (BoardType == BoardType.Random) copy.Set(MatchSettingId.BoardType, Roll(MatchSettingId.BoardType, (int)BoardType.Random));
-        if (PieceType == PieceType.Random) copy.Set(MatchSettingId.PieceType, Roll(MatchSettingId.PieceType, (int)PieceType.Random));
+        var playing = Clone();
+        if (players > 0) playing.values[(int)MatchSettingId.Seats] = players;
+        if (BoardType == BoardType.Random) copy.Set(MatchSettingId.BoardType, playing.Roll(MatchSettingId.BoardType, (int)BoardType.Random));
+        if (PieceType == PieceType.Random) copy.Set(MatchSettingId.PieceType, playing.Roll(MatchSettingId.PieceType, (int)PieceType.Random));
         return copy;
     }
 

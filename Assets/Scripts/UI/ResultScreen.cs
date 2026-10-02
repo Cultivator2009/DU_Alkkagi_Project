@@ -165,6 +165,7 @@ public class ResultScreen : MonoBehaviour
         if (bridge.HostGone) status = string.Empty; // the reason line says it
         else if (bridge.OpponentGone && reason != MatchEndReason.OpponentLeft)
             status = multi ? Loc.Get("rematch.othersGone") : Loc.Get(hud.OpponentReturnedToLobby ? "rematch.opponentLobby" : "rematch.opponentLeft");
+        else if (!bridge.RematchFits) status = Loc.Get("rematch.boardPlayers", bridge.OthersPresent + 1);
         else if (multi && wanting > 0)
             status = Loc.Get("rematch.count", wanting, bridge.OthersPresent + 1);
         else if (!multi && bridge.OthersWantingRematch > 0 && !bridge.LocalWantsRematch)
@@ -173,7 +174,7 @@ public class ResultScreen : MonoBehaviour
 
         rematchLabel.text = Loc.Get(bridge.LocalWantsRematch ? "rematch.waiting"
             : bridge.OthersWantingRematch > 0 ? "rematch.accept" : "rematch.request");
-        SetInteractable(rematchButton, !bridge.OpponentGone && !bridge.HostGone && !bridge.LocalWantsRematch);
+        SetInteractable(rematchButton, !bridge.OpponentGone && !bridge.HostGone && !bridge.LocalWantsRematch && bridge.RematchFits);
     }
 
     // The rating row is the scoreboard's last: without it the scoreboard,

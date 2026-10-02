@@ -44,6 +44,16 @@ public class NetworkMatchBridge : MonoBehaviour
     public int OthersWantingRematch => roster.SteamIds.Count(id => id != localId && !gone.Contains(id) && wantsRematch.Contains(id));
     public bool OpponentGone => OthersPresent == 0;
     public bool HostGone => gone.Contains(hostId);
+    // Whether the lobby's board (as picked: Random rolls among those that
+    // fit) suits the players still here, for a rematch (MatchSettings.BoardFits).
+    public bool RematchFits
+    {
+        get
+        {
+            var picked = lobby != null && lobby.CurrentLobby.HasValue ? lobby.ReadLobbySettings() : MatchSettings.Picked;
+            return picked.BoardType == BoardType.Random || MatchSettings.BoardFits(picked.BoardType, OthersPresent + 1);
+        }
+    }
     public bool PlayerGone(int playerId) => playerId >= 0 && playerId < roster.Count && gone.Contains(roster.SteamIds[playerId]);
     public ulong SteamIdOf(int playerId) => playerId >= 0 && playerId < roster.Count ? roster.SteamIds[playerId] : 0;
     // This player's rating in a rated match, or null.
@@ -220,9 +230,9 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         if (!isHost || !LocalWantsRematch) return;
         var present = roster.SteamIds.Where(id => !gone.Contains(id)).ToList();
-        if (present.Count < 2 || !present.All(wantsRematch.Contains)) return;
+        if (present.Count < 2 || !present.All(wantsRematch.Contains) || !RematchFits) return;
         MatchRoster.Current = lobby.RosterOf(present); // their ratings after this match
-        MatchSettings.Current = MatchSettings.Picked.Resolve(); // Random rolls again
+        MatchSettings.Current = MatchSettings.Picked.Resolve(present.Count); // Random rolls again
         session.Broadcast(new Msg.LoadGameScene { Settings = MatchSettings.Current, Roster = MatchRoster.Current });
         gameManager.EndMatch();
         SceneManager.LoadScene("GameScene");

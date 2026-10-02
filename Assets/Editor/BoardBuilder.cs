@@ -21,8 +21,10 @@ using UnityEngine;
 // - chess: 5.7 cm squares (a tournament board) with a 2.2 cm border, 50 cm.
 // - hexagon (three sides): 54.5 cm corner to corner, a flat edge facing
 //   each of the three sides; dimpled like a diamond-game board.
-// - cross (four sides): arms 30 cm wide, 54.5 cm end to end, lined like a
-//   go board.
+// - cross (four sides): arms 30 cm wide, 72.7 cm end to end, lined like a
+//   go board. Each arm reaches 1.4 past the middle square, so a side's
+//   pieces deep in its arm are out of its neighbours' line of fire until
+//   they come out to the middle.
 // A board is its shape and materials (BoardVariant); the variant builds the
 // solid board itself, here and again at run time. Pieces get their mesh,
 // letter and mass per kind at spawn (BoardSetup), so the templates only
@@ -35,7 +37,7 @@ internal static class BoardBuilder
     private const string GonggiDir = "Assets/Materials/Gonggi";
     private const string BoardsDir = "Assets/Materials/Boards";
     private const float HexRadius = 1.8f;  // corner to centre
-    private const float CrossHalf = 1.8f;  // centre to an arm's end
+    private const float CrossHalf = 2.4f;  // centre to an arm's end (1.8 at first: the arms gave no cover)
     private const float CrossArm = 1.0f;   // half an arm's width
     private const float GoWidth = 42.42f * ChessPieceMesh.UnitsPerCm;
     private const float Width = 2.8f;  // janggi: 9 files
@@ -326,7 +328,7 @@ internal static class BoardBuilder
         variant.topMaterial = top;
         variant.sideMaterial = Material(BoardsDir, "CrossBoardSide", new Color(0.62f, 0.44f, 0.26f), 0.3f, 0);
         variant.physics = go.physics;
-        variant.blackZone = Rect.MinMaxRect(-0.8f, -1.65f, 0.8f, -0.9f);
+        variant.blackZone = Rect.MinMaxRect(-0.8f, -2.25f, 0.8f, -1.2f);
         variant.multiZone = Rect.MinMaxRect(-0.75f, 0.15f, 0.75f, 0.75f);
         variant.multiSpacing = 0.28f;
         variant.sceneLayouts = false;
@@ -606,7 +608,7 @@ internal static class BoardBuilder
     // star point at the middle and in each arm.
     private static Texture2D CrossTexture()
     {
-        const int w = 1024;
+        const int w = 1536;
         var pixels = new Color[w * w];
         var wood = new Color(0.86f, 0.70f, 0.47f);
         var ink = new Color(0.22f, 0.15f, 0.08f);
@@ -619,7 +621,8 @@ internal static class BoardBuilder
             pixels[y * w + x] = wood * (0.90f + 0.12f * grain);
         }
         const float pitch = 0.2f, lineIn = 0.2f;
-        for (var i = -8; i <= 8; i++)
+        var lines = Mathf.FloorToInt((CrossHalf - lineIn) / pitch + 1e-4f);
+        for (var i = -lines; i <= lines; i++)
         {
             // A line across the middle runs the bar's length; one out in an
             // arm only its width.
@@ -628,7 +631,8 @@ internal static class BoardBuilder
             Line(pixels, w, w, P(-reach), P(v), P(reach), P(v), 2.2f, ink);
             Line(pixels, w, w, P(v), P(-reach), P(v), P(reach), 2.2f, ink);
         }
-        foreach (var star in new[] { Vector2.zero, new Vector2(0, 1.2f), new Vector2(0, -1.2f), new Vector2(1.2f, 0), new Vector2(-1.2f, 0) })
+        const float armStar = 1.6f; // about the middle of an arm, on a line
+        foreach (var star in new[] { Vector2.zero, new Vector2(0, armStar), new Vector2(0, -armStar), new Vector2(armStar, 0), new Vector2(-armStar, 0) })
             Dot(pixels, w, w, P(star.x), P(star.y), 0.03f / (2 * CrossHalf) * w, ink);
         // The inlay: the cross's outline, 0.07 in.
         const float e = CrossHalf - 0.07f, a = CrossArm - 0.07f;

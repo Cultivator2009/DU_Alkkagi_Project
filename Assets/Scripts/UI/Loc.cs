@@ -176,6 +176,7 @@ public static class Loc
         { "rematch.opponentLeft", ("상대가 나갔어요", "Your opponent left") },
         { "rematch.count", ("재대결 {0}/{1}명", "Rematch {0}/{1}") },
         { "rematch.othersGone", ("다른 플레이어가 모두 나갔어요", "Everyone else has left") },
+        { "rematch.boardPlayers", ("이 판은 {0}명이 할 수 없어요 · 로비에서 판을 바꾸세요", "This board isn't for {0} players · change it in the lobby") },
         { "gameover.lobby", ("로비로", "Lobby") },
 
         { "menu.title", ("알까기", "Alkkagi") },
@@ -347,6 +348,7 @@ public static class Loc
         { "lobby.status.creating", ("로비 만드는 중…", "Creating lobby…") },
         { "lobby.status.joining", ("참가하는 중…", "Joining…") },
         { "lobby.status.waitingOpponent", ("상대 기다리는 중", "Waiting for an opponent") },
+        { "lobby.status.boardPlayers", ("이 판은 {0}명이 할 수 없어요 · 판을 바꾸거나 봇을 넣으세요", "This board isn't for {0} players · change it or add a bot") },
         { "lobby.status.waitingHost", ("호스트의 시작을 기다리는 중", "Waiting for the host") },
         { "lobby.status.ready", ("시작할 수 있어요", "Ready to start") },
         { "lobby.status.readyCount", ("{0}/{1}명 · 시작할 수 있어요", "{0}/{1} players · ready to start") },

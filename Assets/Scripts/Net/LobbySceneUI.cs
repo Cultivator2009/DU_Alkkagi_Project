@@ -239,8 +239,8 @@ public class LobbySceneUI : MonoBehaviour
     {
         lobbyManager.SetMatchInProgress(true);
         MatchSettings.Picked = lobbyManager.ReadLobbySettings();
-        MatchSettings.Current = MatchSettings.Picked.Resolve();
         MatchRoster.Current = lobbyManager.BuildRoster();
+        MatchSettings.Current = MatchSettings.Picked.Resolve(MatchRoster.Current.Count);
         NetSession.Current.Broadcast(new Msg.LoadGameScene { Settings = MatchSettings.Current, Roster = MatchRoster.Current });
         SceneManager.LoadScene("GameScene");
     }
@@ -352,11 +352,15 @@ public class LobbySceneUI : MonoBehaviour
         rulesCaption.text = Loc.Get(rules.RankedMode ? "lobby.rulesRanked" : "lobby.rulesCustom");
         visibilityToggle.Show((int)lobbyManager.Visibility, lobbyManager.IsHost);
 
-        var canStart = members.Count >= 2;
+        // The board has to suit the players actually here (Random rolls only
+        // among those that do): three on the go board, say, isn't fair.
+        var boardFits = rules.BoardType == BoardType.Random || MatchSettings.BoardFits(rules.BoardType, members.Count);
+        var canStart = members.Count >= 2 && boardFits;
         startButton.gameObject.SetActive(lobbyManager.IsHost);
         SetInteractable(startButton, canStart);
         if (!lobbyManager.IsHost) SetStatus("lobby.status.waitingHost", busyColor);
-        else if (!canStart) SetStatus("lobby.status.waitingOpponent", busyColor);
+        else if (members.Count < 2) SetStatus("lobby.status.waitingOpponent", busyColor);
+        else if (!boardFits) SetStatusText(Loc.Get("lobby.status.boardPlayers", members.Count), errorColor);
         else if (seatCount > 2) SetStatusText(Loc.Get("lobby.status.readyCount", members.Count, seatCount), okColor);
         else SetStatus("lobby.status.ready", okColor);
     }
