@@ -22,10 +22,9 @@ public interface IRuleset
 
     void OnBeforeFlick(GamePieceManager piece);
 
-    // A piece went off the board, on shooterId's shot (-1: on no one's, the
-    // board giving way). True: it's gone for good. False: it comes back
-    // into its side's zone once everything has stopped.
-    bool OnPieceOut(GamePieceManager piece, IReadOnlyList<Side> sides, int shooterId);
+    // A piece is out of the match - off the board, or (a battle of health)
+    // broken - on shooterId's shot (-1: on no one's, the board giving way).
+    void OnPieceOut(GamePieceManager piece, IReadOnlyList<Side> sides, int shooterId);
 
     // Out of the match (checked once a shot is over), besides conceding or leaving.
     bool IsKnockedOut(Side side);

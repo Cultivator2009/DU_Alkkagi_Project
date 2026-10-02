@@ -9,25 +9,20 @@ public struct PieceOwnerEntry
 
 public struct PieceTransform
 {
-    public const byte Parked = 1; // off the board, waiting to come back: not shown
-    public const byte Warped = 2; // put back on the board: jump there, don't glide
-
     public char PieceId;
     public Vector3 Position;
     public Quaternion Rotation;
-    public byte Flags;
-
-    public bool Is(byte flag) => (Flags & flag) != 0;
+    public int Health; // a battle of health's, A (GamePieceManager.health)
 
     public static void Write(NetWriter w, PieceTransform t)
     {
         w.Piece(t.PieceId);
         w.Vector3(t.Position);
         w.Quaternion(t.Rotation);
-        w.Byte(t.Flags);
+        w.Int(t.Health);
     }
 
-    public static PieceTransform Read(NetReader r) => new PieceTransform { PieceId = r.Piece(), Position = r.Vector3(), Rotation = r.Quaternion(), Flags = r.Byte() };
+    public static PieceTransform Read(NetReader r) => new PieceTransform { PieceId = r.Piece(), Position = r.Vector3(), Rotation = r.Quaternion(), Health = r.Int() };
 }
 
 // The messages, one class each (NetProtocol has their numbers and routes).
@@ -195,6 +190,33 @@ public static class Msg
             var position = r.Vector3();
             var piece = r.Piece();
             Sound = new BoardSoundEvent { Kind = kind, Volume = volume, Pan = BoardSounds.Pan(position), Owner = -1, Position = position, Piece = piece };
+        }
+    }
+
+    // Host -> guests: a battle of health's knock as it lands, for the HUD
+    // (the turn's result has the health that counts). Health: what the
+    // piece (A) or its side (B) has left.
+    public sealed class Damage : INetMessage
+    {
+        public char PieceId;
+        public int Amount;
+        public int Health;
+        public Vector3 Position;
+
+        public void Write(NetWriter w)
+        {
+            w.Piece(PieceId);
+            w.Int(Amount);
+            w.Int(Health);
+            w.Vector3(Position);
+        }
+
+        public void Read(NetReader r)
+        {
+            PieceId = r.Piece();
+            Amount = r.Int();
+            Health = r.Int();
+            Position = r.Vector3();
         }
     }
 

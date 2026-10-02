@@ -110,7 +110,7 @@ public class BoardSounds : MonoBehaviour
             else if (sound.Kind == BoardSound.Fall) effects.PlayFall(sound.Position);
             else if (sound.Kind == BoardSound.Flick) effects.PlayFlick(sound.Position, sound.Volume);
         }
-        if (sound.Kind == BoardSound.Shatter) Shatter(sound.Piece);
+        if (sound.Kind == BoardSound.Shatter) Break(sound.Piece);
         var bank = GameAudio.Bank;
         var clip = sound.Kind switch
         {
@@ -129,16 +129,18 @@ public class BoardSounds : MonoBehaviour
         GameAudio.PlayBoard(clip, sound.Volume, pitch, sound.Pan);
     }
 
-    // The piece breaks and goes from view. It still falls on, unseen, to
-    // be counted out (DeathTrigger); a guest's goes when the host's turn
-    // result says so.
-    private static void Shatter(char id)
+    // The piece breaks and goes from view (once). It still falls on,
+    // unseen, to be counted out (DeathTrigger); a guest's goes when the
+    // host's turn result says so.
+    public static void Break(char id)
     {
         var gameManager = GameManager.manager;
         if (gameManager == null) return;
         var piece = gameManager.gamePieceScripts.Find(p => p != null && p.Manager.pieceID == id);
         if (piece == null || !piece.gameObject.activeInHierarchy) return;
+        var renderers = piece.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0 || !renderers[0].enabled) return;
         PieceShatter.Break(piece);
-        foreach (var renderer in piece.GetComponentsInChildren<Renderer>()) renderer.enabled = false;
+        foreach (var renderer in renderers) renderer.enabled = false;
     }
 }

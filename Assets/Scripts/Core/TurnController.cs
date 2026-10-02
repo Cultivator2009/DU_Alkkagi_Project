@@ -52,6 +52,9 @@ public class TurnController
     public IReadOnlyList<Side> Sides => sides;
     // The side whose shot is playing out, or -1 (none, or the edge giving way).
     public int Shooter => State == GameManager.GameState.ProcessingTurn && !Collapsing ? CurrentPlayerID : -1;
+    // The piece the shot playing out was flicked with ('\0' otherwise): a
+    // battle of health spares it its knocks.
+    public char ShotPieceId => Shooter >= 0 && selGamePiece != null ? selGamePiece.Manager.pieceID : '\0';
 
     // 0 = no turn timer. The clock runs while the side to move is choosing
     // and aiming, and stops once the stone is flicked.
@@ -68,9 +71,6 @@ public class TurnController
     public int HostPlayerId { get; set; } = -1;
     public float RemoteGraceSeconds { get; set; }
 
-    // Once a shot has stopped and the ruleset has said who's out, before the
-    // result: the pieces waiting to come back go back (GameManager).
-    public Action ResolveParked { get; set; }
     // The edge gives way to this step: the board shrinks and whatever stood
     // on the lost ground is let fall (GameManager, BoardSetup.Crumble). On
     // a guest too, for the look of it.
@@ -213,14 +213,13 @@ public class TurnController
         State = GameManager.GameState.MatchOver;
     }
 
-    // A piece went into the death trigger (GameManager). True: it's gone for
-    // good; false: it's parked until the shot is over (the ruleset brings it
-    // back).
-    public bool PieceOut(GamePieceManager piece)
+    // A piece is out of the match: into the death trigger, or broken by
+    // its knocks (GameManager).
+    public void PieceOut(GamePieceManager piece)
     {
         Kills.PieceRemoved(piece.pieceID, piece.playerIndex);
         outsThisRound++;
-        return ruleset.OnPieceOut(piece, sides, Shooter);
+        ruleset.OnPieceOut(piece, sides, Shooter);
     }
 
     // The match as the host sends it (MatchState).
@@ -382,10 +381,9 @@ public class TurnController
         sides[shooter].Shots++;
         Kills.EndShot();
 
-        // Who this shot put out; their pieces waiting to come back don't.
+        // Who this shot put out.
         var knockedOut = standingAtShot.Where(s => s.Standing && ruleset.IsKnockedOut(s)).ToList();
         foreach (var side in knockedOut) side.Out = MatchEndReason.Knockout;
-        ResolveParked?.Invoke();
         OnShotEnded?.Invoke(shooter);
         OnSidesChanged?.Invoke();
 
@@ -428,7 +426,6 @@ public class TurnController
 
         var knockedOut = standingAtShot.Where(s => s.Standing && ruleset.IsKnockedOut(s)).ToList();
         foreach (var side in knockedOut) side.Out = MatchEndReason.Knockout;
-        ResolveParked?.Invoke();
         OnSidesChanged?.Invoke();
 
         var standing = sides.Where(s => s.Standing).ToList();

@@ -54,6 +54,7 @@ namespace AlkkagiUIEditor
             };
             BuildPlacementPanel(root);
             BuildKillFeed(root, controller);
+            BuildHealthOverlay(root);
             BuildAim(root);
             // Left of the Menu button (BuildPauseMenu).
             controller.resetViewButton = UIKit.CapsuleButton(root, "ResetViewButton", "hud.resetView", new Vector2(200, 64), false, 26);
@@ -342,6 +343,25 @@ namespace AlkkagiUIEditor
 
             fill.gameObject.SetActive(false);
             feed.template = entry;
+        }
+
+        // A battle of health over the board: a health bar per piece and the
+        // knocks' damage rising (HealthOverlay copies the two templates).
+        private static void BuildHealthOverlay(Transform root)
+        {
+            var area = UIKit.Node("HealthOverlay", root).Stretch();
+            var overlay = area.gameObject.AddComponent<HealthOverlay>();
+            var center = new Vector2(0.5f, 0.5f);
+
+            var bar = UIKit.Image(area, "BarTemplate", null, new Color(Theme.Ink.r, Theme.Ink.g, Theme.Ink.b, 0.6f));
+            bar.rectTransform.Place(center, Vector2.zero, new Vector2(48, 8));
+            var fill = UIKit.Image(bar.transform, "Fill", null, Theme.Seal);
+            fill.rectTransform.Stretch(1.5f);
+            overlay.barTemplate = bar.rectTransform;
+
+            var number = UIKit.Text(area, "NumberTemplate", "-12", 30, true, Theme.Seal, TextAlignmentOptions.Center);
+            number.rectTransform.Place(center, Vector2.zero, new Vector2(120, 44));
+            overlay.numberTemplate = number;
         }
 
         // Option A from the aim-UI mockups, its power ring now the piece's own

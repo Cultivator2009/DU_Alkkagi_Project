@@ -69,6 +69,8 @@ public class BoardVariant : MonoBehaviour
             foreach (var mesh in meshes.Where(m => m != null).ToList()) Discard(mesh);
             Discard(old.gameObject);
         }
+        var oldWalls = transform.Find(WallsName);
+        if (oldWalls != null) Discard(oldWalls.gameObject);
         var slab = new GameObject(SlabName).transform;
         slab.SetParent(transform, false);
         slab.gameObject.layer = gameObject.layer;
@@ -97,6 +99,45 @@ public class BoardVariant : MonoBehaviour
     }
 
     private const string SlabName = "Slab";
+    private const string WallsName = "Walls";
+    public const string WallName = "Wall"; // a knock against one costs health (ImpactDamage) and is heard (PieceSounds)
+    private static PhysicsMaterial wallPhysics;
+
+    // Walls round the board's edge (MatchSettings.Walled): a low wooden rim
+    // to see, standing outside the edge so the board keeps its size, and a
+    // collider well over the tallest piece's height so nothing gets over.
+    // Pieces bounce off them. Gone again with the next Build.
+    public void BuildWalls()
+    {
+        const float thickness = 0.06f, rim = 0.045f, height = 0.8f;
+        var walls = new GameObject(WallsName).transform;
+        walls.SetParent(transform, false);
+        walls.gameObject.layer = gameObject.layer;
+        wallPhysics ??= new PhysicsMaterial("Wall") { bounciness = 0.5f, dynamicFriction = 0.3f, staticFriction = 0.3f, bounceCombine = PhysicsMaterialCombine.Average };
+        foreach (var (a, b) in Shape.Outline())
+        {
+            var along = b - a;
+            var outward = new Vector2(along.y, -along.x).normalized;
+            var middle = (a + b) / 2 + outward * thickness / 2;
+            var wall = new GameObject(WallName).transform;
+            wall.SetParent(walls, false);
+            wall.gameObject.layer = gameObject.layer;
+            wall.localPosition = new Vector3(middle.x, 0, middle.y);
+            wall.localRotation = Quaternion.LookRotation(new Vector3(outward.x, 0, outward.y));
+            var box = wall.gameObject.AddComponent<BoxCollider>();
+            box.center = new Vector3(0, height / 2, 0);
+            box.size = new Vector3(along.magnitude, height, thickness);
+            box.sharedMaterial = wallPhysics;
+
+            var look = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            look.name = "Rim";
+            Discard(look.GetComponent<Collider>());
+            look.transform.SetParent(wall, false);
+            look.transform.localPosition = new Vector3(0, rim / 2, 0);
+            look.transform.localScale = new Vector3(along.magnitude + thickness, rim, thickness);
+            look.GetComponent<MeshRenderer>().sharedMaterial = sideMaterial;
+        }
+    }
 
     private static void Discard(Object thing)
     {

@@ -74,11 +74,14 @@ public class KillFeed : MonoBehaviour
             KillKind.TeamKill => "kill.teamKill",
             _ => null,
         };
-        // A battle of health: what it cost its side, unless there's more to say.
-        var damage = MatchSettings.Current.Variant == GameVariant.Health && badgeKey == null;
+        // A battle of health with shared health (B): what the fall cost its
+        // side, unless there's more to say. (A piece of A's took its own
+        // health with it.)
+        var settings = MatchSettings.Current;
+        var damage = settings.Variant == GameVariant.Health && settings.HealthRule == HealthRule.Side && badgeKey == null;
         entry.badge.SetActive(badgeKey != null || damage);
         if (badgeKey != null) entry.badgeText.text = Loc.Get(badgeKey);
-        else if (damage) entry.badgeText.text = Loc.Get("kill.damage", board.Value(kill.VictimId));
+        else if (damage) entry.badgeText.text = Loc.Get("kill.damage", HealthRuleset.FallDamage);
     }
 
     // The side's stone, or for a janggi or chess piece its disc with the letter.

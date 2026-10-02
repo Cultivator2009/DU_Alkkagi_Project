@@ -81,12 +81,6 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         }
     }
 
-    // Off the board until the shot is over, when it comes back (a battle of
-    // health, HealthRuleset). Warped: put back since the host last told the
-    // guests where it is, so they jump it there (NetworkMatchBridge).
-    public bool IsParked { get; private set; }
-    public bool Warped { get; set; }
-
     // True on a local single-player piece and on the network host (who always
     // simulates physics). False on a network guest, whose flicks are only
     // requests sent to the host instead of being applied locally.
@@ -194,32 +188,6 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         isDragging = false;
         isCancelled = true;
         AimPower = 0;
-    }
-
-    public void Park()
-    {
-        isDragging = false;
-        isSelected = false;
-        AimPower = 0;
-        lowVelocityFrameCount = 0;
-        isGamePieceMoving = false; // it counts as stopped while it waits
-        IsParked = true;
-        gameObject.SetActive(false);
-    }
-
-    public void Unpark(Vector3 position, Quaternion rotation)
-    {
-        gameObject.SetActive(true);
-        transform.SetPositionAndRotation(position, rotation);
-        Body.position = position;
-        Body.rotation = rotation;
-        if (!Body.isKinematic)
-        {
-            Body.linearVelocity = Vector3.zero;
-            Body.angularVelocity = Vector3.zero;
-        }
-        IsParked = false;
-        Warped = true;
     }
 
     // Only ever called on the authoritative simulation (local single-player,

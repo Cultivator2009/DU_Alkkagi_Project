@@ -29,9 +29,11 @@ public struct PlannedShot
 // each opponent piece, dead on and cut a little either way, at the strength
 // that should just clear it off the board, a bit more, and full. A shot scores
 // for what the opponent's pieces it knocks out are worth and against its
-// own (IRuleset.Value: a piece each, or what it costs in health), the match
-// result above all; after that, opponents left near the edge and its own
-// kept away from it.
+// own (IRuleset.Value: a piece each, or what it costs in health) - in a
+// battle of health the knocks' damage too, read off each stand-in's sudden
+// changes of speed - the match result above all; after that, opponents
+// left near the edge and its own kept away from it. With walls (a battle
+// of health's) the copy has them too.
 public class AIPlanner : IDisposable
 {
     // Both measured on the board: a flicked piece slows at about 8.8 m/s²
@@ -52,6 +54,9 @@ public class AIPlanner : IDisposable
         public float Radius;
         public float MaxRise;
         public bool Out;
+        public int Health;          // a battle of health, A: the piece's own
+        public float Damage;        // what this candidate's knocks cost it (a battle of health)
+        public Vector3 LastVelocity;
     }
 
     private struct Candidate
@@ -86,7 +91,7 @@ public class AIPlanner : IDisposable
         Copy(board.Active.gameObject);
         foreach (var piece in pieces)
         {
-            if (piece == null || piece.IsParked) continue;
+            if (piece == null) continue;
             var manager = piece.Manager;
             stands.Add(new Stand
             {
@@ -96,6 +101,7 @@ public class AIPlanner : IDisposable
                 Value = ruleset.Value(manager),
                 Radius = manager.radius,
                 MaxRise = piece.maxRiseSpeed,
+                Health = manager.health,
             });
         }
     }
@@ -166,9 +172,12 @@ public class AIPlanner : IDisposable
             stand.Body.linearVelocity = Vector3.zero;
             stand.Body.angularVelocity = Vector3.zero;
             stand.Body.WakeUp();
+            stand.Damage = 0;
+            stand.LastVelocity = Vector3.zero;
         }
 
         var shooter = candidate.Shooter;
+        var impacts = ruleset is HealthRuleset; // the flicked piece takes none
         var flick = candidate.Direction * (candidate.Power * shooter.Source.maxForce);
         shooter.Body.linearVelocity = flick / shooter.Source.referenceMass * Mathf.Pow(shooter.Source.referenceMass / shooter.Body.mass, shooter.Source.massExponent);
 
@@ -186,7 +195,16 @@ public class AIPlanner : IDisposable
             physics.Simulate(Time.fixedDeltaTime);
             foreach (var stand in stands)
             {
-                if (stand.Out || stand.Body.position.y > OutHeight) continue;
+                if (stand.Out) continue;
+                // A battle of health: a knock is a sudden change of speed
+                // across the board (sliding only takes 0.18 a step off),
+                // its impulse the piece's mass times that.
+                var velocity = stand.Body.linearVelocity;
+                var change = velocity - stand.LastVelocity;
+                change.y = 0;
+                if (impacts && stand != shooter && change.magnitude > 0.5f) stand.Damage += GameManager.manager.DamageFor(stand.Body.mass * change.magnitude);
+                stand.LastVelocity = velocity;
+                if (stand.Body.position.y > OutHeight) continue;
                 stand.Out = true;
                 stand.Body.gameObject.SetActive(false);
             }
@@ -201,10 +219,15 @@ public class AIPlanner : IDisposable
         var lost = new (int pieces, int value)[sides.Count];
         float mineOut = 0, theirsOut = 0;
         var position = 0f;
+        var perPiece = ruleset is HealthRuleset health && health.Rule == HealthRule.PerPiece;
         foreach (var stand in stands)
         {
             if (stand.Source == null) continue; // gone before this turn
             var mine = stand.Owner == player;
+            // A battle of health: knocks cost too, and (A) one that leaves a
+            // piece nothing breaks it.
+            var damage = Mathf.RoundToInt(stand.Damage);
+            if (perPiece && !stand.Out && damage >= stand.Health) stand.Out = true;
             if (stand.Out)
             {
                 if (mine) mineOut += stand.Value;
@@ -212,6 +235,12 @@ public class AIPlanner : IDisposable
                 lost[stand.Owner].pieces++;
                 lost[stand.Owner].value += stand.Value;
                 continue;
+            }
+            if (damage > 0)
+            {
+                if (mine) mineOut += damage;
+                else theirsOut += damage;
+                lost[stand.Owner].value += damage;
             }
             // Near the edge is where a piece gets knocked out next; on
             // ground about to give way, it's out.
@@ -229,13 +258,15 @@ public class AIPlanner : IDisposable
         }
 
         var score = 10f * theirsOut - 12f * mineOut + position;
+        // The match above all, whatever the pieces are worth (health runs to hundreds).
+        const float match = 100000f;
         bool Gone(Side side) => ruleset.WouldBeKnockedOut(side, lost[side.Id].pieces, lost[side.Id].value);
         var mineGone = Gone(sides[player]);
         var theirsGone = sides.Where(s => s.Id != player && s.Standing).All(Gone);
-        if (theirsGone && !mineGone) score += 1000;
-        else if (mineGone && !theirsGone) score -= 1000;
+        if (theirsGone && !mineGone) score += match;
+        else if (mineGone && !theirsGone) score -= match;
         else if (mineGone)
-            score += bothOutRule == BothOutRule.ShooterWins ? 1000 : bothOutRule == BothOutRule.Draw ? -50 : -1000;
+            score += bothOutRule == BothOutRule.ShooterWins ? match : bothOutRule == BothOutRule.Draw ? -match / 20 : -match;
         return score;
     }
 

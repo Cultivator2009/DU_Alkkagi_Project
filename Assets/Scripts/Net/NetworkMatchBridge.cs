@@ -146,6 +146,7 @@ public class NetworkMatchBridge : MonoBehaviour
             .On<Msg.TurnResult>(HandleGuestTurnResult)
             .On<Msg.MatchStateUpdate>((_, m) => Controller.ApplyRemote(m.State, Array.Empty<KillEvent>()))
             .On<Msg.FastForward>((_, m) => HostFastForwarding = m.On)
+            .On<Msg.Damage>(HandleGuestDamage)
             .On<Msg.LoadGameScene>(HandleGuestLoadGameScene);
     }
 
@@ -155,6 +156,7 @@ public class NetworkMatchBridge : MonoBehaviour
         if (session != null) session.Transport.OnPeerDisconnected -= PlayerDeparted;
         if (lobby != null) lobby.OnMemberLeft -= HandleMemberLeft;
         BoardSounds.OnEmitted -= ForwardBoardSound;
+        GameManager.Damaged -= ForwardDamage;
     }
 
     // ---- Players leaving, rematch, back to lobby ----
@@ -283,6 +285,7 @@ public class NetworkMatchBridge : MonoBehaviour
             if (controller.Collapsing) BroadcastTurnResult();
         };
         BoardSounds.OnEmitted += ForwardBoardSound;
+        GameManager.Damaged += ForwardDamage;
         inPlayAtLastResult = new HashSet<char>(pieceLookup.Keys);
         hostInitialized = true;
         TryBeginMatch();
@@ -331,6 +334,33 @@ public class NetworkMatchBridge : MonoBehaviour
             if (sound.Kind == BoardSound.Flick && sound.Owner == roster.PlayerOf(id)) continue;
             session.Send(id, new Msg.BoardSound { Sound = sound });
         }
+    }
+
+    // A battle of health's knocks, as they land: the guests show them (the
+    // turn's result has the health that counts).
+    private void ForwardDamage(char pieceId, int amount, Vector3 at)
+    {
+        if (!pieceLookup.TryGetValue(pieceId, out var piece)) return;
+        var manager = piece != null ? piece.Manager : null;
+        var health = gameManager.Ruleset is HealthRuleset rules && rules.Rule == HealthRule.Side
+            ? gameManager.Sides[manager != null ? manager.playerIndex : 0].Health
+            : manager != null ? manager.health : 0;
+        session.Broadcast(new Msg.Damage { PieceId = pieceId, Amount = amount, Health = health, Position = at });
+    }
+
+    private void HandleGuestDamage(ulong _, Msg.Damage message)
+    {
+        if (!pieceLookup.TryGetValue(message.PieceId, out var piece) || piece == null) return;
+        var manager = piece.Manager;
+        if (MatchSettings.Current.HealthRule == HealthRule.Side) gameManager.Sides[manager.playerIndex].Health = message.Health;
+        else
+        {
+            var side = gameManager.Sides[manager.playerIndex];
+            side.Health = Mathf.Max(0, side.Health - (manager.health - message.Health));
+            manager.health = message.Health;
+            if (message.Health <= 0) BoardSounds.Break(message.PieceId); // the host's own word may be lost on the way
+        }
+        GameManager.ShowDamage(message.PieceId, message.Amount, message.Position);
     }
 
     // The match, the last shot's kill feed, what went for good since the
@@ -385,9 +415,7 @@ public class NetworkMatchBridge : MonoBehaviour
         {
             if (piece == null) continue;
             var body = piece.Body;
-            var flags = (byte)((piece.IsParked ? PieceTransform.Parked : 0) | (piece.Warped ? PieceTransform.Warped : 0));
-            piece.Warped = false;
-            transforms.Add(new PieceTransform { PieceId = piece.Manager.pieceID, Position = body.position, Rotation = body.rotation, Flags = flags });
+            transforms.Add(new PieceTransform { PieceId = piece.Manager.pieceID, Position = body.position, Rotation = body.rotation, Health = piece.Manager.health });
         }
         return transforms;
     }
@@ -405,7 +433,7 @@ public class NetworkMatchBridge : MonoBehaviour
         // Unity-null once it's gone: a lagging guest board can still name a
         // piece that's already out. Only the sender's own pieces.
         pieceLookup.TryGetValue(message.PieceId, out var piece);
-        if (piece != null && (piece.IsParked || piece.Manager.playerIndex != roster.PlayerOf(sender))) piece = null;
+        if (piece != null && piece.Manager.playerIndex != roster.PlayerOf(sender)) piece = null;
         var controller = Controller;
         // Rejected while idle means the guest disagrees about the board or
         // whose turn it is - resend the current state so its view and input
@@ -532,20 +560,13 @@ public class NetworkMatchBridge : MonoBehaviour
         ApplyTransforms(message.Pieces);
     }
 
-    // Parked pieces hide; one put back jumps there.
     private void ApplyTransforms(List<PieceTransform> transforms)
     {
         foreach (var t in transforms)
         {
             snapshotTargetPosition[t.PieceId] = t.Position;
             snapshotTargetRotation[t.PieceId] = t.Rotation;
-            if (!pieceLookup.TryGetValue(t.PieceId, out var piece) || piece == null) continue;
-            var shown = !t.Is(PieceTransform.Parked);
-            if (piece.gameObject.activeSelf != shown) piece.gameObject.SetActive(shown);
-            if (!shown || !t.Is(PieceTransform.Warped)) continue;
-            piece.transform.SetPositionAndRotation(t.Position, t.Rotation);
-            piece.Body.position = t.Position;
-            piece.Body.rotation = t.Rotation;
+            if (pieceLookup.TryGetValue(t.PieceId, out var piece) && piece != null) piece.Manager.health = t.Health;
         }
     }
 

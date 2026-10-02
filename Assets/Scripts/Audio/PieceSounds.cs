@@ -52,6 +52,11 @@ public class PieceSounds : MonoBehaviour
             kind = BoardSound.Hinge;
             key = collision.collider;
         }
+        else if (collision.collider.name == BoardVariant.WallName)
+        {
+            kind = BoardSound.Hit; // wood on wood, like a knock
+            key = collision.collider;
+        }
         else if (knocksBoard)
         {
             // How hard it came down, not how fast it slides: a flicked piece

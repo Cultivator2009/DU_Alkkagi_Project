@@ -8,7 +8,7 @@ public class GamePieceManager : MonoBehaviour
     public bool isDestroyed;
     public float radius = 0.1f; // bounding circle on the board, set by BoardSetup when spawned
     [System.NonSerialized] public Vector2[] footprint; // its outline from above as it was spawned (Footprint), for placing
-    public int value = 2;       // what losing it costs in a battle of health, set by BoardSetup (BoardSetup.Value)
+    [System.NonSerialized] public int health; // a battle of health's, A: its own (HealthRuleset); the host's word on a guest
 
     private void Start() {
         

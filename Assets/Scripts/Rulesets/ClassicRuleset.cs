@@ -21,12 +21,11 @@ public class ClassicRuleset : IRuleset
         // Classic Alkkagi has no pre-flick action. Item modes hook in here.
     }
 
-    public virtual bool OnPieceOut(GamePieceManager piece, IReadOnlyList<Side> sides, int shooterId)
+    public virtual void OnPieceOut(GamePieceManager piece, IReadOnlyList<Side> sides, int shooterId)
     {
         var owner = Find(sides, piece.playerIndex);
         if (owner != null) owner.Pieces = System.Math.Max(0, owner.Pieces - 1);
         Credit(piece, sides, shooterId);
-        return true;
     }
 
     // The shooter's score, or for a piece of their own the other side's.

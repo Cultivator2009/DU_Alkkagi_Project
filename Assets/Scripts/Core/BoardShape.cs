@@ -110,6 +110,52 @@ public sealed class BoardShape
         return new BoardShape(kept);
     }
 
+    // The board's edge all the way round, as segments (a, b) with the board
+    // on their left: each part's edges, less what runs inside another part
+    // (where the cross's bars overlap).
+    public List<(Vector2 a, Vector2 b)> Outline()
+    {
+        var outline = new List<(Vector2, Vector2)>();
+        foreach (var part in parts)
+        {
+            for (var i = 0; i < part.Length; i++)
+            {
+                var a = part[i];
+                var b = part[(i + 1) % part.Length];
+                var cuts = new List<float> { 0f, 1f };
+                foreach (var other in parts)
+                {
+                    if (other == part) continue;
+                    for (var j = 0; j < other.Length; j++)
+                        if (Crossing(a, b, other[j], other[(j + 1) % other.Length], out var t)) cuts.Add(t);
+                }
+                cuts.Sort();
+                var outward = -Inward(a, b);
+                for (var k = 0; k + 1 < cuts.Count; k++)
+                {
+                    if (cuts[k + 1] - cuts[k] < 1e-5f) continue;
+                    var middle = Vector2.Lerp(a, b, (cuts[k] + cuts[k + 1]) / 2) + outward * 1e-3f;
+                    if (parts.Any(p => p != part && Depth(p, middle) > 0)) continue;
+                    outline.Add((Vector2.Lerp(a, b, cuts[k]), Vector2.Lerp(a, b, cuts[k + 1])));
+                }
+            }
+        }
+        return outline;
+    }
+
+    // Where segment a-b crosses segment c-d, as a share of the way along a-b.
+    private static bool Crossing(Vector2 a, Vector2 b, Vector2 c, Vector2 d, out float t)
+    {
+        t = 0;
+        var r = b - a;
+        var s = d - c;
+        var cross = r.x * s.y - r.y * s.x;
+        if (Mathf.Abs(cross) < 1e-9f) return false;
+        t = ((c.x - a.x) * s.y - (c.y - a.y) * s.x) / cross;
+        var u = ((c.x - a.x) * r.y - (c.y - a.y) * r.x) / cross;
+        return t > 0 && t < 1 && u >= 0 && u <= 1;
+    }
+
     // Inside some part, at least margin from its edges.
     public bool Contains(Vector2 point, float margin = 0f) => parts.Any(part => Depth(part, point) >= margin);
 

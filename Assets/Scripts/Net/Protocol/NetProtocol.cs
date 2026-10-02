@@ -22,7 +22,8 @@ public enum NetMessageType : byte
     BoardSound = 14,
     Concede = 15,
     MatchState = 16, // the match between turns, when it changes mid-turn (a side conceding, leaving)
-    FastForward = 17
+    FastForward = 17,
+    Damage = 18      // a battle of health's knock, as it lands
 }
 
 // Who may send a message to whom. NetFilters.Authority drops anything
@@ -49,7 +50,7 @@ public static class NetProtocol
     // Lobbies advertise it and a build only joins lobbies on its own. The
     // messages stand fields added at their end (NetWriter), so it only has
     // to go up when a field changes or goes, or a message's meaning does.
-    public const int Version = 7;
+    public const int Version = 8;
 
     public readonly struct Entry
     {
@@ -89,6 +90,7 @@ public static class NetProtocol
         Add<Msg.Concede>(NetMessageType.Concede, NetRoute.GuestToHost);
         Add<Msg.MatchStateUpdate>(NetMessageType.MatchState, NetRoute.HostToGuests);
         Add<Msg.FastForward>(NetMessageType.FastForward, NetRoute.HostToGuests);
+        Add<Msg.Damage>(NetMessageType.Damage, NetRoute.HostToGuests);
     }
 
     private static void Add<T>(NetMessageType type, NetRoute route, bool reliable = true) where T : INetMessage, new()

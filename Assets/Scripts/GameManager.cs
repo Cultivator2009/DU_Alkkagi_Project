@@ -28,8 +28,11 @@ public class GameManager : MonoBehaviour
     public GameObject[] vcams = null;
 
     public IRuleset Ruleset { get; private set; }
-    private readonly List<GamePieceDragAndReleaseForce> parked = new List<GamePieceDragAndReleaseForce>(); // off the board, coming back
     public TurnController TurnController { get; private set; }
+    // A battle of health's knocks as they land (piece, damage, where), on
+    // the authority and, from its word, on a guest: for the HUD.
+    public static event System.Action<char, int, Vector3> Damaged;
+    private float hardestKnock; // the impulse of a full-power hit square on, for this match's pieces (DamageFor)
     public BoardSetup Board { get; private set; }
     public PlacementPhase Placement { get; private set; }
     // The side the AI plays in a local game against it (LocalOpponent), or -1.
@@ -88,7 +91,7 @@ public class GameManager : MonoBehaviour
     {
         var settings = MatchSettings.Current;
         Ruleset = settings.Variant == GameVariant.Health
-            ? new HealthRuleset(settings.BothOutRule, settings.HealthRule, settings.Health)
+            ? new HealthRuleset(settings.BothOutRule, settings.HealthRule, settings.PieceHealth, settings.SideHealth)
             : new ClassicRuleset(settings.BothOutRule);
         Time.timeScale = GamePace.Speed;
         totalPlayerCnt = MatchRoster.Current != null ? Mathf.Clamp(MatchRoster.Current.Count, 2, MatchRoster.MaxPlayers) : 2;
@@ -104,6 +107,16 @@ public class GameManager : MonoBehaviour
             Sides[gamePieceScript.Manager.playerIndex].Pieces++;
         }
         Ruleset.Begin(Sides);
+        if (Ruleset is HealthRuleset health)
+        {
+            foreach (var piece in gamePieceScripts)
+            {
+                piece.Manager.health = health.PieceHealth;
+                piece.gameObject.AddComponent<ImpactDamage>();
+            }
+            hardestKnock = HardestKnock(gamePieceScripts);
+        }
+        if (settings.Walled) Board.Active.BuildWalls();
 
         vcams = GameObject.FindGameObjectsWithTag("vcam");
         // Lives in GameScene, so it goes with the match.
@@ -116,7 +129,6 @@ public class GameManager : MonoBehaviour
         var zone = new ZoneRule { Enabled = settings.Zone, MaxStage = ZoneRule.StagesFor(Board.Active.Shape) };
         TurnController = new TurnController(Ruleset, Sides, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds, zone, settings.RoundLimit)
         {
-            ResolveParked = ResolveParked,
             Crumble = stage => Board.Crumble(stage, gamePieceScripts),
         };
         new GameObject("BoardZoneView").AddComponent<BoardZoneView>().Init(Board, TurnController);
@@ -186,42 +198,54 @@ public class GameManager : MonoBehaviour
         gamePieceScripts.Remove(piece);
     }
 
-    // A piece went off the board (DeathTrigger), on the authority: the
-    // ruleset says whether it's gone or comes back once the shot is over.
+    // A piece is out (DeathTrigger, or broken by its knocks), on the authority.
     public void PieceOut(GamePieceDragAndReleaseForce piece)
     {
         var manager = piece.Manager;
         if (manager.isDestroyed || TurnController == null || TurnController.IsMirror) return;
         manager.isDestroyed = true;
-        if (TurnController.PieceOut(manager))
-        {
-            RemovePiece(piece);
-            Destroy(piece.gameObject);
-            return;
-        }
-        piece.Park();
-        parked.Add(piece);
+        TurnController.PieceOut(manager);
+        RemovePiece(piece);
+        Destroy(piece.gameObject);
     }
 
-    // The shot is over and the ruleset has said who's out: the pieces of the
-    // sides still in come back into their zones, the others' are gone.
-    private void ResolveParked()
+    // ---- A battle of health ----
+
+    // What a knock of this impulse costs: 1 for the faintest that counts up
+    // to MaxDamage for a full-power hit square on (and anything harder).
+    public int DamageFor(float impulse)
     {
-        foreach (var piece in parked)
-        {
-            var side = Sides[piece.Manager.playerIndex];
-            if (!side.Standing)
-            {
-                side.Pieces = Mathf.Max(0, side.Pieces - 1);
-                RemovePiece(piece);
-                Destroy(piece.gameObject);
-                continue;
-            }
-            Board.Respawn(piece, gamePieceScripts);
-            piece.Manager.isDestroyed = false;
-        }
-        parked.Clear();
+        if (hardestKnock <= 0 || impulse < hardestKnock * 0.02f) return 0;
+        return Mathf.Clamp(Mathf.RoundToInt(HealthRuleset.MaxDamage * impulse / hardestKnock), 1, HealthRuleset.MaxDamage);
     }
+
+    // Two of this match's pieces of about the average weight meeting square
+    // on, one flicked at full power: each takes m v (1 + e) / 2, a little
+    // of the speed gone to the board on the way.
+    private static float HardestKnock(List<GamePieceDragAndReleaseForce> pieces)
+    {
+        if (pieces.Count == 0) return 0;
+        var mass = pieces.Average(p => p.Body.mass);
+        var piece = pieces[0];
+        var speed = piece.maxForce / piece.referenceMass * Mathf.Pow(piece.referenceMass / mass, piece.massExponent);
+        return mass * speed * 0.75f;
+    }
+
+    // A knock a piece took (ImpactDamage), on the authority: its side's or
+    // its own health goes down, and one left with none breaks where it is.
+    public void Damage(GamePieceManager piece, int amount, Vector3 at)
+    {
+        if (!(Ruleset is HealthRuleset health) || piece.isDestroyed || TurnController == null || TurnController.IsMirror) return;
+        var broken = health.Damage(piece, amount, Sides);
+        Damaged?.Invoke(piece.pieceID, amount, at);
+        if (!broken) return;
+        var body = gamePieceScripts.Find(p => p.Manager == piece);
+        if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Shatter, 0f, piece.transform.position, piece: piece.pieceID);
+        PieceOut(body);
+    }
+
+    // A guest hears of a knock from the host (NetworkMatchBridge).
+    public static void ShowDamage(char pieceId, int amount, Vector3 at) => Damaged?.Invoke(pieceId, amount, at);
 
     // Call before leaving GameScene. This manager outlives the scene
     // (DontDestroyOnLoad) and GamePreparation only ever appends, so without a
@@ -234,8 +258,8 @@ public class GameManager : MonoBehaviour
         Board = null;
         Sides.Clear();
         gamePieceScripts.Clear();
-        parked.Clear();
         vcams = null;
+        hardestKnock = 0;
         AIPlayerId = -1;
         SkipLocalTurnProcessing = false;
         gameState = GameState.Mainmenu;

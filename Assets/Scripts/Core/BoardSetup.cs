@@ -90,21 +90,6 @@ public class BoardSetup : MonoBehaviour
         new Vector2Int(7, 0), new Vector2Int(0, 0), new Vector2Int(4, 1), new Vector2Int(3, 1), new Vector2Int(5, 1), new Vector2Int(2, 1),
     };
 
-    // What a piece is worth in a battle of health: a stone 2, a janggi piece
-    // by its kind (the general most, as its capture ends a real game), a
-    // chess piece by its kind likewise.
-    private static readonly int[] JanggiValues = { 6, 4, 3, 3, 3, 2, 2 }; // by janggiKinds' order
-    private const int StoneValue = 2;
-
-    public static int ChessValue(ChessKind kind) => kind switch
-    {
-        ChessKind.King => 6,
-        ChessKind.Queen => 5,
-        ChessKind.Rook => 4,
-        ChessKind.Pawn => 2,
-        _ => 3,
-    };
-
     public Color zoneColor = new Color(0.18f, 0.14f, 0.10f, 0.10f);
     public Color activeZoneColor = new Color(0.70f, 0.19f, 0.16f, 0.22f);
 
@@ -121,9 +106,6 @@ public class BoardSetup : MonoBehaviour
     private readonly Dictionary<int, Material> stoneMaterials = new Dictionary<int, Material>(); // the third and fourth sides' colours
     private readonly Dictionary<int, Material> sideMaterials = new Dictionary<int, Material>(); // chess and gonggi pieces, every side's
     private readonly Dictionary<char, string> letterKeys = new Dictionary<char, string>(); // janggi and chess pieces, by id
-    private readonly Dictionary<char, int> values = new Dictionary<char, int>(); // every piece's worth, by id
-    private readonly Dictionary<char, Quaternion> spawnRotations = new Dictionary<char, Quaternion>(); // how each piece first stood, facing its side
-    private readonly System.Random respawnRandom = new System.Random();
     private PieceType pieceType;
     private MeshRenderer[] zoneMarkers;
 
@@ -165,8 +147,6 @@ public class BoardSetup : MonoBehaviour
                 var manager = piece.GetComponent<GamePieceManager>();
                 manager.playerIndex = player;
                 manager.pieceID = PieceId(player, i);
-                spawnRotations[manager.pieceID] = piece.transform.rotation;
-                values[manager.pieceID] = manager.value;
                 manager.footprint = Footprint.Of(piece.gameObject);
                 piece.gameObject.SetActive(true);
                 pieces.Add(piece);
@@ -211,9 +191,6 @@ public class BoardSetup : MonoBehaviour
     // answers once the piece is gone (the kill feed asks then).
     public string LetterKey(char pieceId) => letterKeys.TryGetValue(pieceId, out var key) ? key : null;
 
-    // A piece's worth (a battle of health's damage); still answers once it's gone.
-    public int Value(char pieceId) => values.TryGetValue(pieceId, out var value) ? value : StoneValue;
-
     private void UseBoard(BoardType type)
     {
         Active = Array.Find(boards, b => b.type == type) ?? boards[0];
@@ -229,7 +206,6 @@ public class BoardSetup : MonoBehaviour
         piece.name = $"{new[] { "Black", "White", "Blue", "Red" }[player]} {index + 1}";
         piece.GetComponent<MeshCollider>().sharedMesh = GoStoneCollider.Get();
         piece.GetComponent<GamePieceManager>().radius = StoneRadius;
-        piece.GetComponent<GamePieceManager>().value = StoneValue;
         if (player >= 2)
             foreach (var renderer in piece.GetComponentsInChildren<Renderer>())
                 renderer.sharedMaterial = StoneMaterial(player, renderer.sharedMaterial);
@@ -281,7 +257,6 @@ public class BoardSetup : MonoBehaviour
         piece.GetComponent<Rigidbody>().mass = blackTemplate.GetComponent<Rigidbody>().mass * volume / (stoneBox.x * stoneBox.y * stoneBox.z);
 
         piece.GetComponent<GamePieceManager>().radius = JanggiPieceMesh.Circumradius(kind.width);
-        piece.GetComponent<GamePieceManager>().value = JanggiValues[janggiLineup[Mathf.Min(rank, janggiLineup.Length - 1)]];
         piece.name = $"{new[] { "Cho", "Han", "Blue", "Black" }[player]} {index + 1} ({label.text})";
         return piece;
     }
@@ -315,7 +290,6 @@ public class BoardSetup : MonoBehaviour
         body.centerOfMass = new Vector3(0, ChessPieceMesh.Height(kind) * chessBalance, 0);
 
         piece.GetComponent<GamePieceManager>().radius = ChessPieceMesh.BaseRadius(kind);
-        piece.GetComponent<GamePieceManager>().value = ChessValue(kind);
         piece.name = $"{new[] { "White", "Black", "Red", "Blue" }[player]} {index + 1} ({kind})";
         return piece;
     }
@@ -336,7 +310,6 @@ public class BoardSetup : MonoBehaviour
         body.centerOfMass = new Vector3(0, GonggiMesh.Height * gonggiBalance, 0);
 
         piece.GetComponent<GamePieceManager>().radius = GonggiMesh.Radius;
-        piece.GetComponent<GamePieceManager>().value = StoneValue;
         piece.name = $"{new[] { "Black", "White", "Blue", "Red" }[player]} {index + 1} (gonggi)";
         return piece;
     }
@@ -554,17 +527,6 @@ public class BoardSetup : MonoBehaviour
         ActiveOrFirst.Build(stage * ZoneRule.Step);
         foreach (var piece in pieces)
             if (piece != null && !piece.Body.isKinematic) piece.Body.WakeUp();
-    }
-
-    // A piece coming back (a battle of health): somewhere free in its side's
-    // zone, standing as it first did.
-    public void Respawn(GamePieceDragAndReleaseForce piece, IEnumerable<GamePieceDragAndReleaseForce> pieces)
-    {
-        var manager = piece.Manager;
-        var occupied = pieces.Where(p => p != null && p != piece && !p.IsParked)
-            .Select(p => (p.Manager, p.transform.position)).ToList();
-        var position = RandomFreePosition(manager.playerIndex, manager, occupied, respawnRandom);
-        piece.Unpark(position, spawnRotations.TryGetValue(manager.pieceID, out var rotation) ? rotation : piece.transform.rotation);
     }
 
     // ---- Placement phase view ----
