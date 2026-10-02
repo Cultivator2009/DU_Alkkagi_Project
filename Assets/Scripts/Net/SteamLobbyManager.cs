@@ -34,6 +34,8 @@ public class SteamLobbyManager : MonoBehaviour
     private const string VisibilityKey = "vis";
     private const string VisibilityPref = "lobby.visibility";
     private const string RatingKey = "rating"; // member data: each member's own rating, for the seats and the roster
+    private const string BotsKey = "bots";     // the host's bots, their levels in order ("2,3", Opponent)
+    private const string TeamPrefix = "team."; // a seat's team: "team.<steam id>", or a bot's "team.bot<index>"
 
     public static SteamLobbyManager Instance { get; private set; }
 
@@ -222,9 +224,112 @@ public class SteamLobbyManager : MonoBehaviour
     {
         if (!IsHost) return;
         WriteSettings(CurrentLobby.Value, settings);
-        // Seats is how many may be in the lobby; never fewer than are in it.
+        // Fewer seats: the bots go first, the players never.
+        var bots = Bots.ToList();
+        var room = Mathf.Max(0, settings.Seats - CurrentLobby.Value.MemberCount);
+        if (bots.Count > room) WriteBots(bots.Take(room).ToList(), settings);
+        else FitMembers(settings, bots.Count);
+    }
+
+    // Seats is how many may be in the lobby, bots included; never fewer
+    // players than are in it.
+    private void FitMembers(MatchSettings settings, int bots)
+    {
         var lobby = CurrentLobby.Value;
-        lobby.MaxMembers = Mathf.Max(settings.Seats, lobby.MemberCount);
+        lobby.MaxMembers = Mathf.Max(settings.Seats - bots, lobby.MemberCount);
+    }
+
+    // ---- The host's bots and the teams ----
+
+    // One seat as the host would start the match: a member or a bot.
+    public sealed class LobbySeat
+    {
+        public ulong Id;       // the member's Steam id, or MatchRoster.BotId
+        public string Name;    // the member's (a bot's is LobbySceneUI's to give)
+        public Opponent Who;   // Human for a member
+        public int BotIndex = -1;
+        public int Team;
+        public bool IsBot => BotIndex >= 0;
+    }
+
+    public static List<Opponent> BotsOf(Lobby lobby) =>
+        (lobby.GetData(BotsKey) ?? string.Empty).Split(',').Where(v => int.TryParse(v, out _)).Select(v => (Opponent)int.Parse(v)).Where(o => o != Opponent.Human).ToList();
+
+    public IReadOnlyList<Opponent> Bots => CurrentLobby.HasValue ? BotsOf(CurrentLobby.Value) : new List<Opponent>();
+
+    // A bot into the first open seat (the host's AI plays it).
+    public void AddBot(Opponent level)
+    {
+        if (!IsHost) return;
+        var settings = ReadLobbySettings();
+        var bots = Bots.ToList();
+        if (CurrentLobby.Value.MemberCount + bots.Count >= settings.Seats) return;
+        bots.Add(level);
+        WriteBots(bots, settings);
+    }
+
+    public void RemoveBot(int index)
+    {
+        if (!IsHost) return;
+        var lobby = CurrentLobby.Value;
+        var seats = SeatsOf(lobby);
+        var bots = Bots.ToList();
+        if (index < 0 || index >= bots.Count) return;
+        bots.RemoveAt(index);
+        // The later bots move up a place: their teams with them.
+        var botSeats = seats.Where(seat => seat.IsBot && seat.BotIndex != index).ToList();
+        for (var i = 0; i < botSeats.Count; i++) lobby.SetData(TeamPrefix + "bot" + i, botSeats[i].Team.ToString());
+        lobby.DeleteData(TeamPrefix + "bot" + botSeats.Count); // the place left open: a new bot there starts afresh
+        WriteBots(bots, ReadLobbySettings());
+    }
+
+    public void SetBotLevel(int index, Opponent level)
+    {
+        if (!IsHost) return;
+        var bots = Bots.ToList();
+        if (index < 0 || index >= bots.Count || level == Opponent.Human) return;
+        bots[index] = level;
+        WriteBots(bots, ReadLobbySettings());
+    }
+
+    private void WriteBots(List<Opponent> bots, MatchSettings settings)
+    {
+        CurrentLobby.Value.SetData(BotsKey, string.Join(",", bots.Select(b => (int)b)));
+        FitMembers(settings, bots.Count);
+    }
+
+    public void SetTeam(LobbySeat seat, int team)
+    {
+        if (IsHost) CurrentLobby.Value.SetData(TeamKey(seat), team.ToString());
+    }
+
+    private static string TeamKey(LobbySeat seat) => TeamPrefix + (seat.IsBot ? "bot" + seat.BotIndex : seat.Id.ToString());
+
+    // The seats as the lobby lists them: the members (SeatOrder), then the
+    // bots. A seat no one has put on a team is on the one its place gives.
+    public static List<LobbySeat> SeatsOf(Lobby lobby)
+    {
+        var seats = SeatOrder(lobby).Select(m => new LobbySeat { Id = m.Id.Value, Name = m.Name, Who = Opponent.Human }).ToList();
+        var bots = BotsOf(lobby);
+        for (var i = 0; i < bots.Count; i++) seats.Add(new LobbySeat { Id = MatchRoster.BotId(i), Who = bots[i], BotIndex = i });
+        seats = seats.Take(MatchRoster.MaxPlayers).ToList();
+        for (var i = 0; i < seats.Count; i++) seats[i].Team = int.TryParse(lobby.GetData(TeamKey(seats[i])), out var team) ? team : i % 2;
+        return seats;
+    }
+
+    // Two teams of two: the host's and one other.
+    public static bool TeamsReady(List<LobbySeat> seats) => seats.Count == 4 && seats.Count(seat => seat.Team == seats[0].Team) == 2;
+
+    // The seats in the order the match puts them: as listed, or with teams
+    // the host's team in seats 0 and 2 and the other in 1 and 3, so the
+    // teammates sit across from each other and the turns go team to team.
+    public static List<LobbySeat> MatchOrder(List<LobbySeat> seats, bool teams)
+    {
+        if (!teams || !TeamsReady(seats)) return seats;
+        var hostTeam = seats[0].Team;
+        var mate = seats.Skip(1).First(seat => seat.Team == hostTeam);
+        var others = seats.Where(seat => seat.Team != hostTeam).ToList();
+        return new List<LobbySeat> { seats[0], others[0], mate, others[1] };
     }
 
     // The lobby's seats in order: the owner first (player 0), then the
@@ -238,13 +343,16 @@ public class SteamLobbyManager : MonoBehaviour
         return seats.Take(MatchRoster.MaxPlayers).ToList();
     }
 
-    public MatchRoster BuildRoster() => RosterOf(SeatOrder(CurrentLobby.Value).Select(m => m.Id.Value));
+    public MatchRoster BuildRoster() => RosterOf(MatchOrder(SeatsOf(CurrentLobby.Value), ReadLobbySettings().Teams).Select(seat => seat.Id));
 
-    // These players, in this order, with the ratings they show in the lobby.
+    // These players (and bots), in this order, with the ratings they show in
+    // the lobby; a bot as strong as the lobby has it now.
     public MatchRoster RosterOf(IEnumerable<ulong> steamIds)
     {
         var ids = steamIds.ToList();
-        return new MatchRoster(ids, ids.Select(id => RatingOf(id) ?? Elo.Start));
+        var bots = Bots;
+        Opponent Who(ulong id) => !MatchRoster.IsBotId(id) ? Opponent.Human : (int)id - 1 < bots.Count ? bots[(int)id - 1] : Opponent.AINormal;
+        return new MatchRoster(ids, ids.Select(id => MatchRoster.IsBotId(id) ? Elo.Start : RatingOf(id) ?? Elo.Start), ids.Select(Who));
     }
 
     // A member's rating as their own game shares it; null until it has.

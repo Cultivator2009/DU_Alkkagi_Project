@@ -18,7 +18,13 @@ public class MainMenuUI : MonoBehaviour
     // Local match setup: the same rules an online host sets in the lobby.
     public GameObject setupPanel;
     public MatchSettingsPanel setupRules;
-    public SegmentedToggle opponentToggle; // Opponent order
+    // Who plays each seat (Opponent order), as many rows shown as the match
+    // has players; the card closes up by the rest.
+    public RectTransform setupCard;
+    public GameObject[] seatRows;
+    public TMP_Text[] seatLabels;
+    public SegmentedToggle[] seatToggles;
+    public float seatRowPitch = 72f;
     public Button setupStartButton;
     public Button setupCancelButton;
     public GameObject steamUserRow;
@@ -29,17 +35,25 @@ public class MainMenuUI : MonoBehaviour
     {
         NetworkServices.EnsureCreated();
 
+        cardHeight = setupCard.sizeDelta.y;
+        rulesTop = ((RectTransform)setupRules.transform).anchoredPosition;
         localButton.onClick.AddListener(() =>
         {
-            setupRules.Show(MatchSettings.LoadPrefs(), true);
-            opponentToggle.Show((int)LocalOpponent.Current);
+            var rules = MatchSettings.LoadPrefs();
+            setupRules.Show(rules, true);
+            RenderSeats(rules);
             setupPanel.SetActive(true);
         });
-        opponentToggle.OnSelected += index =>
+        setupRules.OnChanged += RenderSeats;
+        for (var i = 0; i < seatToggles.Length; i++)
         {
-            LocalOpponent.Current = (Opponent)index;
-            opponentToggle.Show(index);
-        };
+            var seat = i;
+            seatToggles[i].OnSelected += index =>
+            {
+                LocalOpponent.Set(seat, (Opponent)index);
+                seatToggles[seat].Show(index);
+            };
+        }
         setupStartButton.onClick.AddListener(StartLocalMatch);
         setupCancelButton.onClick.AddListener(() => setupPanel.SetActive(false));
         onlineButton.onClick.AddListener(() => SceneManager.LoadScene("LobbyScene"));
@@ -51,12 +65,29 @@ public class MainMenuUI : MonoBehaviour
         setupPanel.SetActive(false);
     }
 
+    private float cardHeight;
+    private Vector2 rulesTop;
+
+    // A row per seat the rules give, named as the pieces name the sides.
+    private void RenderSeats(MatchSettings rules)
+    {
+        for (var i = 0; i < seatRows.Length; i++)
+        {
+            seatRows[i].SetActive(i < rules.Seats);
+            seatLabels[i].text = SideStyle.Name(i, rules.PieceType);
+            seatToggles[i].Show((int)LocalOpponent.Of(i));
+        }
+        var hidden = seatRows.Length - rules.Seats;
+        setupCard.sizeDelta = new Vector2(setupCard.sizeDelta.x, cardHeight - hidden * seatRowPitch);
+        ((RectTransform)setupRules.transform).anchoredPosition = rulesTop + Vector2.up * (hidden * seatRowPitch);
+    }
+
     private void StartLocalMatch()
     {
         MatchSettings.Picked = setupRules.Settings;
         MatchSettings.Picked.SavePrefs();
         MatchSettings.Current = MatchSettings.Picked.Resolve();
-        MatchRoster.Current = null; // two at this screen
+        MatchRoster.Current = null; // the seats at this screen (LocalOpponent)
         MatchSeries.Reset(); // a fresh local session; rematches from the game-over screen keep counting
         SceneManager.LoadScene("GameScene");
     }

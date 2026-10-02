@@ -33,11 +33,21 @@ public class GameManager : MonoBehaviour
     // the authority and, from its word, on a guest: for the HUD.
     public static event System.Action<char, int, Vector3> Damaged;
     private float hardestKnock; // the impulse of a full-power hit square on, for this match's pieces (DamageFor)
+    private bool teams;         // two teams of two (MatchSettings.Teams, four playing)
+
+    // Which team a side plays for: its own, or with teams sides 0 and 2
+    // against 1 and 3. Every rule asks this rather than comparing sides.
+    public int TeamOf(int playerId) => teams ? playerId % 2 : playerId;
+    public bool Teams => teams;
     public BoardSetup Board { get; private set; }
     public PlacementPhase Placement { get; private set; }
-    // The side the AI plays in a local game against it (LocalOpponent), or -1.
-    public int AIPlayerId { get; private set; } = -1;
-    public bool VersusAI => AIPlayerId >= 0;
+    // The sides the AI plays in a local game (LocalOpponent, seat by seat).
+    public HashSet<int> AIPlayers { get; } = new HashSet<int>();
+    public bool VersusAI => AIPlayers.Count > 0;
+    public bool IsAI(int playerId) => AIPlayers.Contains(playerId);
+    // The one side played at this screen in a local game against the AI,
+    // or -1 (several at this screen take turns at it, or none do).
+    public int SoleHuman { get; private set; } = -1;
 
     // Set by NetworkMatchBridge on a network guest: the authoritative turn
     // state machine only ever runs on the host, so a guest's local
@@ -90,11 +100,13 @@ public class GameManager : MonoBehaviour
     private void GamePreparation()
     {
         var settings = MatchSettings.Current;
-        Ruleset = settings.Variant == GameVariant.Health
-            ? new HealthRuleset(settings.BothOutRule, settings.HealthRule, settings.PieceHealth, settings.SideHealth)
-            : new ClassicRuleset(settings.BothOutRule);
         Time.timeScale = GamePace.Speed;
-        totalPlayerCnt = MatchRoster.Current != null ? Mathf.Clamp(MatchRoster.Current.Count, 2, MatchRoster.MaxPlayers) : 2;
+        // Online, whoever the roster lists; locally, the seats picked.
+        totalPlayerCnt = Mathf.Clamp(MatchRoster.Current != null ? MatchRoster.Current.Count : IsOnlineMatch ? 2 : settings.Seats, 2, MatchRoster.MaxPlayers);
+        teams = settings.Teams && totalPlayerCnt == 4;
+        Ruleset = settings.Variant == GameVariant.Health
+            ? new HealthRuleset(settings.BothOutRule, settings.HealthRule, settings.PieceHealth, settings.SideHealth, TeamOf)
+            : new ClassicRuleset(settings.BothOutRule, TeamOf);
 
         for (var playerIndex = 0; playerIndex < totalPlayerCnt; playerIndex++) Sides.Add(new Side(playerIndex));
 
@@ -127,24 +139,32 @@ public class GameManager : MonoBehaviour
         foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>().knocksBoard = pieceSet.KnocksBoard;
 
         var zone = new ZoneRule { Enabled = settings.Zone, MaxStage = ZoneRule.StagesFor(Board.Active.Shape) };
-        TurnController = new TurnController(Ruleset, Sides, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds, zone, settings.RoundLimit)
+        TurnController = new TurnController(Ruleset, Sides, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds, zone, settings.RoundLimit, TeamOf)
         {
             Crumble = stage => Board.Crumble(stage, gamePieceScripts),
         };
         new GameObject("BoardZoneView").AddComponent<BoardZoneView>().Init(Board, TurnController);
         gameState = GameState.WaitingForPlayers;
-        if (!IsOnlineMatch && LocalOpponent.IsAI)
+        var humans = Enumerable.Range(0, totalPlayerCnt).ToList();
+        if (!IsOnlineMatch)
         {
-            // White; this screen's mouse only ever moves black.
-            AIPlayerId = 1;
-            TurnController.PieceSelector.LocalPlayerId = 0;
-            var ai = new GameObject("AI").AddComponent<AIOpponent>();
-            ai.playerId = AIPlayerId;
-            ai.level = LocalOpponent.Level;
+            for (var seat = 0; seat < totalPlayerCnt; seat++)
+            {
+                if (!LocalOpponent.IsAI(seat)) continue;
+                AIPlayers.Add(seat);
+                var ai = new GameObject("AI " + seat).AddComponent<AIOpponent>();
+                ai.playerId = seat;
+                ai.level = LocalOpponent.LevelOf(seat);
+            }
+            // This screen's mouse only ever moves the sides played at it.
+            humans.RemoveAll(AIPlayers.Contains);
+            if (VersusAI) TurnController.PieceSelector.Players = new HashSet<int>(humans);
+            SoleHuman = VersusAI && humans.Count == 1 ? humans[0] : -1;
         }
         // Online, NetworkMatchBridge calls BeginMatch once the guest is in.
-        // Against the AI both sides can place at once, as online.
-        if (!IsOnlineMatch) BeginMatch(hotSeat: !VersusAI);
+        // With one at this screen, everyone places at once, as online; with
+        // several, they take turns at it.
+        if (!IsOnlineMatch) BeginMatch(hotSeat: humans.Count > 1);
     }
 
     // NetworkBootstrap adds the bridge as GameScene loads into a lobby, before
@@ -263,7 +283,9 @@ public class GameManager : MonoBehaviour
         gamePieceScripts.Clear();
         vcams = null;
         hardestKnock = 0;
-        AIPlayerId = -1;
+        AIPlayers.Clear();
+        SoleHuman = -1;
+        teams = false;
         SkipLocalTurnProcessing = false;
         gameState = GameState.Mainmenu;
         GamePace.SetFastForward(false);

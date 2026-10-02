@@ -258,28 +258,42 @@ namespace AlkkagiUIEditor
         // Cancel. MainMenuUI fills it from the last-used choices.
         private static void BuildSetupPanel(Transform root, MainMenuUI menu)
         {
-            const float width = 840, pad = 64, rowHeight = 52, gap = 8, opponentRow = 80;
-            // As many rows as fit a 1080 screen with the card's other parts;
-            // more scroll.
-            var rulesHeight = Mathf.Min(UIKit.RuleRows(false) * (rowHeight + gap) - gap, 10 * (rowHeight + gap) - gap);
+            const float width = 840, pad = 64, rowHeight = 52, gap = 8, seatHeight = 60, seatPitch = 72;
+            const int seats = 4;
+            // A row per seat (who plays it), then as many rule rows as fit a
+            // 1080 screen with the card's other parts; more scroll. MainMenuUI
+            // closes the card up by the seats a match doesn't have.
+            var rulesHeight = Mathf.Min(UIKit.RuleRows(false) * (rowHeight + gap) - gap, 7 * (rowHeight + gap) - gap);
             var overlay = UIKit.Image(root, "SetupPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             menu.setupPanel = overlay.gameObject;
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             UIKit.Appear(overlay, card.rectTransform);
-            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 148 + opponentRow + rulesHeight + 40 + 84 + 48));
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 148 + seats * seatPitch + rulesHeight + 40 + 84 + 48));
+            menu.setupCard = card.rectTransform;
+            menu.seatRowPitch = seatPitch;
             var top = new Vector2(0.5f, 1);
 
             UIKit.Label(card.transform, "Title", "match.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
                 .rectTransform.Place(top, new Vector2(0, -44), new Vector2(width - pad * 2, 64));
-            UIKit.Label(card.transform, "OpponentLabel", "setup.opponent", 28, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
-                .rectTransform.Place(new Vector2(0, 1), new Vector2(pad, -144), new Vector2(160, 60));
-            menu.opponentToggle = UIKit.SegmentedToggle(card.transform, "OpponentToggle",
-                new[] { "opponent.Human", "opponent.AIEasy", "opponent.AINormal", "opponent.AIHard" }, 60);
-            menu.opponentToggle.GetComponent<RectTransform>().Place(new Vector2(1, 1), new Vector2(-pad, -144), new Vector2(width - pad * 2 - 150, 60));
+            menu.seatRows = new GameObject[seats];
+            menu.seatLabels = new TMP_Text[seats];
+            menu.seatToggles = new SegmentedToggle[seats];
+            for (var i = 0; i < seats; i++)
+            {
+                var y = -136 - i * seatPitch;
+                var row = UIKit.Node("Seat" + i, card.transform).Place(new Vector2(0, 1), new Vector2(pad, y), new Vector2(width - pad * 2, seatHeight));
+                menu.seatRows[i] = row.gameObject;
+                // The side's name, as the pieces name it: set by MainMenuUI.
+                menu.seatLabels[i] = UIKit.Text(row, "Label", SideStyle.Name(i), 28, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+                menu.seatLabels[i].rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(140, seatHeight), new Vector2(0, 0.5f));
+                menu.seatToggles[i] = UIKit.SegmentedToggle(row, "Who",
+                    new[] { "opponent.Human", "opponent.AIEasy", "opponent.AINormal", "opponent.AIHard" }, seatHeight);
+                menu.seatToggles[i].GetComponent<RectTransform>().Place(new Vector2(1, 0.5f), Vector2.zero, new Vector2(width - pad * 2 - 150, seatHeight), new Vector2(1, 0.5f));
+            }
             menu.setupRules = UIKit.RulesPanel(card.transform, "Rules", width - pad * 2, rowHeight, gap, 28, online: false, height: rulesHeight);
-            menu.setupRules.GetComponent<RectTransform>().Place(new Vector2(0, 1), new Vector2(pad, -148 - opponentRow), menu.setupRules.GetComponent<RectTransform>().sizeDelta);
+            menu.setupRules.GetComponent<RectTransform>().Place(new Vector2(0, 1), new Vector2(pad, -148 - seats * seatPitch), menu.setupRules.GetComponent<RectTransform>().sizeDelta);
 
             menu.setupCancelButton = UIKit.CapsuleButton(card.transform, "CancelButton", "setup.cancel", new Vector2(240, 84), false, 32);
             menu.setupCancelButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(pad, 48), new Vector2(240, 84));

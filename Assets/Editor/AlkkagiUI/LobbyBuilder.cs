@@ -213,7 +213,7 @@ namespace AlkkagiUIEditor
             filled.rectTransform.Stretch();
             var stone = UIKit.Stone(filled.transform, "Stone", 52, seat == 0 ? Theme.StoneBlack : Theme.StoneWhite, seat == 0 ? Theme.Ink : Theme.InkMuted, false)
                 .Place(new Vector2(0, 0.5f), new Vector2(24, 0), new Vector2(52, 52), new Vector2(0, 0.5f));
-            UIKit.Mark(stone, seat);
+            slot.mark = UIKit.Mark(stone, seat);
             // ASCII placeholders: the real Steam name replaces them at runtime.
             slot.nameText = UIKit.Text(filled.transform, "Name", seat == 0 ? "Host" : "Guest", 32, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
             slot.nameText.overflowMode = TextOverflowModes.Ellipsis;
@@ -224,6 +224,11 @@ namespace AlkkagiUIEditor
             slot.ratingText = UIKit.Text(chip.transform, "Text", "1000", 24, true, Theme.Ink, TextAlignmentOptions.Center);
             slot.ratingText.rectTransform.Stretch();
             slot.ratingChip = chip.gameObject;
+            // With teams, the seat's team in the rating's place; the host's to switch.
+            slot.teamButton = UIKit.CapsuleButton(filled.transform, "TeamButton", "lobby.addBot", new Vector2(98, 44), false, 22);
+            slot.teamButton.GetComponent<RectTransform>().Place(new Vector2(0, 0.5f), new Vector2(304, 0), new Vector2(98, 44), new Vector2(0, 0.5f));
+            slot.teamText = RuntimeLabel(slot.teamButton, "1팀");
+            slot.teamButton.gameObject.SetActive(false);
             slot.roleText = UIKit.Text(filled.transform, "Role", $"{Loc.Get(seat == 0 ? "lobby.host" : "lobby.guest")} · {Loc.Get(colorKey)}", 24, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
             slot.roleText.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(410, 0), new Vector2(170, 56), new Vector2(0, 0.5f));
             slot.filledView = filled.gameObject;
@@ -231,6 +236,11 @@ namespace AlkkagiUIEditor
             slot.blockButton = UIKit.CapsuleButton(filled.transform, "BlockButton", "lobby.block", new Vector2(112, 56), false, 24);
             slot.blockButton.GetComponent<RectTransform>().Place(right, new Vector2(-12, 0), new Vector2(112, 56), right);
             slot.blockButton.gameObject.SetActive(false);
+            // A bot's strength, where the block button would be: the host cycles it.
+            slot.levelButton = UIKit.CapsuleButton(filled.transform, "LevelButton", "lobby.addBot", new Vector2(112, 56), false, 22);
+            slot.levelButton.GetComponent<RectTransform>().Place(right, new Vector2(-12, 0), new Vector2(112, 56), right);
+            slot.levelText = RuntimeLabel(slot.levelButton, "Normal");
+            slot.levelButton.gameObject.SetActive(false);
             if (seat > 0)
             {
                 // The host can send a guest away (public lobbies let anyone in).
@@ -247,12 +257,25 @@ namespace AlkkagiUIEditor
                 .rectTransform.Place(new Vector2(0, 0.5f), new Vector2(96, 0), new Vector2(360, 56), new Vector2(0, 0.5f));
             var emptyRole = UIKit.Text(empty.transform, "Role", Loc.Get(colorKey), 24, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft);
             emptyRole.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(472, 0), new Vector2(190, 56), new Vector2(0, 0.5f));
-            UIKit.MarkLabel(emptyRole, seat);
+            slot.emptyMark = UIKit.MarkLabel(emptyRole, seat);
             slot.inviteButton = UIKit.CapsuleButton(empty.transform, "InviteButton", "lobby.invite", new Vector2(236, 56), false, 22);
             slot.inviteButton.GetComponent<RectTransform>().Place(right, new Vector2(-12, 0), new Vector2(236, 56), right);
+            // The host can fill an open seat with a bot instead.
+            slot.addBotButton = UIKit.CapsuleButton(empty.transform, "AddBotButton", "lobby.addBot", new Vector2(150, 56), false, 22);
+            slot.addBotButton.GetComponent<RectTransform>().Place(right, new Vector2(-260, 0), new Vector2(150, 56), right);
+            slot.addBotButton.gameObject.SetActive(false);
             slot.emptyView = empty.gameObject;
             empty.gameObject.SetActive(false);
             return slot;
+        }
+
+        // A button's label that LobbySceneUI writes, not a Loc key.
+        private static TMP_Text RuntimeLabel(Button button, string placeholder)
+        {
+            var label = button.GetComponentInChildren<TMP_Text>();
+            Object.DestroyImmediate(label.GetComponent<LocalizedText>());
+            label.text = placeholder;
+            return label;
         }
 
         private static TMP_InputField CodeInput(Transform parent)

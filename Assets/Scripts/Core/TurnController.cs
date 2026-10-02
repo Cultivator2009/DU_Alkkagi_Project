@@ -99,6 +99,7 @@ public class TurnController
     private int winner = -1;
     private MatchEndReason endReason;
     private int firstPlayer; // who opened the match: a round starts with them
+    private readonly Func<int, int> teamOf; // MatchSettings.TeamOf: each side its own team, or two of two
 
     public TurnController(
         IRuleset ruleset,
@@ -107,8 +108,10 @@ public class TurnController
         PieceSelector pieceSelector,
         int turnSeconds,
         ZoneRule zone = null,
-        int roundLimit = 0)
+        int roundLimit = 0,
+        Func<int, int> teamOf = null)
     {
+        this.teamOf = teamOf ?? (id => id);
         Zone = zone ?? new ZoneRule();
         RoundLimit = roundLimit;
         this.ruleset = ruleset;
@@ -116,7 +119,7 @@ public class TurnController
         this.gamePieceScripts = gamePieceScripts;
         this.pieceSelector = pieceSelector;
         TurnSeconds = turnSeconds;
-        Kills = new KillLog(sides.Count);
+        Kills = new KillLog(sides.Count, this.teamOf);
     }
 
     // first: who moves first (black, unless a ranked series says otherwise).
@@ -197,9 +200,9 @@ public class TurnController
         side.Out = reason;
         var standing = sides.Where(s => s.Standing).ToList();
         OnSidesChanged?.Invoke();
-        if (standing.Count <= 1)
+        if (standing.Select(s => teamOf(s.Id)).Distinct().Count() <= 1)
         {
-            EndMatch(standing.Count == 1 ? standing[0].Id : -1, reason);
+            EndMatch(standing.Count >= 1 ? standing[0].Id : -1, reason);
             return;
         }
         OnPlayerOut?.Invoke(playerId, reason);
@@ -491,19 +494,20 @@ public class TurnController
         OnTurnStarted?.Invoke(CurrentPlayerID);
     }
 
-    // True if the round limit ended the match: the side with the most left
-    // (health in a battle of health, pieces otherwise) wins, a tie is a draw.
+    // True if the round limit ended the match: the side (or team) with the
+    // most left (health in a battle of health, pieces otherwise) wins, a
+    // tie is a draw.
     private bool EndRound()
     {
         Zone.EndRound(outsThisRound);
         outsThisRound = 0;
         if (RoundLimit > 0 && Round >= RoundLimit)
         {
-            var standing = sides.Where(s => s.Standing).ToList();
-            int Left(Side side) => side.HasHealth ? side.Health : side.Pieces;
-            var most = standing.Max(Left);
-            var leaders = standing.Where(s => Left(s) == most).ToList();
-            EndMatch(leaders.Count == 1 ? leaders[0].Id : -1, MatchEndReason.RoundLimit);
+            var teams = sides.Where(s => s.Standing).GroupBy(s => teamOf(s.Id))
+                .Select(team => (first: team.First().Id, left: team.Sum(s => s.HasHealth ? s.Health : s.Pieces))).ToList();
+            var most = teams.Max(t => t.left);
+            var leaders = teams.Where(t => t.left == most).ToList();
+            EndMatch(leaders.Count == 1 ? leaders[0].first : -1, MatchEndReason.RoundLimit);
             return true;
         }
         Round++;

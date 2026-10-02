@@ -81,6 +81,9 @@ public class LobbySceneUI : MonoBehaviour
             seats[i].inviteButton.onClick.AddListener(() => lobbyManager.InviteFriends());
             if (seats[i].kickButton != null) seats[i].kickButton.onClick.AddListener(() => OnClickKick(seat));
             seats[i].blockButton.onClick.AddListener(() => OnClickBlock(seat));
+            seats[i].addBotButton.onClick.AddListener(() => lobbyManager.AddBot(Opponent.AINormal));
+            seats[i].levelButton.onClick.AddListener(() => OnClickBotLevel(seat));
+            seats[i].teamButton.onClick.AddListener(() => OnClickTeam(seat));
         }
         leaveButton.onClick.AddListener(OnClickLeave);
         startButton.onClick.AddListener(OnClickStartMatch);
@@ -239,10 +242,28 @@ public class LobbySceneUI : MonoBehaviour
         Render();
     }
 
+    // A guest is sent away; a bot just goes.
     private void OnClickKick(int seat)
     {
-        var members = SteamLobbyManager.SeatOrder(lobbyManager.CurrentLobby.Value);
-        if (seat > 0 && seat < members.Count) lobbyManager.Kick(members[seat].Id.Value);
+        var list = SteamLobbyManager.SeatsOf(lobbyManager.CurrentLobby.Value);
+        if (seat <= 0 || seat >= list.Count) return;
+        if (list[seat].IsBot) lobbyManager.RemoveBot(list[seat].BotIndex);
+        else lobbyManager.Kick(list[seat].Id);
+    }
+
+    // Easy, normal, hard, round again.
+    private void OnClickBotLevel(int seat)
+    {
+        var list = SteamLobbyManager.SeatsOf(lobbyManager.CurrentLobby.Value);
+        if (seat >= list.Count || !list[seat].IsBot) return;
+        var next = list[seat].Who == Opponent.AIHard ? Opponent.AIEasy : list[seat].Who + 1;
+        lobbyManager.SetBotLevel(list[seat].BotIndex, next);
+    }
+
+    private void OnClickTeam(int seat)
+    {
+        var list = SteamLobbyManager.SeatsOf(lobbyManager.CurrentLobby.Value);
+        if (seat < list.Count) lobbyManager.SetTeam(list[seat], 1 - list[seat].Team);
     }
 
     // Blocked: the host sends them away, a guest leaves (SteamLobbyManager).
@@ -380,25 +401,30 @@ public class LobbySceneUI : MonoBehaviour
         lobbyCodeText.text = lobby.Id.Value.ToString();
         if (copiedUntil == 0) copyLabel.text = Loc.Get("lobby.copy");
 
-        var members = SteamLobbyManager.SeatOrder(lobby);
-        // Seats read black/white/blue/red or Cho/Han/..., whichever pieces
-        // the rules pick. As many seats as the rules allow; the host's
-        // invite on the first open one.
+        // The members, then the host's bots; each seat reads the side it will
+        // play (black/white/blue/red or Cho/Han/..., whichever pieces the
+        // rules pick - with teams, where the match seats it). As many seats
+        // as the rules allow; the host's invite and bot on the first open one.
         var rules = lobbyManager.ReadLobbySettings();
-        // Ranked: everything fixed, no one sent away, and it starts itself.
+        var list = SteamLobbyManager.SeatsOf(lobby);
+        var order = SteamLobbyManager.MatchOrder(list, rules.Teams);
+        // Ranked: everything fixed, no one sent away or added, and it starts itself.
         var ranked = rules.RankedMode;
-        var seatCount = Mathf.Clamp(Mathf.Max(rules.Seats, members.Count), 2, seats.Length);
+        var host = lobbyManager.IsHost;
+        var seatCount = Mathf.Clamp(Mathf.Max(rules.Seats, list.Count), 2, seats.Length);
         for (var i = 0; i < seats.Length; i++)
         {
             var slot = seats[i];
             slot.gameObject.SetActive(i < seatCount);
-            if (i < members.Count)
-                slot.ShowPlayer(members[i].Name, $"{Loc.Get(i == 0 ? "lobby.host" : "lobby.guest")} · {SideStyle.Name(i, rules.PieceType)}",
-                    lobbyManager.RatingOf(members[i].Id.Value));
-            else
-                slot.ShowEmpty(lobbyManager.IsHost && i == members.Count);
-            if (slot.kickButton != null) slot.kickButton.gameObject.SetActive(lobbyManager.IsHost && !ranked && i > 0 && i < members.Count);
-            slot.blockButton.gameObject.SetActive(i < members.Count && members[i].Id.Value != Steamworks.SteamClient.SteamId.Value);
+            var seat = i < list.Count ? list[i] : null;
+            var side = seat != null ? order.IndexOf(seat) : i;
+            var sideName = SideStyle.Name(side, rules.PieceType);
+            if (seat == null) slot.ShowEmpty(host && i == list.Count, host && !ranked && i == list.Count, side);
+            else if (seat.IsBot) slot.ShowBot(Loc.Get("bot." + seat.Who), $"{Loc.Get("lobby.bot")} · {sideName}", Loc.Get("level." + seat.Who), side, host && !ranked);
+            else slot.ShowPlayer(seat.Name, $"{Loc.Get(i == 0 ? "lobby.host" : "lobby.guest")} · {sideName}", lobbyManager.RatingOf(seat.Id), side);
+            slot.ShowTeam(seat != null && rules.Teams ? seat.Team : (int?)null, host && !ranked);
+            if (slot.kickButton != null) slot.kickButton.gameObject.SetActive(host && !ranked && i > 0 && seat != null);
+            slot.blockButton.gameObject.SetActive(seat != null && !seat.IsBot && seat.Id != Steamworks.SteamClient.SteamId.Value);
         }
         SideMark.ShowAll(lobbyView.transform, rules.PieceType);
 
@@ -406,17 +432,20 @@ public class LobbySceneUI : MonoBehaviour
         rulesCaption.text = Loc.Get(rules.Mode == MatchMode.Ranked ? "lobby.rulesRanked" : rules.Mode == MatchMode.Custom ? "lobby.rulesCustom" : "lobby.rulesNormal");
         visibilityToggle.Show((int)lobbyManager.Visibility, lobbyManager.IsHost && !ranked);
 
-        // The board has to suit the players actually here (Random rolls only
-        // among those that do): three on the go board, say, isn't fair.
-        var boardFits = rules.BoardType == BoardType.Random || MatchSettings.BoardFits(rules.BoardType, members.Count);
-        var canStart = members.Count >= 2 && boardFits;
+        // The board has to suit the players actually here, bots included
+        // (Random rolls only among those that do): three on the go board,
+        // say, isn't fair. Teams need two of two.
+        var boardFits = rules.BoardType == BoardType.Random || MatchSettings.BoardFits(rules.BoardType, list.Count);
+        var teamsReady = !rules.Teams || SteamLobbyManager.TeamsReady(list);
+        var canStart = list.Count >= 2 && boardFits && teamsReady;
         startButton.gameObject.SetActive(lobbyManager.IsHost && !ranked);
         SetInteractable(startButton, canStart);
-        if (ranked) SetStatus(members.Count < 2 ? "lobby.status.rankedSearching" : "lobby.status.rankedStarting", members.Count < 2 ? busyColor : okColor);
+        if (ranked) SetStatus(list.Count < 2 ? "lobby.status.rankedSearching" : "lobby.status.rankedStarting", list.Count < 2 ? busyColor : okColor);
         else if (!lobbyManager.IsHost) SetStatus("lobby.status.waitingHost", busyColor);
-        else if (members.Count < 2) SetStatus("lobby.status.waitingOpponent", busyColor);
-        else if (!boardFits) SetStatusText(Loc.Get("lobby.status.boardPlayers", members.Count), errorColor);
-        else if (seatCount > 2) SetStatusText(Loc.Get("lobby.status.readyCount", members.Count, seatCount), okColor);
+        else if (list.Count < 2) SetStatus("lobby.status.waitingOpponent", busyColor);
+        else if (!boardFits) SetStatusText(Loc.Get("lobby.status.boardPlayers", list.Count), errorColor);
+        else if (!teamsReady) SetStatus("lobby.status.teams", errorColor);
+        else if (seatCount > 2) SetStatusText(Loc.Get("lobby.status.readyCount", list.Count, seatCount), okColor);
         else SetStatus("lobby.status.ready", okColor);
     }
 

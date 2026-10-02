@@ -88,6 +88,7 @@ public enum MatchSettingId : byte
     PieceType,
     AimGuide,
     Seats,
+    Teams,
     BlackStones,
     WhiteStones,
     BlueStones,
@@ -193,18 +194,23 @@ public sealed class MatchSettings
             v => Loc.Get("pieces." + (global::PieceType)v), ranked: new[] { (int)global::PieceType.Random, (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces }),
         new MatchSettingDef(MatchSettingId.AimGuide, "aimGuide", "match.aimGuide", new[] { 1, 0 }, 1,
             v => Loc.Get(v == 1 ? "option.on" : "option.off"), ranked: new[] { 0 }),
-        // How many may join the lobby; the match is played by whoever is in
-        // it when the host starts, two at least.
+        // Online, how many may join the lobby (the match is played by whoever
+        // is in it when the host starts, two at least, bots included);
+        // locally, the seats at this screen and the AI's (LocalOpponent).
         new MatchSettingDef(MatchSettingId.Seats, "seats", "match.seats", new[] { 2, 3, 4 }, 2,
-            v => Loc.Get("option.players", v), onlineOnly: true, ranked: new[] { 2 }),
+            v => Loc.Get("option.players", v), ranked: new[] { 2 }),
+        // Four as two teams of two (TeamOf): teammates sit across from each
+        // other, so the turns go team to team. Colours and seats as ever.
+        new MatchSettingDef(MatchSettingId.Teams, "teams", "match.teams", new[] { 0, 1 }, 0,
+            v => Loc.Get(v == 1 ? "teams.twoByTwo" : "option.off"), s => s.Seats == 4, isAvailable: (s, v) => v == 0 || s.Seats == 4, ranked: new[] { 0 }),
         new MatchSettingDef(MatchSettingId.BlackStones, "blackStones", "match.blackStones", StoneCounts, 6,
             v => Loc.Get("option.stones", v), normal: NormalStones, ranked: RankedStones),
         new MatchSettingDef(MatchSettingId.WhiteStones, "whiteStones", "match.whiteStones", StoneCounts, 6,
             v => Loc.Get("option.stones", v), normal: NormalStones, ranked: RankedStones),
         new MatchSettingDef(MatchSettingId.BlueStones, "blueStones", "match.blueStones", StoneCounts, 6,
-            v => Loc.Get("option.stones", v), s => s.Seats >= 3, onlineOnly: true, normal: NormalStones),
+            v => Loc.Get("option.stones", v), s => s.Seats >= 3, normal: NormalStones),
         new MatchSettingDef(MatchSettingId.RedStones, "redStones", "match.redStones", StoneCounts, 6,
-            v => Loc.Get("option.stones", v), s => s.Seats >= 4, onlineOnly: true, normal: NormalStones),
+            v => Loc.Get("option.stones", v), s => s.Seats >= 4, normal: NormalStones),
         new MatchSettingDef(MatchSettingId.SpawnMode, "spawn", "match.spawn", new[] { (int)global::SpawnMode.Preset, (int)global::SpawnMode.Placement }, (int)global::SpawnMode.Preset,
             v => Loc.Get(v == (int)global::SpawnMode.Placement ? "spawn.placement" : "spawn.preset"), normal: new[] { (int)global::SpawnMode.Preset }, ranked: new[] { (int)global::SpawnMode.Placement }),
         new MatchSettingDef(MatchSettingId.PlacementStyle, "placement", "match.placementStyle",
@@ -266,6 +272,9 @@ public sealed class MatchSettings
     public PieceType PieceType => (PieceType)Get(MatchSettingId.PieceType);
     public bool AimGuide => Get(MatchSettingId.AimGuide) == 1;
     public int Seats => Get(MatchSettingId.Seats);
+    // Two teams of two: sides 0 and 2 against 1 and 3 (with four playing).
+    public bool Teams => Get(MatchSettingId.Teams) == 1 && Seats == 4;
+    public int TeamOf(int playerId) => Teams ? playerId % 2 : playerId;
     public int StonesFor(int playerId) => Get(playerId switch
     {
         0 => MatchSettingId.BlackStones,

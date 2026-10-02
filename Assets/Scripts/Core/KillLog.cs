@@ -54,9 +54,11 @@ public class KillLog
     private readonly List<(char id, int owner)> removed = new List<(char, int)>();
     private int shooterId;
     private char shotPieceId;
+    private readonly System.Func<int, int> teamOf; // a teammate's piece is a team kill too
 
-    public KillLog(int playerCount)
+    public KillLog(int playerCount, System.Func<int, int> teamOf = null)
     {
+        this.teamOf = teamOf ?? (id => id);
         kills = new int[playerCount];
         nongae = new int[playerCount];
         suicides = new int[playerCount];
@@ -87,12 +89,13 @@ public class KillLog
             Record(fell);
             return;
         }
-        var tradedShotPiece = removed.Any(r => r.id == shotPieceId) && removed.Any(r => r.owner != shooterId);
+        var shooterTeam = teamOf(shooterId);
+        var tradedShotPiece = removed.Any(r => r.id == shotPieceId) && removed.Any(r => teamOf(r.owner) != shooterTeam);
         var events = new List<KillEvent>();
         foreach (var (id, owner) in removed)
         {
             KillKind kind;
-            if (owner != shooterId) kind = tradedShotPiece ? KillKind.Nongae : KillKind.Kill;
+            if (teamOf(owner) != shooterTeam) kind = tradedShotPiece ? KillKind.Nongae : KillKind.Kill;
             else if (id != shotPieceId) kind = KillKind.TeamKill;
             else if (tradedShotPiece) continue; // told by its 논개 kills
             else kind = KillKind.Suicide;

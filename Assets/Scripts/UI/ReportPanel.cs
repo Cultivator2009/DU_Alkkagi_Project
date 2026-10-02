@@ -37,7 +37,7 @@ public class ReportPanel : MonoBehaviour
         bridge = matchBridge;
         count = 0;
         for (var player = 0; player < bridge.PlayerCount && count < players.Length; player++)
-            if (player != bridge.LocalPlayerId) players[count++] = player;
+            if (player != bridge.LocalPlayerId && !bridge.IsBot(player)) players[count++] = player; // no one to report in a bot
         gameObject.SetActive(true);
         Render();
     }

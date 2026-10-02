@@ -75,13 +75,15 @@ public class AIPlanner : IDisposable
     private readonly BothOutRule bothOutRule;
     private readonly IRuleset ruleset;
     private readonly IReadOnlyList<Side> sides;
+    private readonly Func<int, int> teamOf; // a teammate's pieces are as its own
 
     // edgeComing: the edge gives way when this turn ends (ZoneRule), so a
     // piece left on that ground is as good as gone.
-    public AIPlanner(BoardSetup board, IEnumerable<GamePieceDragAndReleaseForce> pieces, IRuleset ruleset, IReadOnlyList<Side> sides, BothOutRule rule, bool edgeComing = false)
+    public AIPlanner(BoardSetup board, IEnumerable<GamePieceDragAndReleaseForce> pieces, IRuleset ruleset, IReadOnlyList<Side> sides, BothOutRule rule, bool edgeComing = false, Func<int, int> teamOf = null)
     {
         this.ruleset = ruleset;
         this.sides = sides;
+        this.teamOf = teamOf ?? (id => id);
         scene = SceneManager.CreateScene("AIPlanner " + Time.frameCount, new CreateSceneParameters(LocalPhysicsMode.Physics3D));
         physics = scene.GetPhysicsScene();
         shape = board.Playable;
@@ -223,7 +225,7 @@ public class AIPlanner : IDisposable
         foreach (var stand in stands)
         {
             if (stand.Source == null) continue; // gone before this turn
-            var mine = stand.Owner == player;
+            var mine = teamOf(stand.Owner) == teamOf(player);
             // A battle of health: knocks cost too, and (A) one that leaves a
             // piece nothing breaks it.
             var damage = Mathf.RoundToInt(stand.Damage);
@@ -261,8 +263,9 @@ public class AIPlanner : IDisposable
         // The match above all, whatever the pieces are worth (health runs to hundreds).
         const float match = 100000f;
         bool Gone(Side side) => ruleset.WouldBeKnockedOut(side, lost[side.Id].pieces, lost[side.Id].value);
-        var mineGone = Gone(sides[player]);
-        var theirsGone = sides.Where(s => s.Id != player && s.Standing).All(Gone);
+        // With teams, a team is out when all of it is.
+        var mineGone = sides.Where(s => teamOf(s.Id) == teamOf(player) && s.Standing).All(Gone);
+        var theirsGone = sides.Where(s => teamOf(s.Id) != teamOf(player) && s.Standing).All(Gone);
         if (theirsGone && !mineGone) score += match;
         else if (mineGone && !theirsGone) score -= match;
         else if (mineGone)
@@ -273,7 +276,7 @@ public class AIPlanner : IDisposable
     private IEnumerable<Candidate> Candidates(int player)
     {
         var mine = stands.Where(s => s.Owner == player && s.Source != null).ToList();
-        var theirs = stands.Where(s => s.Owner != player && s.Source != null).ToList();
+        var theirs = stands.Where(s => teamOf(s.Owner) != teamOf(player) && s.Source != null).ToList();
         foreach (var shooter in mine)
         foreach (var target in theirs)
         {

@@ -93,7 +93,9 @@ public class ResultScreen : MonoBehaviour
         if (hud == null || !IsShown) return;
         var turns = hud.Turns;
         var bridge = hud.Bridge;
-        var sides = GameManager.manager.Sides;
+        var gameManager = GameManager.manager;
+        var teams = gameManager.Teams;
+        var sides = gameManager.Sides;
         var players = sides.Count;
         var loser = 1 - winner; // two sides
         var multi = players > 2;
@@ -111,15 +113,16 @@ public class ResultScreen : MonoBehaviour
         }
         else if (hud.OwnSide.HasValue)
         {
-            // Online and against the AI the result reads from this player's side.
-            var won = winner == hud.OwnSide.Value;
+            // Online and against the AI the result reads from this player's
+            // side (and its team's).
+            var won = gameManager.TeamOf(winner) == gameManager.TeamOf(hud.OwnSide.Value);
             stampText.text = Loc.Get(won ? "win.stamp" : "result.stampLose");
             resultTitleText.text = Loc.Get(won ? "result.win" : "result.lose");
         }
         else
         {
             stampText.text = Loc.Get("win.stamp");
-            resultTitleText.text = Loc.Get("win.title", SideStyle.Name(winner));
+            resultTitleText.text = teams ? Loc.Get("win.team", gameManager.TeamOf(winner) + 1) : Loc.Get("win.title", SideStyle.Name(winner));
         }
 
         // A ranked series that's over reads as the series.
@@ -139,6 +142,7 @@ public class ResultScreen : MonoBehaviour
             MatchEndReason.BothOut when winner < 0 => Loc.Get("reason.bothOutDraw"),
             MatchEndReason.BothOut when MatchSettings.Current.BothOutRule == BothOutRule.ShooterWins => Loc.Get("reason.bothOutWin", SideStyle.Name(winner)),
             MatchEndReason.BothOut => Loc.Get("reason.bothOut", SideStyle.Name(turns.LastPlayerId >= 0 ? turns.LastPlayerId : loser)),
+            MatchEndReason.Knockout when teams => Loc.Get("reason.teamStanding", gameManager.TeamOf(winner) + 1),
             MatchEndReason.Knockout when multi => Loc.Get("reason.lastStanding", SideStyle.Name(winner)),
             _ when multi => Loc.Get("reason.othersGone"),
             MatchEndReason.OpponentLeft => Loc.Get("reason.opponentLeft"),
@@ -195,7 +199,8 @@ public class ResultScreen : MonoBehaviour
         if (bridge.HostGone) status = string.Empty; // the reason line says it
         else if (bridge.OpponentGone && reason != MatchEndReason.OpponentLeft)
             status = multi ? Loc.Get("rematch.othersGone") : Loc.Get(hud.OpponentReturnedToLobby ? "rematch.opponentLobby" : "rematch.opponentLeft");
-        else if (!bridge.RematchFits) status = Loc.Get("rematch.boardPlayers", bridge.OthersPresent + 1);
+        else if (!bridge.RematchFits)
+            status = MatchSettings.Current.Teams && bridge.OthersPresent + 1 != MatchRoster.MaxPlayers ? Loc.Get("rematch.teams") : Loc.Get("rematch.boardPlayers", bridge.OthersPresent + 1);
         else if (multi && wanting > 0)
             status = Loc.Get("rematch.count", wanting, bridge.OthersPresent + 1);
         else if (!multi && bridge.OthersWantingRematch > 0 && !bridge.LocalWantsRematch)

@@ -41,7 +41,7 @@ public class NetworkMatchBridge : MonoBehaviour
     public bool LocalWantsRematch => wantsRematch.Contains(localId);
     // The other players still here, and how many of them asked for a rematch.
     public int OthersPresent => roster.SteamIds.Count(id => id != localId && !gone.Contains(id));
-    public int OthersWantingRematch => roster.SteamIds.Count(id => id != localId && !gone.Contains(id) && wantsRematch.Contains(id));
+    public int OthersWantingRematch => roster.SteamIds.Count(id => id != localId && !gone.Contains(id) && Wants(id));
     public bool OpponentGone => OthersPresent == 0;
     public bool HostGone => gone.Contains(hostId);
     // Whether the lobby's board (as picked: Random rolls among those that
@@ -51,7 +51,9 @@ public class NetworkMatchBridge : MonoBehaviour
         get
         {
             var picked = lobby != null && lobby.CurrentLobby.HasValue ? lobby.ReadLobbySettings() : MatchSettings.Picked;
-            return picked.BoardType == BoardType.Random || MatchSettings.BoardFits(picked.BoardType, OthersPresent + 1);
+            var players = OthersPresent + 1;
+            if (picked.Teams && players != MatchRoster.MaxPlayers) return false; // two teams of two, or no teams match
+            return picked.BoardType == BoardType.Random || MatchSettings.BoardFits(picked.BoardType, players);
         }
     }
     public bool PlayerGone(int playerId) => playerId >= 0 && playerId < roster.Count && gone.Contains(roster.SteamIds[playerId]);
@@ -63,8 +65,14 @@ public class NetworkMatchBridge : MonoBehaviour
     public string PlayerName(int playerId)
     {
         if (playerId < 0 || playerId >= roster.Count) return string.Empty;
+        if (roster.IsBot(playerId)) return Loc.Get("bot." + roster.Who(playerId));
         return SteamClient.IsValid ? new Friend(roster.SteamIds[playerId]).Name : Loc.Get("player.number", playerId + 1);
     }
+
+    public bool IsBot(int playerId) => roster.IsBot(playerId);
+
+    // A bot always wants the rematch.
+    private bool Wants(ulong id) => MatchRoster.IsBotId(id) || wantsRematch.Contains(id);
 
     private NetSession session;
     private NetScope scope;
@@ -92,7 +100,7 @@ public class NetworkMatchBridge : MonoBehaviour
     private readonly Dictionary<char, Vector3> snapshotTargetPosition = new Dictionary<char, Vector3>();
     private readonly Dictionary<char, Quaternion> snapshotTargetRotation = new Dictionary<char, Quaternion>();
 
-    private IEnumerable<ulong> Guests => roster.SteamIds.Skip(1);
+    private IEnumerable<ulong> Guests => roster.SteamIds.Skip(1).Where(id => !MatchRoster.IsBotId(id)); // the bots are the host's
     private TurnController Controller => gameManager.TurnController;
 
     private void Start()
@@ -234,7 +242,7 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         if (!isHost || !LocalWantsRematch) return;
         var present = roster.SteamIds.Where(id => !gone.Contains(id)).ToList();
-        if (present.Count < 2 || !present.All(wantsRematch.Contains) || !RematchFits) return;
+        if (present.Count < 2 || !present.All(Wants) || !RematchFits) return;
         if (Series != null)
         {
             // Both ready for the next game: no need to wait out the clock.
@@ -351,6 +359,14 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         var controller = Controller;
         controller.PieceSelector.LocalPlayerId = localPlayerId;
+        // The host's AI plays its bots' sides, through the same flicks as a guest's.
+        for (var seat = 0; seat < roster.Count; seat++)
+        {
+            if (!roster.IsBot(seat)) continue;
+            var bot = new GameObject("Bot " + seat).AddComponent<AIOpponent>();
+            bot.playerId = seat;
+            bot.level = LocalOpponent.Level(roster.Who(seat));
+        }
         controller.HostPlayerId = localPlayerId;
         controller.RemoteGraceSeconds = GuestFlickGraceSeconds;
         controller.OnTurnStarted += _ => BroadcastTurnResult();

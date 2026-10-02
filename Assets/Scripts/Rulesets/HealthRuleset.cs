@@ -18,7 +18,7 @@ public class HealthRuleset : ClassicRuleset
     public int PieceHealth { get; }
     private readonly int sideHealth;
 
-    public HealthRuleset(BothOutRule bothOutRule, HealthRule rule, int pieceHealth, int sideHealth) : base(bothOutRule)
+    public HealthRuleset(BothOutRule bothOutRule, HealthRule rule, int pieceHealth, int sideHealth, System.Func<int, int> teamOf = null) : base(bothOutRule, teamOf)
     {
         Rule = rule;
         PieceHealth = pieceHealth;

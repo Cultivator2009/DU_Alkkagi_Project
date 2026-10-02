@@ -2,27 +2,35 @@ using UnityEngine;
 
 public enum Opponent : byte
 {
-    Human, // two players at this screen
+    Human, // someone at this screen
     AIEasy,
     AINormal,
     AIHard
 }
 
-// Who a local game's second side is, chosen on the local setup card and
-// remembered for next time. Online games are always two people.
+// Who plays each side of a local game - someone at this screen, or the AI
+// at a level - chosen seat by seat on the local setup card and remembered
+// for next time. A local game of two to four (MatchSettings.Seats); online
+// every seat is a player or the host's bot (MatchRoster).
 public static class LocalOpponent
 {
-    private const string PrefsKey = "local.opponent";
+    private const string PrefsKey = "local.seat";
+    private const string LegacyKey = "local.opponent"; // white's, from before seats
 
-    public static Opponent Current
-    {
-        get => (Opponent)PlayerPrefs.GetInt(PrefsKey, (int)Opponent.Human);
-        set => PlayerPrefs.SetInt(PrefsKey, (int)value);
-    }
+    public static Opponent Of(int seat) => (Opponent)PlayerPrefs.GetInt(PrefsKey + seat, (int)Default(seat));
 
-    public static bool IsAI => Current != Opponent.Human;
+    public static void Set(int seat, Opponent who) => PlayerPrefs.SetInt(PrefsKey + seat, (int)who);
 
-    public static AILevel Level => Current == Opponent.AIEasy ? AILevel.Easy : Current == Opponent.AIHard ? AILevel.Hard : AILevel.Normal;
+    public static bool IsAI(int seat) => Of(seat) != Opponent.Human;
 
-    public static string Name => Loc.Get("opponent." + Current);
+    public static AILevel LevelOf(int seat) => Level(Of(seat));
+
+    public static AILevel Level(Opponent who) => who == Opponent.AIEasy ? AILevel.Easy : who == Opponent.AIHard ? AILevel.Hard : AILevel.Normal;
+
+    public static string Name(int seat) => Loc.Get("opponent." + Of(seat));
+
+    // Black at this screen; white as it was picked before there were seats;
+    // the third and fourth the AI.
+    private static Opponent Default(int seat) =>
+        seat == 0 ? Opponent.Human : seat == 1 ? (Opponent)PlayerPrefs.GetInt(LegacyKey, (int)Opponent.Human) : Opponent.AINormal;
 }

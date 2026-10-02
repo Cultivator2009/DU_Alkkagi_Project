@@ -12,6 +12,8 @@ public class PieceSelector
     // its mouse can never hijack a piece it doesn't physically own, even
     // though it remains the physics authority for every piece.
     public int? LocalPlayerId { get; set; }
+    // Locally against the AI: the sides played at this screen (null: any).
+    public HashSet<int> Players { get; set; }
 
     public PieceSelector(List<GamePieceDragAndReleaseForce> pieces)
     {
@@ -29,7 +31,7 @@ public class PieceSelector
             if (!piece.isSelected || KeyBindings.Down(GameAction.CancelAim)) continue;
 
             var playerIndex = piece.Manager.playerIndex;
-            var mayTake = playerIndex == currentPlayerID && (!LocalPlayerId.HasValue || playerIndex == LocalPlayerId.Value);
+            var mayTake = playerIndex == currentPlayerID && (!LocalPlayerId.HasValue || playerIndex == LocalPlayerId.Value) && (Players == null || Players.Contains(playerIndex));
             if (mayTake && (picked == null || piece.PickRank < picked.PickRank)) picked = piece;
         }
         foreach (var piece in pieces)

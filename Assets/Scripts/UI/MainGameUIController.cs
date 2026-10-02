@@ -121,7 +121,7 @@ public class MainGameUIController : MonoBehaviour
         // locally.
         var lobbyId = SteamLobbyManager.Instance != null && SteamLobbyManager.Instance.CurrentLobby.HasValue ? SteamLobbyManager.Instance.CurrentLobby.Value.Id.Value : 0;
         MatchSeries.Begin(online ? $"lobby:{lobbyId}:{string.Join(",", MatchRoster.Current?.SteamIds ?? new ulong[0])}"
-            : VersusAI ? $"ai:{LocalOpponent.Current}" : "local");
+            : $"local:{string.Join(",", Enumerable.Range(0, PlayerCount).Select(i => LocalOpponent.Of(i)))}");
 
         Arrange(PlayerCount);
         for (var i = 0; i < PlayerCount; i++) playerPanels[i].Build(CountPieces(i));
@@ -181,8 +181,8 @@ public class MainGameUIController : MonoBehaviour
     public bool OpponentReturnedToLobby { get; private set; }
     private static int PlayerCount => GameManager.manager.Sides.Count;
     private static bool VersusAI => GameManager.manager.VersusAI;
-    // The side this screen plays, when it plays just one: online, or against the AI.
-    public int? OwnSide => networkBridge != null ? networkBridge.LocalPlayerId : VersusAI ? 1 - GameManager.manager.AIPlayerId : (int?)null;
+    // The side this screen plays, when it plays just one: online, or alone against the AI.
+    public int? OwnSide => networkBridge != null ? networkBridge.LocalPlayerId : GameManager.manager.SoleHuman >= 0 ? GameManager.manager.SoleHuman : (int?)null;
     // From the match's start (placement included) until its result.
     public bool MatchInProgress => turnController != null && !winnerPlayerId.HasValue;
     public bool CanConcede => turnsStarted && !winnerPlayerId.HasValue && !(OwnSide.HasValue && outSides.ContainsKey(OwnSide.Value));
@@ -371,13 +371,13 @@ public class MainGameUIController : MonoBehaviour
         if (turnController == null || winnerPlayerId.HasValue || playerId != currentPlayerId) return false;
         if (networkBridge != null && !networkBridge.IsHost) return playerId == networkBridge.LocalPlayerId && networkBridge.GuestCanPass;
         if (turnController.State != GameManager.GameState.WaitingForInput) return false;
-        return networkBridge != null ? playerId == networkBridge.LocalPlayerId : playerId != GameManager.manager.AIPlayerId;
+        return networkBridge != null ? playerId == networkBridge.LocalPlayerId : !GameManager.manager.IsAI(playerId);
     }
 
     private bool CanSkip(int playerId)
     {
         if (!turnController.MayPass) return false; // the edge is coming in
-        if (networkBridge == null) return turnController.IsAwaitingShot && playerId != GameManager.manager.AIPlayerId; // hot seat: whoever's turn it is
+        if (networkBridge == null) return turnController.IsAwaitingShot && !GameManager.manager.IsAI(playerId); // hot seat: whoever's turn it is
         if (playerId != networkBridge.LocalPlayerId) return false;
         return networkBridge.IsHost ? turnController.IsAwaitingShot : networkBridge.GuestCanPass;
     }
@@ -506,7 +506,8 @@ public class MainGameUIController : MonoBehaviour
         winnerPlayerId = winnerId;
         if (reason != MatchEndReason.HostLeft) MatchSeries.Record(winnerId);
         var bank = GameAudio.Bank;
-        var lost = OwnSide.HasValue && winnerId >= 0 && winnerId != OwnSide.Value;
+        var gameManager = GameManager.manager;
+        var lost = OwnSide.HasValue && winnerId >= 0 && gameManager.TeamOf(winnerId) != gameManager.TeamOf(OwnSide.Value);
         GameAudio.PlayInterface(winnerId < 0 ? bank.draw : lost ? bank.lose : bank.win);
         result.Show(this, winnerId, reason, matchSeconds);
         Render();
@@ -543,7 +544,8 @@ public class MainGameUIController : MonoBehaviour
     private string PlayerLabel(int playerId)
     {
         var number = networkBridge != null ? networkBridge.PlayerName(playerId)
-            : playerId == GameManager.manager.AIPlayerId ? LocalOpponent.Name : Loc.Get("player.number", playerId + 1);
+            : GameManager.manager.IsAI(playerId) ? LocalOpponent.Name(playerId) : Loc.Get("player.number", playerId + 1);
+        if (GameManager.manager.Teams) number = Loc.Get("team.tag", number, GameManager.manager.TeamOf(playerId) + 1);
         return MatchSeries.Played > 0 ? Loc.Get("series.panel", number, MatchSeries.Wins(playerId)) : number;
     }
 
