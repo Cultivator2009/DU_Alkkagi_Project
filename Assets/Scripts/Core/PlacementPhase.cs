@@ -120,7 +120,7 @@ public class PlacementPhase
         if (!CanAct(player) || !byId.TryGetValue(id, out var stone) || stone.playerIndex != player) return false;
         var moving = placed.ContainsKey(id);
         if (moving && !CanMoveStones) return false;
-        if (!board.InZone(player, position, stone.radius) || !board.IsClear(position, stone.radius, Occupied(id))) return false;
+        if (!board.InZone(player, position, stone.radius) || !board.IsClear(stone, position, Occupied(id))) return false;
 
         placed[id] = board.ClampToZone(player, position, stone.radius);
         if (IsAuthority && Style == PlacementStyle.Alternating)
@@ -196,14 +196,14 @@ public class PlacementPhase
         foreach (var stone in stones[player])
         {
             if (placed.ContainsKey(stone.pieceID)) continue;
-            placed[stone.pieceID] = board.RandomFreePosition(player, stone.radius, Occupied(stone.pieceID).ToList(), random);
+            placed[stone.pieceID] = board.RandomFreePosition(player, stone, Occupied(stone.pieceID).ToList(), random);
         }
     }
 
-    // Every placed piece but `except`, with its size.
-    private IEnumerable<(Vector3 position, float radius)> Occupied(char except)
+    // Every placed piece but `except`, and where.
+    public IEnumerable<(GamePieceManager piece, Vector3 position)> Occupied(char except)
     {
-        return placed.Where(kv => kv.Key != except).Select(kv => (kv.Value, byId[kv.Key].radius));
+        return placed.Where(kv => kv.Key != except).Select(kv => (byId[kv.Key], kv.Value));
     }
 
     private void Advance()

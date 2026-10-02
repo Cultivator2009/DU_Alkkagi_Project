@@ -44,6 +44,9 @@ public sealed class BoardShape
         this.parts = parts.Where(p => p != null && p.Length >= 3).ToArray();
     }
 
+    // Convex polygons, anticlockwise, as they are.
+    public static BoardShape Of(IEnumerable<Vector2[]> polygons) => new BoardShape(polygons);
+
     public IReadOnlyList<Vector2[]> Parts => parts;
     public bool IsEmpty => parts.Length == 0;
 
@@ -83,6 +86,28 @@ public sealed class BoardShape
             if (ok && Area(corners) > 1e-4f) inset.Add(corners);
         }
         return new BoardShape(inset);
+    }
+
+    // What lies on one side of a line: where Dot(point, normal) is at least
+    // offset. Each part is cut along it; one wholly past it goes.
+    public BoardShape Clip(Vector2 normal, float offset)
+    {
+        var kept = new List<Vector2[]>();
+        foreach (var part in parts)
+        {
+            var cut = new List<Vector2>();
+            for (var i = 0; i < part.Length; i++)
+            {
+                var a = part[i];
+                var b = part[(i + 1) % part.Length];
+                var da = Vector2.Dot(a, normal) - offset;
+                var db = Vector2.Dot(b, normal) - offset;
+                if (da >= 0) cut.Add(a);
+                if ((da >= 0) != (db >= 0)) cut.Add(a + (b - a) * (da / (da - db)));
+            }
+            if (cut.Count >= 3 && Area(cut.ToArray()) > 1e-6f) kept.Add(cut.ToArray());
+        }
+        return new BoardShape(kept);
     }
 
     // Inside some part, at least margin from its edges.

@@ -21,12 +21,6 @@ public class BoardVariant : MonoBehaviour
     public Rect uvRect;          // where the top's texture lies, in (x, z)
     public PhysicsMaterial physics;
 
-    // The south side's zone in (x, z) for a go-stone-sized piece (radius
-    // 0.1) when two play; larger pieces keep further in. Every other side's
-    // is the same turned to face its own edge.
-    public Rect blackZone = new Rect(-1.35f, -1.35f, 2.7f, 1.05f);
-    // Three or four sides: across the side's edge (x), and in from it (y).
-    public Rect multiZone = Rect.MinMaxRect(-0.7f, 0.15f, 0.7f, 0.7f);
     // Three or four sides' starting rows: pieces this far apart, a front row
     // and one behind it, this far in from the edge.
     public float multiSpacing = 0.32f;
@@ -110,10 +104,31 @@ public class BoardVariant : MonoBehaviour
         else DestroyImmediate(thing);
     }
 
-    // Tops (submesh 0) and sides (submesh 1). Where rectangular parts
-    // overlap, a later one's top leaves out what an earlier one covers, so
-    // no bit of the surface is drawn twice. A side inside another part is
-    // under its top, out of sight.
+    // The surface in pieces that don't overlap: where rectangular parts
+    // overlap, a later one leaves out what an earlier one covers. For
+    // drawing on the board (the top, the placement zones) without any bit
+    // drawn twice.
+    public static List<Vector2[]> TopPieces(BoardShape board)
+    {
+        var pieces = new List<Vector2[]>();
+        var covered = new List<Rect>();
+        foreach (var part in board.Parts)
+        {
+            if (!BoardShape.IsRect(part, out var rect))
+            {
+                pieces.Add(part);
+                continue;
+            }
+            var left = new List<Rect> { rect };
+            foreach (var earlier in covered) left = left.SelectMany(r => Subtract(r, earlier)).ToList();
+            covered.Add(rect);
+            pieces.AddRange(left.Select(r => BoardPart.Rect(r).corners));
+        }
+        return pieces;
+    }
+
+    // Tops (submesh 0, TopPieces) and sides (submesh 1). A side inside
+    // another part is under its top, out of sight.
     private Mesh Mesh(BoardShape board)
     {
         var vertices = new List<Vector3>();
@@ -121,29 +136,19 @@ public class BoardVariant : MonoBehaviour
         var uvs = new List<Vector2>();
         var tops = new List<int>();
         var sides = new List<int>();
-        var covered = new List<Rect>();
+        foreach (var piece in TopPieces(board))
+        {
+            var first = vertices.Count;
+            foreach (var corner in piece)
+            {
+                vertices.Add(new Vector3(corner.x, 0, corner.y));
+                normals.Add(Vector3.up);
+                uvs.Add(new Vector2((corner.x - uvRect.xMin) / uvRect.width, (corner.y - uvRect.yMin) / uvRect.height));
+            }
+            for (var i = 1; i < piece.Length - 1; i++) tops.AddRange(new[] { first, first + i + 1, first + i });
+        }
         foreach (var part in board.Parts)
         {
-            var pieces = new List<Vector2[]> { part };
-            if (BoardShape.IsRect(part, out var rect))
-            {
-                var left = new List<Rect> { rect };
-                foreach (var earlier in covered) left = left.SelectMany(r => Subtract(r, earlier)).ToList();
-                covered.Add(rect);
-                pieces = left.Select(r => BoardPart.Rect(r).corners).ToList();
-            }
-            foreach (var piece in pieces)
-            {
-                var first = vertices.Count;
-                foreach (var corner in piece)
-                {
-                    vertices.Add(new Vector3(corner.x, 0, corner.y));
-                    normals.Add(Vector3.up);
-                    uvs.Add(new Vector2((corner.x - uvRect.xMin) / uvRect.width, (corner.y - uvRect.yMin) / uvRect.height));
-                }
-                for (var i = 1; i < piece.Length - 1; i++) tops.AddRange(new[] { first, first + i + 1, first + i });
-            }
-
             for (var i = 0; i < part.Length; i++)
             {
                 var a = part[i];

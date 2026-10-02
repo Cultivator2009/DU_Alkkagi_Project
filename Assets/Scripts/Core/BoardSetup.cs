@@ -16,7 +16,7 @@ using UnityEngine;
 public class BoardSetup : MonoBehaviour
 {
     public const int MaxStones = 12;
-    public const float StoneRadius = 0.1f; // a go stone; zones are drawn for this size
+    public const float StoneRadius = 0.1f; // a go stone
 
     // A janggi piece size, as on a real set: the general, the four major
     // pieces, then the guards and soldiers.
@@ -105,7 +105,6 @@ public class BoardSetup : MonoBehaviour
         _ => 3,
     };
 
-    public float gap = 0.02f; // between two pieces placed side by side
     public Color zoneColor = new Color(0.18f, 0.14f, 0.10f, 0.10f);
     public Color activeZoneColor = new Color(0.70f, 0.19f, 0.16f, 0.22f);
 
@@ -126,7 +125,7 @@ public class BoardSetup : MonoBehaviour
     private readonly Dictionary<char, Quaternion> spawnRotations = new Dictionary<char, Quaternion>(); // how each piece first stood, facing its side
     private readonly System.Random respawnRandom = new System.Random();
     private PieceType pieceType;
-    private SpriteRenderer[] zoneMarkers;
+    private MeshRenderer[] zoneMarkers;
 
     private BoardVariant ActiveOrFirst => Active != null ? Active : boards[0];
 
@@ -168,6 +167,7 @@ public class BoardSetup : MonoBehaviour
                 manager.pieceID = PieceId(player, i);
                 spawnRotations[manager.pieceID] = piece.transform.rotation;
                 values[manager.pieceID] = manager.value;
+                manager.footprint = Footprint.Of(piece.gameObject);
                 piece.gameObject.SetActive(true);
                 pieces.Add(piece);
             }
@@ -250,6 +250,12 @@ public class BoardSetup : MonoBehaviour
     {
         foreach (var material in stoneMaterials.Values) Destroy(material);
         foreach (var material in sideMaterials.Values) Destroy(material);
+        if (zoneMarkers == null) return;
+        foreach (var marker in zoneMarkers)
+        {
+            Destroy(marker.GetComponent<MeshFilter>().sharedMesh);
+            Destroy(marker.sharedMaterial);
+        }
     }
 
     // Letters face their owner's edge. Mass goes with volume against a go
@@ -453,80 +459,89 @@ public class BoardSetup : MonoBehaviour
 
     // ---- Zones ----
 
-    // Where the center of a piece of this radius may go, in the side's own
-    // frame (the south side's, turned by its seat's angle): the board's
-    // zone, pulled in for pieces bigger than a go stone. With three or four
-    // sides it's narrower and short of the middle, clear of the neighbours',
-    // and measured in from the side's own edge.
-    public Rect Zone(int player, float radius = StoneRadius)
+    // Placing by hand (SpawnMode.Placement), a piece's body has to lie in
+    // its side's zone and clear of every other piece's (Footprint).
+    private const float ZoneDepth = 0.8f;   // no further in than this share of the way from the side's edge to the middle
+    private const float ZoneGap = 0.04f;    // a zone keeps this clear of the line it shares with a neighbour's
+    private const float EdgeMargin = 0.01f; // in from the board's edge
+    private const float Gap = 0.005f;       // between two pieces side by side, outline to outline (was 0.02 between circles)
+
+    // A side's zone: its share of the board - where it's nearer the side's
+    // own edge than any other side's, as a share of the way in from each
+    // edge to the middle (on a square board, the triangle between the
+    // diagonals) - no further in than ZoneDepth. The board decides its
+    // shape; the parts may overlap (the cross's bars), so for drawing it
+    // goes from the board's TopPieces instead.
+    public BoardShape Zone(int player) => Zone(player, ActiveOrFirst.Shape.Inset(EdgeMargin));
+
+    private BoardShape Zone(int player, BoardShape board)
     {
-        var board = ActiveOrFirst;
-        var zone = board.blackZone;
-        if (Players > 2)
-        {
-            var edge = EdgeDistance(player);
-            zone = Rect.MinMaxRect(board.multiZone.xMin, -(edge - board.multiZone.yMin), board.multiZone.xMax, -(edge - board.multiZone.yMax));
-        }
-        var inset = Mathf.Max(0, radius - StoneRadius);
-        return Rect.MinMaxRect(zone.xMin + inset, zone.yMin + inset, zone.xMax - inset, zone.yMax - inset);
+        var own = SeatDirection(player) / EdgeDistance(player);
+        for (var other = 0; other < Players; other++)
+            if (other != player) board = board.Clip((own - SeatDirection(other) / EdgeDistance(other)).normalized, ZoneGap);
+        return board.Clip(SeatDirection(player), EdgeDistance(player) * (1 - ZoneDepth));
     }
 
-    // Edges count as inside: ClampToZone lands exactly on them, and
-    // Rect.Contains would turn every stone dragged to the edge away.
-    public bool InZone(int player, Vector3 position, float radius)
-    {
-        var zone = Zone(player, radius);
-        var local = ToSeat(player, new Vector2(position.x, position.z));
-        return local.x >= zone.xMin - 1e-4f && local.x <= zone.xMax + 1e-4f && local.y >= zone.yMin - 1e-4f && local.y <= zone.yMax + 1e-4f;
-    }
+    // Edges count as inside: ClampToZone lands exactly on them, and would
+    // otherwise turn every piece dragged to the edge away.
+    public bool InZone(int player, Vector3 position, float radius) => Zone(player).Contains(new Vector2(position.x, position.z), radius - 1e-4f);
 
+    // The nearest point to position where a piece of this size is in the zone.
     public Vector3 ClampToZone(int player, Vector3 position, float radius)
     {
-        var zone = Zone(player, radius);
-        var local = ToSeat(player, new Vector2(position.x, position.z));
-        return OnBoard(FromSeat(player, new Vector2(Mathf.Clamp(local.x, zone.xMin, zone.xMax), Mathf.Clamp(local.y, zone.yMin, zone.yMax))));
+        var point = new Vector2(position.x, position.z);
+        var zone = Zone(player);
+        if (zone.Contains(point, radius)) return OnBoard(point);
+        var room = zone.Inset(radius);
+        return OnBoard(room.IsEmpty ? zone.Closest(point) : room.Closest(point));
     }
 
-    public bool IsClear(Vector3 position, float radius, IEnumerable<(Vector3 position, float radius)> others)
+    // Clear of every piece in others, outline to outline, by Gap.
+    public bool IsClear(GamePieceManager piece, Vector3 position, IEnumerable<(GamePieceManager piece, Vector3 position)> others)
     {
-        foreach (var other in others)
+        var at = new Vector2(position.x, position.z);
+        foreach (var (other, otherAt) in others)
         {
-            var dx = other.position.x - position.x;
-            var dz = other.position.z - position.z;
-            var min = radius + other.radius + gap;
-            if (dx * dx + dz * dz < min * min) return false;
+            var there = new Vector2(otherAt.x, otherAt.z);
+            // Too far apart to touch: no need to look closer.
+            if ((there - at).sqrMagnitude > Sq(piece.radius + other.radius + Gap)) continue;
+            if (!Footprint.Apart(piece.footprint, at, other.footprint, there, Gap)) return false;
         }
         return true;
     }
+
+    private static float Sq(float x) => x * x;
 
     // A random spot in the zone clear of every piece in `occupied`, on what's
     // left of the board. Falls back to scanning the zone on a grid, which
     // with 12 pieces always finds room - unless the board has crumbled away
     // under it, when the spot goes as near the side's edge as there's board.
-    public Vector3 RandomFreePosition(int player, float radius, List<(Vector3 position, float radius)> occupied, System.Random random)
+    public Vector3 RandomFreePosition(int player, GamePieceManager piece, List<(GamePieceManager piece, Vector3 position)> occupied, System.Random random)
     {
-        var zone = Zone(player, radius);
+        var zone = Zone(player);
+        var bounds = zone.Bounds;
         var playable = Playable;
-        bool Free(Vector2 local, out Vector3 world)
+        var radius = piece.radius;
+        bool Free(Vector2 point, bool inZone, out Vector3 world)
         {
-            world = OnBoard(FromSeat(player, local));
-            return playable.Contains(new Vector2(world.x, world.z), radius) && IsClear(world, radius, occupied);
+            world = OnBoard(point);
+            return (!inZone || zone.Contains(point, radius)) && playable.Contains(point, radius) && IsClear(piece, world, occupied);
         }
         for (var attempt = 0; attempt < 200; attempt++)
         {
-            var local = new Vector2(zone.xMin + (float)random.NextDouble() * zone.width, zone.yMin + (float)random.NextDouble() * zone.height);
-            if (Free(local, out var world)) return world;
+            var point = new Vector2(bounds.xMin + (float)random.NextDouble() * bounds.width, bounds.yMin + (float)random.NextDouble() * bounds.height);
+            if (Free(point, true, out var world)) return world;
         }
-        var step = radius + gap;
-        for (var z = zone.yMin; z <= zone.yMax; z += step)
-        for (var x = zone.xMin; x <= zone.xMax; x += step)
-            if (Free(new Vector2(x, z), out var world)) return world;
+        var step = radius / 2;
+        for (var z = bounds.yMin; z <= bounds.yMax; z += step)
+        for (var x = bounds.xMin; x <= bounds.xMax; x += step)
+            if (Free(new Vector2(x, z), true, out var world)) return world;
         // In from the side's edge, and across, until there's board and room.
         for (var z = -EdgeDistance(player); z <= 0; z += step)
-        for (var x = 0f; x <= zone.width; x += step)
+        for (var x = 0f; x <= EdgeDistance(player); x += step)
         {
-            if (Free(new Vector2(x, z), out var right)) return right;
-            if (Free(new Vector2(-x, z), out var left)) return left;
+            if (Free(FromSeat(player, new Vector2(x, z)), false, out var right)) return right;
+            if (Free(FromSeat(player, new Vector2(-x, z)), false, out var left)) return left;
         }
         return OnBoard(Vector2.zero);
     }
@@ -547,8 +562,8 @@ public class BoardSetup : MonoBehaviour
     {
         var manager = piece.Manager;
         var occupied = pieces.Where(p => p != null && p != piece && !p.IsParked)
-            .Select(p => (p.transform.position, p.Manager.radius)).ToList();
-        var position = RandomFreePosition(manager.playerIndex, manager.radius, occupied, respawnRandom);
+            .Select(p => (p.Manager, p.transform.position)).ToList();
+        var position = RandomFreePosition(manager.playerIndex, manager, occupied, respawnRandom);
         piece.Unpark(position, spawnRotations.TryGetValue(manager.pieceID, out var rotation) ? rotation : piece.transform.rotation);
     }
 
@@ -576,7 +591,7 @@ public class BoardSetup : MonoBehaviour
         if (zoneMarkers == null) zoneMarkers = Enumerable.Range(0, Players).Select(CreateZoneMarker).ToArray();
         for (var player = 0; player < zoneMarkers.Length; player++)
         {
-            zoneMarkers[player].color = active(player) ? activeZoneColor : zoneColor;
+            zoneMarkers[player].sharedMaterial.color = active(player) ? activeZoneColor : zoneColor;
             zoneMarkers[player].gameObject.SetActive(true);
         }
     }
@@ -613,30 +628,44 @@ public class BoardSetup : MonoBehaviour
             foreach (var marker in zoneMarkers) marker.gameObject.SetActive(false);
     }
 
-    private SpriteRenderer CreateZoneMarker(int player)
+    // The zone tinted flat just above the board, from the board's
+    // TopPieces so where its parts overlap isn't tinted twice.
+    private MeshRenderer CreateZoneMarker(int player)
     {
-        var zone = Zone(player);
-        var marker = new GameObject($"Zone{player}").AddComponent<SpriteRenderer>();
+        var zone = Zone(player, BoardShape.Of(BoardVariant.TopPieces(ActiveOrFirst.Shape)));
+        var vertices = new List<Vector3>();
+        var triangles = new List<int>();
+        foreach (var part in zone.Parts)
+        {
+            var first = vertices.Count;
+            foreach (var corner in part) vertices.Add(new Vector3(corner.x, 0.003f, corner.y));
+            for (var i = 1; i < part.Length - 1; i++) triangles.AddRange(new[] { first, first + i + 1, first + i });
+        }
+        var mesh = new Mesh { name = $"Zone {player}" };
+        mesh.SetVertices(vertices);
+        mesh.SetTriangles(triangles, 0);
+        mesh.RecalculateBounds();
+
+        var marker = new GameObject($"Zone{player}");
         marker.transform.SetParent(transform, false);
-        marker.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 4);
-        // Flat on the board, just above the surface; sprite height runs along z.
-        var center = FromSeat(player, zone.center);
-        marker.transform.SetPositionAndRotation(new Vector3(center.x, 0.003f, center.y), Facing(player) * Quaternion.Euler(90, 0, 0));
-        // Pad by a stone radius so the tint covers the stones, not just their centers.
-        marker.transform.localScale = new Vector3(zone.width + 2 * StoneRadius, zone.height + 2 * StoneRadius, 1);
-        return marker;
+        marker.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+        marker.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var renderer = marker.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = new Material(Shader.Find("Sprites/Default"));
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+        return renderer;
     }
 
     private void OnDrawGizmos()
     {
         if (boards == null || boards.Length == 0 || boards[0] == null || boards[0].parts == null) return;
-        for (var player = 0; player < 2; player++)
+        for (var player = 0; player < Players; player++)
         {
-            var zone = Zone(player);
             Gizmos.color = player == 0 ? new Color(0.1f, 0.1f, 0.1f, 0.8f) : new Color(1f, 1f, 1f, 0.8f);
-            var corners = new[] { zone.min, new Vector2(zone.xMax, zone.yMin), zone.max, new Vector2(zone.xMin, zone.yMax) }.Select(c => FromSeat(player, c)).ToArray();
-            for (var i = 0; i < 4; i++)
-                Gizmos.DrawLine(new Vector3(corners[i].x, 0.01f, corners[i].y), new Vector3(corners[(i + 1) % 4].x, 0.01f, corners[(i + 1) % 4].y));
+            foreach (var part in Zone(player).Parts)
+                for (var i = 0; i < part.Length; i++)
+                    Gizmos.DrawLine(new Vector3(part[i].x, 0.01f, part[i].y), new Vector3(part[(i + 1) % part.Length].x, 0.01f, part[(i + 1) % part.Length].y));
         }
     }
 }

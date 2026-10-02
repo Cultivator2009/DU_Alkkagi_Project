@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 // The AI side of a local game. On its turn it plans a shot on a copy of the
@@ -89,13 +90,8 @@ public class AIOpponent : MonoBehaviour
                 phase.TryReady(playerId);
                 break;
             }
-            var occupied = new List<(Vector3 position, float radius)>();
-            foreach (var piece in gameManager.gamePieceScripts)
-            {
-                var manager = piece.Manager;
-                if (phase.TryGetPosition(manager.pieceID, out var at)) occupied.Add((at, manager.radius));
-            }
-            phase.TryPlace(playerId, next.pieceID, gameManager.Board.RandomFreePosition(playerId, next.radius, occupied, random));
+            var occupied = phase.Occupied(next.pieceID).ToList();
+            phase.TryPlace(playerId, next.pieceID, gameManager.Board.RandomFreePosition(playerId, next, occupied, random));
             if (phase.Style == PlacementStyle.Alternating) break;
             yield return new WaitForSeconds(0.15f);
         }

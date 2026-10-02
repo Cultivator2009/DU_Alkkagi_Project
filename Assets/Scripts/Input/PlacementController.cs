@@ -2,7 +2,10 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 
 // Mouse input and board view for the placement phase: click inside your
-// zone to put down your next stone, drag a placed one to move it. Online it
+// zone to put down your next stone, drag a placed one to move it. A see-
+// through copy of the stone shows where a click would put it, green where
+// it may go and red where it may not (out of the zone, or on another
+// piece); a stone being dragged is tinted the same way. Online it
 // acts for this machine's player and routes through NetworkMatchBridge (the
 // host owns the rules); in a local hot-seat game it acts for whoever's
 // turn it is to place.
@@ -12,6 +15,11 @@ public class PlacementController : MonoBehaviour
     private NetworkMatchBridge bridge;
     private GamePieceDragAndReleaseForce dragging;
     private Plane boardPlane;
+    private GameObject ghost;
+    private GamePieceManager ghostOf;
+    private Material ghostMaterial;
+    private static readonly Color GhostOk = new Color(0.30f, 0.78f, 0.38f, 0.5f);
+    private static readonly Color GhostBlocked = new Color(0.86f, 0.22f, 0.16f, 0.5f);
 
     // The player this screen places for right now, or -1.
     public int Actor
@@ -51,6 +59,7 @@ public class PlacementController : MonoBehaviour
         if (phase == null || gameManager.gameState != GameManager.GameState.Placement)
         {
             dragging = null;
+            HideGhost();
             return;
         }
 
@@ -59,6 +68,7 @@ public class PlacementController : MonoBehaviour
         if (player < 0 || !phase.CanAct(player))
         {
             dragging = null;
+            HideGhost();
             PieceOutline.For(mainCamera).Set(PieceOutline.Mark.Hover, null);
             return;
         }
@@ -67,7 +77,20 @@ public class PlacementController : MonoBehaviour
         var movable = under != null && under.Manager.playerIndex == player && phase.CanMoveStones && (dragging != null || !IsPointerOverUI());
         PieceOutline.For(mainCamera).Set(PieceOutline.Mark.Hover, movable ? under : null);
         var board = gameManager.Board;
-        if (!TryGetBoardPoint(board, player, out var point)) return;
+        if (!TryGetBoardPoint(board, player, out var point))
+        {
+            HideGhost();
+            return;
+        }
+
+        var next = phase.NextUnplaced(player);
+        if (dragging == null)
+        {
+            // Where a click would put the next stone, unless it would pick one up.
+            var free = next != null && under == null && !IsPointerOverUI() && !CameraRig.Busy;
+            if (free) ShowGhost(next, point, MayGo(phase, board, player, next, point));
+            else HideGhost();
+        }
 
         if (Input.GetMouseButtonDown(0) && !IsPointerOverUI() && !CameraRig.Busy)
         {
@@ -77,10 +100,10 @@ public class PlacementController : MonoBehaviour
                 var manager = hit.Manager;
                 if (manager.playerIndex == player && phase.CanMoveStones) dragging = hit;
             }
-            else
+            else if (next != null)
             {
-                var next = phase.NextUnplaced(player);
-                if (next != null && board.InZone(player, point, next.radius)) Place(phase, player, next.pieceID, point);
+                if (MayGo(phase, board, player, next, point)) Place(phase, player, next.pieceID, point);
+                else GameAudio.PlayInterface(GameAudio.Bank.cancel, 0.4f);
             }
         }
 
@@ -88,9 +111,12 @@ public class PlacementController : MonoBehaviour
         // A pan or the free look drops the stone where it is.
         if (Input.GetMouseButton(0) && !CameraRig.Busy)
         {
-            dragging.transform.position = board.ClampToZone(player, point, dragging.Manager.radius);
+            var at = board.ClampToZone(player, point, dragging.Manager.radius);
+            dragging.transform.position = at;
+            ShowGhost(dragging.Manager, at, board.IsClear(dragging.Manager, at, phase.Occupied(dragging.Manager.pieceID)));
             return;
         }
+        HideGhost();
         // Released: keep it there if the spot is clear, otherwise the next
         // view refresh puts it back where it was.
         var id = dragging.Manager.pieceID;
@@ -124,6 +150,52 @@ public class PlacementController : MonoBehaviour
         GameAudio.PlayBoard(GameAudio.Bank.place, 0.7f, Random.Range(0.94f, 1.06f), BoardSounds.Pan(position));
         if (Bridge != null && !Bridge.IsHost) Bridge.RequestPlace(id, position);
         else phase.TryPlace(player, id, position);
+    }
+
+    private static bool MayGo(PlacementPhase phase, BoardSetup board, int player, GamePieceManager piece, Vector3 at) =>
+        board.InZone(player, at, piece.radius) && board.IsClear(piece, at, phase.Occupied(piece.pieceID));
+
+    // A see-through copy of the piece's meshes, standing as it does, tinted
+    // by whether it may go there. Built once per piece shown.
+    private void ShowGhost(GamePieceManager piece, Vector3 at, bool ok)
+    {
+        if (ghostOf != piece)
+        {
+            if (ghost != null) Destroy(ghost);
+            if (ghostMaterial == null) ghostMaterial = new Material(Shader.Find("Sprites/Default"));
+            ghost = new GameObject("PlacementGhost");
+            var root = piece.transform;
+            foreach (var filter in piece.GetComponentsInChildren<MeshFilter>(true))
+            {
+                if (filter.sharedMesh == null) continue;
+                var part = new GameObject(filter.name);
+                part.transform.SetParent(ghost.transform, false);
+                part.transform.localPosition = root.InverseTransformPoint(filter.transform.position);
+                part.transform.localRotation = Quaternion.Inverse(root.rotation) * filter.transform.rotation;
+                part.transform.localScale = filter.transform.lossyScale;
+                part.AddComponent<MeshFilter>().sharedMesh = filter.sharedMesh;
+                var renderer = part.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = ghostMaterial;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+            // A touch bigger, so it tints a dragged stone rather than fighting it for depth.
+            ghost.transform.localScale = Vector3.one * 1.03f;
+            ghostOf = piece;
+        }
+        ghost.transform.SetPositionAndRotation(at, piece.transform.rotation);
+        ghostMaterial.color = ok ? GhostOk : GhostBlocked;
+        ghost.SetActive(true);
+    }
+
+    private void HideGhost()
+    {
+        if (ghost != null) ghost.SetActive(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (ghost != null) Destroy(ghost);
+        if (ghostMaterial != null) Destroy(ghostMaterial);
     }
 
     private bool TryGetBoardPoint(BoardSetup board, int player, out Vector3 point)

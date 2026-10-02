@@ -42,11 +42,9 @@ internal static class BoardBuilder
     private const float GoWidth = 42.42f * ChessPieceMesh.UnitsPerCm;
     private const float Width = 2.8f;  // janggi: 9 files
     private const float Depth = 3.0f;  // 10 ranks, player to player
-    private static readonly Rect BlackZone = new Rect(-1.25f, -1.35f, 2.5f, 1.05f); // go's too, now it's as narrow
     private static readonly float[] HingeX = { -0.8f, 0.8f };
     private const float ChessBorder = 2.2f * ChessPieceMesh.UnitsPerCm;
     private static float ChessSize => 8 * BoardSetup.ChessSquare + 2 * ChessBorder;
-    private static readonly Rect ChessZone = new Rect(-1.45f, -1.5f, 2.9f, 1.1f);
 
     [MenuItem("Tools/Alkkagi/Build boards and piece templates")]
     private static void Build()
@@ -111,7 +109,6 @@ internal static class BoardBuilder
             Object.DestroyImmediate(quad.gameObject);
         }
         Rectangle(go, GoWidth, Depth);
-        go.blackZone = BlackZone;
         go.Build();
         EditorUtility.SetDirty(go);
     }
@@ -168,7 +165,6 @@ internal static class BoardBuilder
         variant.sideMaterial = Material("JanggiBoardSide", new Color(0.86f, 0.70f, 0.44f), 0.25f, 0);
         variant.physics = go.physics;
         Rectangle(variant, Width, Depth);
-        variant.blackZone = BlackZone;
         variant.Build();
         root.gameObject.SetActive(false); // BoardSetup turns on the one in play
         return variant;
@@ -278,7 +274,6 @@ internal static class BoardBuilder
         variant.sideMaterial = Material(ChessDir, "ChessBoardSide", new Color(0.36f, 0.24f, 0.15f), 0.3f, 0);
         variant.physics = go.physics;
         Rectangle(variant, size, size);
-        variant.blackZone = ChessZone;
         variant.Build();
         root.gameObject.SetActive(false);
         return variant;
@@ -301,7 +296,6 @@ internal static class BoardBuilder
         variant.topMaterial = top;
         variant.sideMaterial = Material(BoardsDir, "HexagonBoardSide", new Color(0.55f, 0.36f, 0.20f), 0.3f, 0);
         variant.physics = go.physics;
-        variant.blackZone = Rect.MinMaxRect(-0.75f, -1.4f, 0.75f, -0.4f);
         variant.multiSpacing = 0.28f;
         variant.sceneLayouts = false;
         variant.seats3 = new[] { 0f, 240f, 120f };
@@ -328,8 +322,6 @@ internal static class BoardBuilder
         variant.topMaterial = top;
         variant.sideMaterial = Material(BoardsDir, "CrossBoardSide", new Color(0.62f, 0.44f, 0.26f), 0.3f, 0);
         variant.physics = go.physics;
-        variant.blackZone = Rect.MinMaxRect(-0.8f, -2.25f, 0.8f, -1.2f);
-        variant.multiZone = Rect.MinMaxRect(-0.75f, 0.15f, 0.75f, 0.75f);
         variant.multiSpacing = 0.28f;
         variant.sceneLayouts = false;
         variant.Build();

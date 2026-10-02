@@ -3646,18 +3646,6 @@ MonoBehaviour:
     width: 3.30033
     height: 3.30033
   physics: {fileID: 13400000, guid: 4d115bc322a37834bbb65600e1f87568, type: 2}
-  blackZone:
-    serializedVersion: 2
-    x: -1.45
-    y: -1.5
-    width: 2.9
-    height: 1.1
-  multiZone:
-    serializedVersion: 2
-    x: -0.7
-    y: 0.15
-    width: 1.4
-    height: 0.54999995
   multiSpacing: 0.32
   multiFront: 0.5
   multiBack: 0.2
@@ -4246,18 +4234,6 @@ MonoBehaviour:
     width: 2.8
     height: 3
   physics: {fileID: 13400000, guid: 4d115bc322a37834bbb65600e1f87568, type: 2}
-  blackZone:
-    serializedVersion: 2
-    x: -1.25
-    y: -1.35
-    width: 2.5
-    height: 1.05
-  multiZone:
-    serializedVersion: 2
-    x: -0.7
-    y: 0.15
-    width: 1.4
-    height: 0.54999995
   multiSpacing: 0.32
   multiFront: 0.5
   multiBack: 0.2
@@ -5356,18 +5332,6 @@ MonoBehaviour:
     width: 2.8
     height: 3
   physics: {fileID: 13400000, guid: 4d115bc322a37834bbb65600e1f87568, type: 2}
-  blackZone:
-    serializedVersion: 2
-    x: -1.25
-    y: -1.35
-    width: 2.5
-    height: 1.05
-  multiZone:
-    serializedVersion: 2
-    x: -0.7
-    y: 0.15
-    width: 1.4
-    height: 0.54999995
   multiSpacing: 0.32
   multiFront: 0.5
   multiBack: 0.2
@@ -9526,18 +9490,6 @@ MonoBehaviour:
     width: 4.8
     height: 4.8
   physics: {fileID: 13400000, guid: 4d115bc322a37834bbb65600e1f87568, type: 2}
-  blackZone:
-    serializedVersion: 2
-    x: -0.8
-    y: -2.25
-    width: 1.6
-    height: 1.05
-  multiZone:
-    serializedVersion: 2
-    x: -0.75
-    y: 0.15
-    width: 1.5
-    height: 0.6
   multiSpacing: 0.28
   multiFront: 0.5
   multiBack: 0.2
@@ -11723,18 +11675,6 @@ MonoBehaviour:
     width: 3.6
     height: 3.1176913
   physics: {fileID: 13400000, guid: 4d115bc322a37834bbb65600e1f87568, type: 2}
-  blackZone:
-    serializedVersion: 2
-    x: -0.75
-    y: -1.4
-    width: 1.5
-    height: 1
-  multiZone:
-    serializedVersion: 2
-    x: -0.7
-    y: 0.15
-    width: 1.4
-    height: 0.54999995
   multiSpacing: 0.28
   multiFront: 0.5
   multiBack: 0.2
@@ -13786,7 +13726,6 @@ MonoBehaviour:
   chessBalance: 0.3
   gonggiWeight: 1.45
   gonggiBalance: 0.3
-  gap: 0.02
   zoneColor: {r: 0.18, g: 0.14, b: 0.1, a: 0.1}
   activeZoneColor: {r: 0.7, g: 0.19, b: 0.16, a: 0.22}
 --- !u!1 &1895147743
