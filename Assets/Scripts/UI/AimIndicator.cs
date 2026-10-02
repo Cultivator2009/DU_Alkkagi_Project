@@ -22,7 +22,9 @@ public class AimIndicator : MonoBehaviour
     public RectTransform guideRoot;
     public GameObject dotTemplate;
     public float arrowGap = 14f;        // between the piece's outline and the arrow
-    public float arrowMaxLength = 150f;
+    // Short, so the arrow says which way rather than drawing a line to the
+    // target: a long one was as good as the aim guide on a match without it.
+    public float arrowMaxLength = 56f;
     public float labelGap = 46f;
     public float dotSpacing = 16f;
 
@@ -76,7 +78,11 @@ public class AimIndicator : MonoBehaviour
         var power = piece.AimPower;
         outline.AimPower = power;
 
+        // No further than a full-power pull: past it the line would only
+        // grow into a longer ruler.
         var pullPoint = ToLocal(piece.DragPoint);
+        var fullPull = piece.fullPullScreen * Screen.height / canvas.scaleFactor;
+        pullPoint = center + Vector2.ClampMagnitude(pullPoint - center, fullPull);
         Point(pullLine, center, pullPoint);
         pullMark.anchoredPosition = pullPoint;
 

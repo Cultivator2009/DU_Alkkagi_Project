@@ -228,7 +228,7 @@ namespace AlkkagiUIEditor
         private static void BuildControlsHint(Transform root, MainGameUIController controller)
         {
             const float width = 420, lineHeight = 34, keyWidth = 140, inset = 20;
-            var bound = new[] { GameAction.CancelAim, GameAction.CameraView, GameAction.PanView, GameAction.ResetView };
+            var bound = new[] { GameAction.CancelAim, GameAction.FineAim, GameAction.CameraView, GameAction.PanView, GameAction.ResetView };
             var bg = UIKit.Panel(root, "ControlsHint", Theme.Hanji, Theme.FieldBorder);
             bg.rectTransform.Place(new Vector2(1, 0), new Vector2(-Margin, Margin + 64 + 16), new Vector2(width, (bound.Length + 3) * lineHeight + inset * 2));
             var hint = bg.gameObject.AddComponent<ControlsHint>();

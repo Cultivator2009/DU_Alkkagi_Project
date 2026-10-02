@@ -10,8 +10,13 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // friction, half what PhysX's default gave): 50 / sqrt(2) sends every
     // piece as far as before, a little slower.
     public float maxForce = 35.36f;
-    // Pull-back distance (world units) that reads as 100% power.
-    public float maxDragDistance = 1f;
+    // The pull that reads as 100% power, as a share of the screen's height:
+    // the same hand movement whatever the zoom, board or camera distance.
+    // (It was a board unit, a third of the screen at the home view - too
+    // far to reach from a piece near the screen's edge without zooming out.)
+    public float fullPullScreen = 0.18f;
+    // Holding FineAim, the pull follows the mouse this much slower.
+    public float fineAimFactor = 0.25f;
     // Releasing below this is treated as a cancel rather than a wasted turn.
     public float minShotPower = 0.03f;
     public float settleVelocityThreshold = 0.05f;
@@ -31,6 +36,9 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
 
     private int lowVelocityFrameCount = 0;
     private int powerNotch; // tenths of the pull's power reached so far, for the ratchet tick
+    private bool pulling;   // isDragging as of the last frame: a new pull starts at the cursor
+    private Vector2 pullScreen; // where the pull is held, on the screen: the cursor, slowed by FineAim
+    private Vector2 lastMouse;
 
     private Rigidbody rb;
     private GamePieceManager manager;
@@ -107,20 +115,23 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             // Get the end position of the drag in the world space
             startPos = AimOrigin;
 
-            // Off the window the pull holds where it was.
-            if (Pointer.OnScreen)
-            {
-                ray = mainCam.ScreenPointToRay(mousePosInput);
-                // https://docs.unity3d.com/ScriptReference/Physics.Raycast.html
-                if (plane.Raycast(ray, out float dist)) endPos = ray.GetPoint(dist);
-            }
-            // endPos = mainCam.ScreenToWorldPoint(new Vector3(mousePosInput.x, mousePosInput.y, mainCam.transform.position.y));
-            // endPos.y = transform.position.y;
+            // The held point moves with the mouse, slower while FineAim is
+            // held. Off the window the pull holds where it was.
+            var mouse = (Vector2)mousePosInput;
+            if (!pulling) pullScreen = lastMouse = mouse;
+            if (Pointer.OnScreen) pullScreen += (mouse - lastMouse) * (KeyBindings.Held(GameAction.FineAim) ? fineAimFactor : 1f);
+            pullScreen = new Vector2(Mathf.Clamp(pullScreen.x, 0, Screen.width - 1), Mathf.Clamp(pullScreen.y, 0, Screen.height - 1));
+            lastMouse = mouse;
+            ray = mainCam.ScreenPointToRay(pullScreen);
+            // https://docs.unity3d.com/ScriptReference/Physics.Raycast.html
+            if (plane.Raycast(ray, out float dist)) endPos = ray.GetPoint(dist);
 
-            // Slingshot: the shot goes opposite the pull.
+            // Slingshot: the shot goes opposite the pull, as hard as the pull
+            // is long on the screen.
             var pull = startPos - endPos;
             pull.y = 0;
-            AimPower = Mathf.Clamp01(pull.magnitude / maxDragDistance);
+            var pullLength = ((Vector2)mainCam.WorldToScreenPoint(startPos) - pullScreen).magnitude;
+            AimPower = Mathf.Clamp01(pullLength / (fullPullScreen * Screen.height));
             AimDirection = pull.sqrMagnitude > 1e-6f ? pull.normalized : Vector3.zero;
 
             // A soft ratchet: a tick at each tenth of power pulled, higher as it grows.
@@ -129,6 +140,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             powerNotch = notch;
         }
         else powerNotch = 0;
+        pulling = isDragging;
         // https://docs.unity3d.com/ScriptReference/Input.GetMouseButtonDown.html
         if (isDragging && KeyBindings.Down(GameAction.CancelAim)) Cancel();
         // Let go: Unity's OnMouseUp would go to the piece the click landed
