@@ -81,7 +81,8 @@ public class PlacementPhase
     private readonly System.Random random = new System.Random();
     private bool finishRaised;
 
-    public PlacementPhase(BoardSetup board, IEnumerable<GamePieceManager> pieces, int playerCount, MatchSettings settings, bool hotSeat, bool authority)
+    // first: who places first when it's one at a time.
+    public PlacementPhase(BoardSetup board, IEnumerable<GamePieceManager> pieces, int playerCount, MatchSettings settings, bool hotSeat, bool authority, int first = 0)
     {
         this.board = board;
         Style = settings.PlacementStyle;
@@ -95,8 +96,8 @@ public class PlacementPhase
             stones[piece.playerIndex].Add(piece);
             byId[piece.pieceID] = piece;
         }
-        // Black goes first whenever it's one side at a time.
-        Placer = Style == PlacementStyle.Alternating || hotSeat ? 0 : Everyone;
+        // The first to move goes first whenever it's one side at a time.
+        Placer = Style == PlacementStyle.Alternating || hotSeat ? first : Everyone;
     }
 
     public float Clock(int player) => clocks[player];

@@ -125,17 +125,21 @@ public static class Msg
     {
         public MatchSettings Settings = new MatchSettings();
         public MatchRoster Roster;
+        public RankedSeries Series; // a ranked game's, null otherwise
 
         public void Write(NetWriter w)
         {
             w.Record(Settings.Write);
             w.Record(Roster.Write);
+            w.Bool(Series != null);
+            if (Series != null) w.Record(Series.Write);
         }
 
         public void Read(NetReader r)
         {
             Settings = r.Record(MatchSettings.Read);
             Roster = r.Record(MatchRoster.Read);
+            if (r.Bool()) Series = r.Record(RankedSeries.Read);
         }
     }
 

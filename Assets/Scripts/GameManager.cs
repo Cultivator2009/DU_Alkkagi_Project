@@ -182,14 +182,17 @@ public class GameManager : MonoBehaviour
     private void StartPlacement(bool hotSeat, bool authority)
     {
         var pieces = gamePieceScripts.Select(p => p.GetComponent<GamePieceManager>());
-        Placement = new PlacementPhase(Board, pieces, Sides.Count, MatchSettings.Current, hotSeat, authority);
+        Placement = new PlacementPhase(Board, pieces, Sides.Count, MatchSettings.Current, hotSeat, authority, FirstPlayer);
         Board.BeginPlacement(gamePieceScripts);
         gameState = GameState.Placement;
     }
 
+    // Who moves first: black, or in a ranked game whoever the series says.
+    private static int FirstPlayer => MatchSettings.Current.RankedMode && RankedSeries.Current != null ? RankedSeries.Current.First : 0;
+
     private void StartTurns()
     {
-        TurnController.StartMatch();
+        TurnController.StartMatch(FirstPlayer);
         gameState = TurnController.State;
     }
 

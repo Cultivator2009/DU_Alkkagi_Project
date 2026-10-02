@@ -171,6 +171,7 @@ public class NetworkMatchBridge : MonoBehaviour
         var playerId = roster.PlayerOf(steamId);
         if (playerId < 0 || steamId == localId || !gone.Add(steamId)) return;
         wantsRematch.Remove(steamId);
+        LeftSeries(playerId);
 
         if (isHost)
         {
@@ -220,6 +221,7 @@ public class NetworkMatchBridge : MonoBehaviour
     {
         gone.Add(sender);
         wantsRematch.Remove(sender);
+        LeftSeries(roster.PlayerOf(sender));
         OnPlayerReturnedToLobby?.Invoke(roster.PlayerOf(sender));
         OnRematchStateChanged?.Invoke();
         TryStartRematch();
@@ -233,6 +235,12 @@ public class NetworkMatchBridge : MonoBehaviour
         if (!isHost || !LocalWantsRematch) return;
         var present = roster.SteamIds.Where(id => !gone.Contains(id)).ToList();
         if (present.Count < 2 || !present.All(wantsRematch.Contains) || !RematchFits) return;
+        if (Series != null)
+        {
+            // Both ready for the next game: no need to wait out the clock.
+            if (!Series.Over) StartNextGame();
+            return;
+        }
         MatchRoster.Current = lobby.RosterOf(present); // their ratings after this match
         MatchSettings.Current = MatchSettings.Picked.Resolve(present.Count); // Random rolls again
         session.Broadcast(new Msg.LoadGameScene { Settings = MatchSettings.Current, Roster = MatchRoster.Current });
@@ -246,11 +254,81 @@ public class NetworkMatchBridge : MonoBehaviour
 
         BuildPieceLookup();
 
+        // A ranked game: counted for the series before anything else hears
+        // the result. From its first game on, leaving is held as a loss.
+        if (Series != null)
+        {
+            if (Series.Game == 1) Series.Hold(SeriesRatings(), localPlayerId);
+            Controller.OnMatchEnded += SeriesGameEnded;
+        }
         if (isHost) InitHost();
         else InitGuest();
-        // Rated: a ranked mode played by its rules, everyone the roster lists
-        // in it. It counts from here: leaving is held as a loss.
-        if (MatchSettings.Current.Rated && roster.Count == gameManager.Sides.Count) Rating = new RatingTracker(Controller, roster.Ratings, localPlayerId);
+        // Rated match by match (a series rates itself): a rated mode played by
+        // its rules, everyone the roster lists in it. It counts from here:
+        // leaving is held as a loss.
+        if (MatchSettings.Current.Rated && Series == null && roster.Count == gameManager.Sides.Count) Rating = new RatingTracker(Controller, roster.Ratings, localPlayerId);
+    }
+
+    // ---- Ranked (RankedSeries) ----
+
+    public const float NextGameSeconds = 8f;
+    public RankedSeries Series => MatchSettings.Current.RankedMode ? RankedSeries.Current : null;
+    // When the host starts the next game (real time), while there is one to come.
+    public float NextGameAt { get; private set; } = -1;
+
+    // The roster's ratings, this player's own from their record (as RatingTracker).
+    private int[] SeriesRatings()
+    {
+        var ratings = roster.Ratings.ToArray();
+        ratings[localPlayerId] = PlayerRating.Current.Rating;
+        return ratings;
+    }
+
+    // Every screen counts the game the same: won, lost or drawn - or, won
+    // because the other left, the whole series. The host then starts the
+    // next game a moment later.
+    private void SeriesGameEnded(int winner, MatchEndReason reason)
+    {
+        var series = Series;
+        if (reason == MatchEndReason.OpponentLeft && winner >= 0) series.Forfeit(1 - winner);
+        else series.Record(winner);
+        if (series.Over)
+        {
+            series.Apply(SeriesRatings(), localPlayerId);
+            NextGameAt = -1;
+            return;
+        }
+        NextGameAt = Time.realtimeSinceStartup + NextGameSeconds;
+        if (isHost) StartCoroutine(StartNextGameSoon());
+    }
+
+    // Leaving between games (or the scene) is leaving the series.
+    private void LeftSeries(int playerId)
+    {
+        var series = Series;
+        if (series == null || series.Over || playerId < 0) return;
+        series.Forfeit(playerId);
+        series.Apply(SeriesRatings(), localPlayerId);
+        NextGameAt = -1;
+    }
+
+    private IEnumerator StartNextGameSoon()
+    {
+        while (Time.realtimeSinceStartup < NextGameAt) yield return null;
+        if (Series != null && !Series.Over && !OpponentGone) StartNextGame();
+    }
+
+    // The same two, a new board and pieces rolled, the loser of the last
+    // game first (RankedSeries.Next).
+    private void StartNextGame()
+    {
+        NextGameAt = -1;
+        MatchRoster.Current = lobby.RosterOf(roster.SteamIds);
+        RankedSeries.Current = Series.Next();
+        MatchSettings.Current = MatchSettings.Picked.Resolve(roster.Count);
+        session.Broadcast(new Msg.LoadGameScene { Settings = MatchSettings.Current, Roster = MatchRoster.Current, Series = RankedSeries.Current });
+        gameManager.EndMatch();
+        SceneManager.LoadScene("GameScene");
     }
 
     private void BuildPieceLookup()
@@ -606,6 +684,7 @@ public class NetworkMatchBridge : MonoBehaviour
         if (message.Roster.PlayerOf(localId) < 0) return; // left out: this player went back to the lobby
         MatchSettings.Current = message.Settings;
         MatchRoster.Current = message.Roster;
+        RankedSeries.Current = message.Series;
         gameManager.EndMatch();
         SceneManager.LoadScene("GameScene");
     }

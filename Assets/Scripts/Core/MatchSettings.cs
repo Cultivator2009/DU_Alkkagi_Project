@@ -3,14 +3,18 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// What an online lobby plays for. The ranked modes (Normal, and Item once it
-// exists) fix the rules that sway the balance (MatchSettingDef.RankedValues)
-// and move everyone's rating; Custom opens every rule and isn't rated.
+// What an online lobby plays for. Normal plays the standard rules (those
+// that sway the balance fixed, MatchSettingDef.NormalValues; the board and
+// pieces the host's) for no rating; Custom opens every rule; Ranked is
+// the competitive match - every rule fixed (RankedValues), one on one, the
+// best of three (RankedSeries) - and the only one that moves the rating.
+// A ranked lobby only comes from the ranked quick match.
 public enum MatchMode : byte
 {
     Normal,
     Item,  // reserved for the item mode; not offered yet
-    Custom
+    Custom,
+    Ranked
 }
 
 // Random is a lobby or setup choice only: MatchSettings.Resolve rolls it
@@ -113,13 +117,15 @@ public sealed class MatchSettingDef
     // board only for the sides it has edges for); null = always.
     public readonly Func<MatchSettings, int, bool> IsAvailable;
     public readonly bool OnlineOnly; // a lobby rule: local games are always two at one screen
-    // What the ranked modes allow, in display order: one value fixes the
-    // rule, null leaves it open. RankedFallback is where they put it.
+    // What Normal and Ranked allow, in display order: one value fixes the
+    // rule, null leaves it open. The fallback is where the mode puts it.
+    public readonly int[] NormalValues;
+    public readonly int NormalFallback;
     public readonly int[] RankedValues;
     public readonly int RankedFallback;
     private readonly Func<int, string> format;
 
-    public MatchSettingDef(MatchSettingId id, string key, string labelKey, int[] values, int defaultValue, Func<int, string> format, Func<MatchSettings, bool> isRelevant = null, bool onlineOnly = false, int[] ranked = null, int? rankedFallback = null, Func<MatchSettings, int, bool> isAvailable = null)
+    public MatchSettingDef(MatchSettingId id, string key, string labelKey, int[] values, int defaultValue, Func<int, string> format, Func<MatchSettings, bool> isRelevant = null, bool onlineOnly = false, int[] normal = null, int? normalFallback = null, Func<MatchSettings, int, bool> isAvailable = null, int[] ranked = null, int? rankedFallback = null)
     {
         IsAvailable = isAvailable;
         Id = id;
@@ -130,9 +136,15 @@ public sealed class MatchSettingDef
         this.format = format;
         IsRelevant = isRelevant;
         OnlineOnly = onlineOnly;
+        NormalValues = normal == null ? null : values.Where(normal.Contains).ToArray();
+        NormalFallback = normalFallback ?? (normal != null ? normal[0] : defaultValue);
         RankedValues = ranked == null ? null : values.Where(ranked.Contains).ToArray();
         RankedFallback = rankedFallback ?? (ranked != null ? ranked[0] : defaultValue);
     }
+
+    // What a lobby's mode allows (null: anything) and where it puts the rule.
+    public int[] FixedValues(MatchMode mode) => mode == MatchMode.Ranked ? RankedValues : mode == MatchMode.Custom ? null : NormalValues;
+    public int Fallback(MatchMode mode) => mode == MatchMode.Ranked ? RankedFallback : NormalFallback;
 
     public string Format(int value) => format(value);
 }
@@ -145,20 +157,25 @@ public sealed class MatchSettings
 {
     private const string PrefsPrefix = "match.";
     private static readonly int[] StoneCounts = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
-    // Ranked: six stones a side, as laid out, the shooter losing a both-out,
-    // and a turn clock (a player who stops playing can't hold the others,
-    // who would lose rating by leaving). Board, pieces, aim guide, seats and
-    // the clock's length stay the host's.
-    private static readonly int[] RankedStones = { 6 };
+    // Normal: six stones a side, as laid out, the shooter losing a both-out,
+    // the edge crumbling and a round limit behind it, and a turn clock (a
+    // player who stops playing can't hold the others). Board, pieces, aim
+    // guide, seats and the clock's length stay the host's.
+    private static readonly int[] NormalStones = { 6 };
+    // Ranked: classic alkkagi to the letter - go stones or janggi pieces on
+    // any board (both rolled for every game), ten a side placed one at a
+    // time in turn, no aim guide, 20 seconds a turn and 20 rounds, no
+    // crumbling edge, one on one.
+    private static readonly int[] RankedStones = { 10 };
 
     public static readonly MatchSettingDef[] Defs =
     {
-        // Item joins the list with the item mode.
-        new MatchSettingDef(MatchSettingId.Mode, "mode", "match.mode", new[] { (int)MatchMode.Normal, (int)MatchMode.Custom }, (int)MatchMode.Normal,
-            v => Loc.Get("mode." + (MatchMode)v), onlineOnly: true),
-        // A battle of health isn't ranked (yet).
+        // Item joins the list with the item mode. Ranked is only ever set by
+        // the ranked quick match, never picked.
+        new MatchSettingDef(MatchSettingId.Mode, "mode", "match.mode", new[] { (int)MatchMode.Normal, (int)MatchMode.Custom, (int)MatchMode.Ranked }, (int)MatchMode.Normal,
+            v => Loc.Get("mode." + (MatchMode)v), onlineOnly: true, isAvailable: (s, v) => v != (int)MatchMode.Ranked || s.Mode == MatchMode.Ranked),
         new MatchSettingDef(MatchSettingId.Variant, "variant", "match.variant", new[] { (int)GameVariant.Classic, (int)GameVariant.Health }, (int)GameVariant.Classic,
-            v => Loc.Get("variant." + (GameVariant)v), ranked: new[] { (int)GameVariant.Classic }),
+            v => Loc.Get("variant." + (GameVariant)v), normal: new[] { (int)GameVariant.Classic }, ranked: new[] { (int)GameVariant.Classic }),
         new MatchSettingDef(MatchSettingId.HealthRule, "healthRule", "match.healthRule", new[] { (int)global::HealthRule.PerPiece, (int)global::HealthRule.Side }, (int)global::HealthRule.PerPiece,
             v => Loc.Get("healthRule." + (global::HealthRule)v), s => s.Variant == GameVariant.Health),
         new MatchSettingDef(MatchSettingId.PieceHealth, "pieceHealth", "match.pieceHealth", new[] { 50, 100, 150, 200 }, 100,
@@ -170,42 +187,45 @@ public sealed class MatchSettings
             v => Loc.Get(v == 1 ? "option.on" : "option.off"), s => s.Variant == GameVariant.Health),
         new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board",
             new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Hexagon, (int)global::BoardType.Cross, (int)global::BoardType.Random }, (int)global::BoardType.Go,
-            v => Loc.Get("board." + (global::BoardType)v), isAvailable: (s, v) => BoardFits((global::BoardType)v, s.Seats)),
+            v => Loc.Get("board." + (global::BoardType)v), isAvailable: (s, v) => BoardFits((global::BoardType)v, s.Seats),
+            ranked: new[] { (int)global::BoardType.Random, (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Hexagon, (int)global::BoardType.Cross }),
         new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces, (int)global::PieceType.ChessPieces, (int)global::PieceType.GonggiStones, (int)global::PieceType.Random }, (int)global::PieceType.GoStones,
-            v => Loc.Get("pieces." + (global::PieceType)v)),
+            v => Loc.Get("pieces." + (global::PieceType)v), ranked: new[] { (int)global::PieceType.Random, (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces }),
         new MatchSettingDef(MatchSettingId.AimGuide, "aimGuide", "match.aimGuide", new[] { 1, 0 }, 1,
-            v => Loc.Get(v == 1 ? "option.on" : "option.off")),
+            v => Loc.Get(v == 1 ? "option.on" : "option.off"), ranked: new[] { 0 }),
         // How many may join the lobby; the match is played by whoever is in
         // it when the host starts, two at least.
         new MatchSettingDef(MatchSettingId.Seats, "seats", "match.seats", new[] { 2, 3, 4 }, 2,
-            v => Loc.Get("option.players", v), onlineOnly: true),
+            v => Loc.Get("option.players", v), onlineOnly: true, ranked: new[] { 2 }),
         new MatchSettingDef(MatchSettingId.BlackStones, "blackStones", "match.blackStones", StoneCounts, 6,
-            v => Loc.Get("option.stones", v), ranked: RankedStones),
+            v => Loc.Get("option.stones", v), normal: NormalStones, ranked: RankedStones),
         new MatchSettingDef(MatchSettingId.WhiteStones, "whiteStones", "match.whiteStones", StoneCounts, 6,
-            v => Loc.Get("option.stones", v), ranked: RankedStones),
+            v => Loc.Get("option.stones", v), normal: NormalStones, ranked: RankedStones),
         new MatchSettingDef(MatchSettingId.BlueStones, "blueStones", "match.blueStones", StoneCounts, 6,
-            v => Loc.Get("option.stones", v), s => s.Seats >= 3, onlineOnly: true, ranked: RankedStones),
+            v => Loc.Get("option.stones", v), s => s.Seats >= 3, onlineOnly: true, normal: NormalStones),
         new MatchSettingDef(MatchSettingId.RedStones, "redStones", "match.redStones", StoneCounts, 6,
-            v => Loc.Get("option.stones", v), s => s.Seats >= 4, onlineOnly: true, ranked: RankedStones),
+            v => Loc.Get("option.stones", v), s => s.Seats >= 4, onlineOnly: true, normal: NormalStones),
         new MatchSettingDef(MatchSettingId.SpawnMode, "spawn", "match.spawn", new[] { (int)global::SpawnMode.Preset, (int)global::SpawnMode.Placement }, (int)global::SpawnMode.Preset,
-            v => Loc.Get(v == (int)global::SpawnMode.Placement ? "spawn.placement" : "spawn.preset"), ranked: new[] { (int)global::SpawnMode.Preset }),
+            v => Loc.Get(v == (int)global::SpawnMode.Placement ? "spawn.placement" : "spawn.preset"), normal: new[] { (int)global::SpawnMode.Preset }, ranked: new[] { (int)global::SpawnMode.Placement }),
         new MatchSettingDef(MatchSettingId.PlacementStyle, "placement", "match.placementStyle",
             new[] { (int)global::PlacementStyle.Hidden, (int)global::PlacementStyle.Live, (int)global::PlacementStyle.Alternating }, (int)global::PlacementStyle.Hidden,
-            v => Loc.Get("placement.style" + (global::PlacementStyle)v), s => s.SpawnMode == global::SpawnMode.Placement, ranked: new[] { (int)global::PlacementStyle.Hidden }),
+            v => Loc.Get("placement.style" + (global::PlacementStyle)v), s => s.SpawnMode == global::SpawnMode.Placement,
+            normal: new[] { (int)global::PlacementStyle.Hidden }, ranked: new[] { (int)global::PlacementStyle.Alternating }),
         new MatchSettingDef(MatchSettingId.PlacementSeconds, "placementTime", "match.placementTime", new[] { 30, 45, 60, 90, 120 }, 60,
-            v => Loc.Get("option.seconds", v), s => s.SpawnMode == global::SpawnMode.Placement, ranked: new[] { 60 }),
+            v => Loc.Get("option.seconds", v), s => s.SpawnMode == global::SpawnMode.Placement, normal: new[] { 60 }, ranked: new[] { 60 }),
         new MatchSettingDef(MatchSettingId.TurnSeconds, "turnTime", "match.turnTime", new[] { 0, 10, 15, 20, 30, 60 }, 0,
-            v => v == 0 ? Loc.Get("option.noLimit") : Loc.Get("option.seconds", v), ranked: new[] { 10, 15, 20, 30, 60 }, rankedFallback: 30),
+            v => v == 0 ? Loc.Get("option.noLimit") : Loc.Get("option.seconds", v), normal: new[] { 10, 15, 20, 30, 60 }, normalFallback: 30, ranked: new[] { 20 }),
         // The board's edge crumbling in once nothing has gone out for a
         // while (TurnController), so no one can hold a match by passing.
-        // Ranked: always, and a round limit behind it.
+        // Normal: always, and a round limit behind it. Ranked: the round
+        // limit alone.
         new MatchSettingDef(MatchSettingId.Zone, "zone", "match.zone", new[] { 1, 0 }, 1,
-            v => Loc.Get(v == 1 ? "option.on" : "option.off"), s => !s.Walled, ranked: new[] { 1 }),
+            v => Loc.Get(v == 1 ? "option.on" : "option.off"), s => !s.Walled, normal: new[] { 1 }, ranked: new[] { 0 }),
         new MatchSettingDef(MatchSettingId.RoundLimit, "roundLimit", "match.roundLimit", new[] { 0, 15, 20, 30, 40 }, 0,
-            v => v == 0 ? Loc.Get("option.noLimit") : Loc.Get("option.rounds", v), ranked: new[] { 20 }),
+            v => v == 0 ? Loc.Get("option.noLimit") : Loc.Get("option.rounds", v), normal: new[] { 20 }, ranked: new[] { 20 }),
         new MatchSettingDef(MatchSettingId.BothOutRule, "bothOut", "match.bothOut",
             new[] { (int)global::BothOutRule.ShooterLoses, (int)global::BothOutRule.ShooterWins, (int)global::BothOutRule.Draw }, (int)global::BothOutRule.ShooterLoses,
-            v => Loc.Get("bothOut." + (global::BothOutRule)v), ranked: new[] { (int)global::BothOutRule.ShooterLoses }),
+            v => Loc.Get("bothOut." + (global::BothOutRule)v), normal: new[] { (int)global::BothOutRule.ShooterLoses }, ranked: new[] { (int)global::BothOutRule.ShooterLoses }),
     };
 
     // The match being played (or about to be), Random rolled. Set before
@@ -234,7 +254,8 @@ public sealed class MatchSettings
     }
 
     public MatchMode Mode => (MatchMode)Get(MatchSettingId.Mode);
-    public bool RankedMode => Mode != MatchMode.Custom;
+    public bool FixedMode => Mode != MatchMode.Custom; // a mode that fixes rules
+    public bool RankedMode => Mode == MatchMode.Ranked;
     public GameVariant Variant => (GameVariant)Get(MatchSettingId.Variant);
     public HealthRule HealthRule => (HealthRule)Get(MatchSettingId.HealthRule);
     public int PieceHealth => Get(MatchSettingId.PieceHealth);
@@ -287,27 +308,38 @@ public sealed class MatchSettings
     // The values a rule may take in this lobby's mode, with the others as they are.
     public int[] Allowed(MatchSettingDef def)
     {
-        var values = RankedMode && def.RankedValues != null ? def.RankedValues : def.Values;
+        var values = def.FixedValues(Mode) ?? def.Values;
         return def.IsAvailable == null ? values : values.Where(v => def.IsAvailable(this, v)).ToArray();
     }
 
-    // Whether the result moves ratings: a ranked mode, played by its rules. A
-    // host sending anything else plays unrated on every machine.
+    // Whether the result moves ratings: Ranked, played by its rules. A host
+    // sending anything else plays unrated on every machine.
     public bool Rated => RankedMode && Defs.All(def => Array.IndexOf(Allowed(def), Get(def.Id)) >= 0);
 
-    // Brings the rules a ranked mode fixes back inside it, e.g. on switching
-    // a lobby from Custom to Normal, and any rule the others no longer
-    // allow back to one they do.
+    // A ranked lobby's rules: every one where Ranked puts it.
+    public static MatchSettings ForRanked()
+    {
+        var settings = new MatchSettings();
+        settings.Set(MatchSettingId.Mode, (int)MatchMode.Ranked);
+        foreach (var def in Defs)
+            if (def.RankedValues != null) settings.Set(def.Id, def.RankedFallback);
+        return settings;
+    }
+
+    // Brings the rules a mode fixes back inside it, e.g. on switching a
+    // lobby from Custom to Normal, and any rule the others no longer allow
+    // back to one they do.
     public void ApplyMode() => Normalize(modes: true);
 
-    // modes: the lobby's (a ranked mode fixes rules); the local setup has none.
+    // modes: the lobby's (a mode may fix rules); the local setup has none.
     public void Normalize(bool modes)
     {
         foreach (var def in Defs)
         {
             var allowed = modes ? Allowed(def) : Available(def);
             if (allowed.Length == 0 || Array.IndexOf(allowed, Get(def.Id)) >= 0) continue;
-            Set(def.Id, Array.IndexOf(allowed, def.RankedFallback) >= 0 ? def.RankedFallback : allowed[0]);
+            var fallback = def.Fallback(Mode);
+            Set(def.Id, Array.IndexOf(allowed, fallback) >= 0 ? fallback : allowed[0]);
         }
     }
 
@@ -324,10 +356,11 @@ public sealed class MatchSettings
         return copy;
     }
 
-    // Any of the rule's values the others allow but Random itself.
+    // Any of the rule's values the mode and the others allow but Random
+    // itself (Ranked: go stones or janggi pieces).
     private int Roll(MatchSettingId id, int random)
     {
-        var choices = Available(Defs[(int)id]).Where(v => v != random).ToArray();
+        var choices = Allowed(Defs[(int)id]).Where(v => v != random).ToArray();
         return choices[UnityEngine.Random.Range(0, choices.Length)];
     }
 
@@ -347,8 +380,9 @@ public sealed class MatchSettings
     // from these too).
     public void SavePrefs(bool lobby = false)
     {
+        if (RankedMode) return; // the ranked quick match's, not this player's picks
         foreach (var def in Defs)
-            if (!lobby || !RankedMode || def.RankedValues == null) PlayerPrefs.SetInt(PrefsPrefix + def.Key, Get(def.Id));
+            if (!lobby || def.FixedValues(Mode) == null) PlayerPrefs.SetInt(PrefsPrefix + def.Key, Get(def.Id));
     }
 
     // Lobby data is string key/value pairs; keys the lobby doesn't have keep

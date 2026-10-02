@@ -18,6 +18,7 @@ public class LobbySceneUI : MonoBehaviour
     public GameObject idleView;
     public Button createButton;
     public Button quickButton;
+    public Button rankedButton; // the ranked quick match: the only way into a ranked lobby
     public TMP_InputField joinCodeInput;
     public Button joinButton;
     public Button backButton;
@@ -63,6 +64,7 @@ public class LobbySceneUI : MonoBehaviour
 
         createButton.onClick.AddListener(OnClickCreate);
         quickButton.onClick.AddListener(OnClickQuick);
+        rankedButton.onClick.AddListener(OnClickRanked);
         joinButton.onClick.AddListener(OnClickJoin);
         refreshButton.onClick.AddListener(RefreshBrowser);
         foreach (var row in browserRows)
@@ -105,6 +107,17 @@ public class LobbySceneUI : MonoBehaviour
             .On<Msg.LoadGameScene>(HandleLoadGameScene)
             .On<Msg.Kick>(HandleKick);
         Loc.OnLanguageChanged += Render;
+        // Back from a ranked series (over, or left): a ranked lobby is for
+        // one series only.
+        if (RankedSeries.Current != null)
+        {
+            RankedSeries.Current = null;
+            if (lobbyManager.CurrentLobby.HasValue && SteamLobbyManager.RulesOf(lobbyManager.CurrentLobby.Value).RankedMode)
+            {
+                lobbyManager.LeaveLobby();
+                pendingStatusKey = "lobby.status.rankedOver";
+            }
+        }
         // Back from a match: open the lobby to new players again.
         if (lobbyManager.IsHost) lobbyManager.SetMatchInProgress(false);
         PlayerRating.SettlePending(); // a rated match left before its result
@@ -135,6 +148,33 @@ public class LobbySceneUI : MonoBehaviour
             copiedUntil = 0;
             copyLabel.text = Loc.Get("lobby.copy");
         }
+        CountDownRanked();
+    }
+
+    // A ranked lobby starts by itself a moment after the second player is in:
+    // no one picks anything.
+    private const float RankedStartSeconds = 3f;
+    private float rankedStartAt = -1;
+
+    private void CountDownRanked()
+    {
+        var full = lobbyManager != null && lobbyManager.IsHost && lobbyManager.CurrentLobby.HasValue
+                   && SteamLobbyManager.RulesOf(lobbyManager.CurrentLobby.Value).RankedMode && lobbyManager.CurrentLobby.Value.MemberCount >= 2;
+        if (!full)
+        {
+            rankedStartAt = -1;
+            return;
+        }
+        if (rankedStartAt < 0)
+        {
+            rankedStartAt = Time.unscaledTime + RankedStartSeconds;
+            Render();
+        }
+        if (Time.unscaledTime >= rankedStartAt)
+        {
+            rankedStartAt = -1;
+            OnClickStartMatch();
+        }
     }
 
     private static void EnsureEventSystem()
@@ -157,7 +197,14 @@ public class LobbySceneUI : MonoBehaviour
     private void OnClickQuick()
     {
         pendingStatusKey = null;
-        lobbyManager.QuickMatch();
+        lobbyManager.QuickMatch(MatchMode.Normal);
+        Render();
+    }
+
+    private void OnClickRanked()
+    {
+        pendingStatusKey = null;
+        lobbyManager.QuickMatch(MatchMode.Ranked);
         Render();
     }
 
@@ -186,7 +233,8 @@ public class LobbySceneUI : MonoBehaviour
         Render();
         var found = await lobbyManager.FindOpenLobbies();
         if (this == null) return; // left the scene meanwhile
-        openLobbies = found;
+        // Ranked lobbies are for the ranked quick match, not to be picked.
+        openLobbies = found.Where(l => !SteamLobbyManager.RulesOf(l).RankedMode).ToArray();
         browsing = false;
         Render();
     }
@@ -241,7 +289,8 @@ public class LobbySceneUI : MonoBehaviour
         MatchSettings.Picked = lobbyManager.ReadLobbySettings();
         MatchRoster.Current = lobbyManager.BuildRoster();
         MatchSettings.Current = MatchSettings.Picked.Resolve(MatchRoster.Current.Count);
-        NetSession.Current.Broadcast(new Msg.LoadGameScene { Settings = MatchSettings.Current, Roster = MatchRoster.Current });
+        RankedSeries.Current = MatchSettings.Picked.RankedMode ? RankedSeries.Begin(MatchRoster.Current.Ratings) : null;
+        NetSession.Current.Broadcast(new Msg.LoadGameScene { Settings = MatchSettings.Current, Roster = MatchRoster.Current, Series = RankedSeries.Current });
         SceneManager.LoadScene("GameScene");
     }
 
@@ -277,6 +326,7 @@ public class LobbySceneUI : MonoBehaviour
         if (message.Roster.PlayerOf(NetSession.Current.LocalId) < 0) return; // joined too late for this one
         MatchSettings.Current = message.Settings;
         MatchRoster.Current = message.Roster;
+        RankedSeries.Current = message.Series;
         SceneManager.LoadScene("GameScene");
     }
 
@@ -303,6 +353,7 @@ public class LobbySceneUI : MonoBehaviour
             SetStatus("lobby.status.noSteam", errorColor);
             SetInteractable(createButton, false);
             SetInteractable(quickButton, false);
+            SetInteractable(rankedButton, false);
             SetInteractable(joinButton, false);
             SetInteractable(refreshButton, false);
             RenderBrowser(false);
@@ -314,6 +365,7 @@ public class LobbySceneUI : MonoBehaviour
             var busy = lobbyManager.IsJoining || lobbyManager.IsSearching || pendingStatusKey == "lobby.status.creating";
             SetInteractable(createButton, !busy);
             SetInteractable(quickButton, !busy);
+            SetInteractable(rankedButton, !busy);
             SetInteractable(joinButton, !busy);
             SetInteractable(refreshButton, !browsing);
             RenderBrowser(!busy);
@@ -333,6 +385,8 @@ public class LobbySceneUI : MonoBehaviour
         // the rules pick. As many seats as the rules allow; the host's
         // invite on the first open one.
         var rules = lobbyManager.ReadLobbySettings();
+        // Ranked: everything fixed, no one sent away, and it starts itself.
+        var ranked = rules.RankedMode;
         var seatCount = Mathf.Clamp(Mathf.Max(rules.Seats, members.Count), 2, seats.Length);
         for (var i = 0; i < seats.Length; i++)
         {
@@ -343,22 +397,23 @@ public class LobbySceneUI : MonoBehaviour
                     lobbyManager.RatingOf(members[i].Id.Value));
             else
                 slot.ShowEmpty(lobbyManager.IsHost && i == members.Count);
-            if (slot.kickButton != null) slot.kickButton.gameObject.SetActive(lobbyManager.IsHost && i > 0 && i < members.Count);
+            if (slot.kickButton != null) slot.kickButton.gameObject.SetActive(lobbyManager.IsHost && !ranked && i > 0 && i < members.Count);
             slot.blockButton.gameObject.SetActive(i < members.Count && members[i].Id.Value != Steamworks.SteamClient.SteamId.Value);
         }
         SideMark.ShowAll(lobbyView.transform, rules.PieceType);
 
-        rulesPanel.Show(rules, lobbyManager.IsHost);
-        rulesCaption.text = Loc.Get(rules.RankedMode ? "lobby.rulesRanked" : "lobby.rulesCustom");
-        visibilityToggle.Show((int)lobbyManager.Visibility, lobbyManager.IsHost);
+        rulesPanel.Show(rules, lobbyManager.IsHost && !ranked);
+        rulesCaption.text = Loc.Get(rules.Mode == MatchMode.Ranked ? "lobby.rulesRanked" : rules.Mode == MatchMode.Custom ? "lobby.rulesCustom" : "lobby.rulesNormal");
+        visibilityToggle.Show((int)lobbyManager.Visibility, lobbyManager.IsHost && !ranked);
 
         // The board has to suit the players actually here (Random rolls only
         // among those that do): three on the go board, say, isn't fair.
         var boardFits = rules.BoardType == BoardType.Random || MatchSettings.BoardFits(rules.BoardType, members.Count);
         var canStart = members.Count >= 2 && boardFits;
-        startButton.gameObject.SetActive(lobbyManager.IsHost);
+        startButton.gameObject.SetActive(lobbyManager.IsHost && !ranked);
         SetInteractable(startButton, canStart);
-        if (!lobbyManager.IsHost) SetStatus("lobby.status.waitingHost", busyColor);
+        if (ranked) SetStatus(members.Count < 2 ? "lobby.status.rankedSearching" : "lobby.status.rankedStarting", members.Count < 2 ? busyColor : okColor);
+        else if (!lobbyManager.IsHost) SetStatus("lobby.status.waitingHost", busyColor);
         else if (members.Count < 2) SetStatus("lobby.status.waitingOpponent", busyColor);
         else if (!boardFits) SetStatusText(Loc.Get("lobby.status.boardPlayers", members.Count), errorColor);
         else if (seatCount > 2) SetStatusText(Loc.Get("lobby.status.readyCount", members.Count, seatCount), okColor);

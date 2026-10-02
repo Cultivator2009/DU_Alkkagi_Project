@@ -75,11 +75,14 @@ namespace AlkkagiUIEditor
             var view = UIKit.Node("IdleView", card).Stretch();
             ui.idleView = view.gameObject;
 
-            var half = new Vector2((CardSize.x - Pad * 2 - 24) / 2, 120);
-            ui.createButton = UIKit.CapsuleButton(view, "CreateButton", "lobby.create", half, true, 36, "lobby.createSub");
-            ui.createButton.GetComponent<RectTransform>().Place(TopLeft, new Vector2(Pad, -170), half);
-            ui.quickButton = UIKit.CapsuleButton(view, "QuickButton", "lobby.quick", half, false, 36, "lobby.quickSub");
-            ui.quickButton.GetComponent<RectTransform>().Place(TopRight, new Vector2(-Pad, -170), half);
+            // Create, quick match (Normal) and the ranked quick match side by side.
+            var third = new Vector2((CardSize.x - Pad * 2 - 2 * 24) / 3, 120);
+            ui.createButton = UIKit.CapsuleButton(view, "CreateButton", "lobby.create", third, true, 34, "lobby.createSub");
+            ui.createButton.GetComponent<RectTransform>().Place(TopLeft, new Vector2(Pad, -170), third);
+            ui.quickButton = UIKit.CapsuleButton(view, "QuickButton", "lobby.quick", third, false, 34, "lobby.quickSub");
+            ui.quickButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 1), new Vector2(0, -170), third, new Vector2(0.5f, 1));
+            ui.rankedButton = UIKit.CapsuleButton(view, "RankedButton", "lobby.ranked", third, false, 34, "lobby.rankedSub");
+            ui.rankedButton.GetComponent<RectTransform>().Place(TopRight, new Vector2(-Pad, -170), third);
 
             UIKit.Image(view, "Divider", null, Theme.Divider).rectTransform.Place(TopLeft, new Vector2(Pad, -334), new Vector2(CardSize.x - Pad * 2, 2));
             UIKit.Label(view, "JoinLabel", "lobby.joinLabel", 26, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)

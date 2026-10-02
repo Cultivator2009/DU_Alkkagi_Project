@@ -43,8 +43,17 @@ public class ResultScreen : MonoBehaviour
     private MatchEndReason reason;
     private int seconds;
     private bool ratingRowShown = true; // as built
+    private float nextRender; // a ranked series: its countdown to the next game, and its end as it comes in
 
     public bool IsShown => gameObject.activeSelf;
+
+    private void Update()
+    {
+        var series = hud != null && hud.Bridge != null ? hud.Bridge.Series : null;
+        if (series == null || Time.unscaledTime < nextRender) return;
+        nextRender = Time.unscaledTime + 0.25f;
+        Render();
+    }
 
     private void Awake()
     {
@@ -113,7 +122,16 @@ public class ResultScreen : MonoBehaviour
             resultTitleText.text = Loc.Get("win.title", SideStyle.Name(winner));
         }
 
-        resultReasonText.text = reason switch
+        // A ranked series that's over reads as the series.
+        var series = bridge != null ? bridge.Series : null;
+        if (series != null && series.Over && hud.OwnSide.HasValue)
+        {
+            var won = series.Winner == hud.OwnSide.Value;
+            stampText.text = Loc.Get(series.Winner < 0 ? "result.stampDraw" : won ? "win.stamp" : "result.stampLose");
+            resultTitleText.text = Loc.Get(series.Winner < 0 ? "ranked.draw" : won ? "ranked.win" : "ranked.lose");
+        }
+
+        resultReasonText.text = series != null && series.Over && series.End == SeriesEnd.Left ? Loc.Get("ranked.left") : reason switch
         {
             MatchEndReason.HostLeft => Loc.Get("reason.hostLeft"),
             MatchEndReason.RoundLimit when winner < 0 => Loc.Get("reason.roundLimitDraw"),
@@ -132,7 +150,8 @@ public class ResultScreen : MonoBehaviour
         remainingLabel.Show(health ? "stats.health" : "hud.remaining");
         var kills = turns.Kills;
         var rating = bridge != null ? bridge.Rating : null;
-        var changes = rating?.Changes;
+        // A series rates itself, once it's over.
+        var changes = series != null ? series.Changes : rating?.Changes;
         for (var i = 0; i < players; i++)
         {
             remainingCells[i].text = health ? sides[i].Health.ToString() : sides[i].Pieces.ToString();
@@ -142,11 +161,11 @@ public class ResultScreen : MonoBehaviour
             teamKillCells[i].text = kills.TeamKills(i).ToString();
             shotsCells[i].text = sides[i].Shots.ToString();
             ratingCells[i].gameObject.SetActive(changes != null);
-            if (changes != null) ratingCells[i].text = RatingCell(rating.Match.Rating(i), changes[i]);
+            if (changes != null) ratingCells[i].text = RatingCell(series != null ? series.Ratings[i] : rating.Match.Rating(i), changes[i]);
         }
         ShowRatingRow(changes != null);
         matchTimeText.text = Loc.Get("stats.time", $"{seconds / 60}:{seconds % 60:00}");
-        seriesText.text = (multi
+        seriesText.text = series != null ? Loc.Get("ranked.series", series.Game, SideStyle.Name(0), series.Wins[0], series.Wins[1], SideStyle.Name(1)) : (multi
                               ? Loc.Get("series.multi", string.Join(" · ", Enumerable.Range(0, players).Select(i => Loc.Get("series.side", SideStyle.Name(i), MatchSeries.Wins(i)))))
                               : Loc.Get("series.score", SideStyle.Name(0), MatchSeries.Wins(0), MatchSeries.Wins(1), SideStyle.Name(1)))
                           + (MatchSeries.Draws > 0 ? Loc.Get("series.draws", MatchSeries.Draws) : string.Empty);
@@ -156,6 +175,17 @@ public class ResultScreen : MonoBehaviour
             rematchLabel.text = Loc.Get("win.rematch");
             statusText.text = string.Empty;
             SetInteractable(rematchButton, true);
+            return;
+        }
+
+        // A ranked series: the next game comes by itself (sooner if both
+        // ask); none once it's over.
+        if (series != null)
+        {
+            var left = Mathf.Max(0, Mathf.CeilToInt(bridge.NextGameAt - Time.realtimeSinceStartup));
+            statusText.text = series.Over ? string.Empty : Loc.Get("ranked.next", left);
+            rematchLabel.text = Loc.Get(series.Over ? "ranked.over" : bridge.LocalWantsRematch ? "rematch.waiting" : "ranked.nextButton");
+            SetInteractable(rematchButton, !series.Over && !bridge.OpponentGone && !bridge.LocalWantsRematch);
             return;
         }
 

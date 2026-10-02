@@ -107,13 +107,15 @@ public class SteamLobbyManager : MonoBehaviour
         LeaveLobby();
     }
 
-    // mode: what the lobby plays for; left out, the host's last pick.
+    // mode: what the lobby plays for; left out, the host's last pick. A
+    // ranked lobby has Ranked's rules, nothing of the host's.
     public async void CreateLobby(LobbyVisibility visibility, MatchMode? mode = null)
     {
         // The host's last-used rules are where the lobby starts, seats
         // included, within what the mode allows.
-        var settings = MatchSettings.LoadPrefs();
+        var settings = mode == MatchMode.Ranked ? MatchSettings.ForRanked() : MatchSettings.LoadPrefs();
         if (mode.HasValue) settings.Set(MatchSettingId.Mode, (int)mode.Value);
+        if (settings.RankedMode && mode != MatchMode.Ranked) settings.Set(MatchSettingId.Mode, (int)MatchMode.Normal);
         settings.ApplyMode();
         var result = await SteamMatchmaking.CreateLobbyAsync(settings.Seats);
         if (!result.HasValue)
@@ -181,13 +183,13 @@ public class SteamLobbyManager : MonoBehaviour
         return (lobbies ?? Array.Empty<Lobby>()).Where(l => !(ulong.TryParse(l.GetData(HostIdKey), out var host) && BlockList.IsBlocked(host))).ToArray();
     }
 
-    // The nearest open public Normal lobby, or failing that a new one to wait
-    // in: quick match is ranked. A lobby can fill between the search and the
-    // join, so each is tried in turn.
-    public async void QuickMatch()
+    // The nearest open public lobby of the mode (Normal, or Ranked for the
+    // ranked quick match), or failing that a new one to wait in. A lobby
+    // can fill between the search and the join, so each is tried in turn.
+    public async void QuickMatch(MatchMode mode)
     {
         IsSearching = true;
-        var lobbies = await FindOpenLobbies(MatchMode.Normal);
+        var lobbies = await FindOpenLobbies(mode);
         IsSearching = false;
         IsJoining = true;
         foreach (var lobby in lobbies)
@@ -195,7 +197,7 @@ public class SteamLobbyManager : MonoBehaviour
             if ((await SteamMatchmaking.JoinLobbyAsync(lobby.Id)).HasValue) return; // HandleLobbyEntered finishes the join
         }
         IsJoining = false;
-        CreateLobby(LobbyVisibility.Public, MatchMode.Normal);
+        CreateLobby(LobbyVisibility.Public, mode);
     }
 
     public static string HostName(Lobby lobby) => lobby.GetData(HostNameKey);

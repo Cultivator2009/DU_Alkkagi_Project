@@ -98,6 +98,7 @@ public class TurnController
     private const float CollapseMinSeconds = 0.4f;
     private int winner = -1;
     private MatchEndReason endReason;
+    private int firstPlayer; // who opened the match: a round starts with them
 
     public TurnController(
         IRuleset ruleset,
@@ -118,10 +119,12 @@ public class TurnController
         Kills = new KillLog(sides.Count);
     }
 
-    public void StartMatch()
+    // first: who moves first (black, unless a ranked series says otherwise).
+    public void StartMatch(int first = 0)
     {
         LastTurnEnd = TurnEnd.None;
-        BeginTurn(0);
+        firstPlayer = first;
+        BeginTurn(first);
     }
 
     public void Tick()
@@ -479,7 +482,7 @@ public class TurnController
     private void BeginTurn(int playerIndex)
     {
         // Round again to the front: a round is over.
-        if (Turn > 0 && playerIndex <= CurrentPlayerID && EndRound()) return;
+        if (Turn > 0 && InRound(playerIndex) <= InRound(CurrentPlayerID) && EndRound()) return;
         selGamePiece = null;
         CurrentPlayerID = sides[playerIndex].Id;
         Turn++;
@@ -507,6 +510,9 @@ public class TurnController
         if (Zone.Warned) OnZoneChanged?.Invoke();
         return false;
     }
+
+    // A side's place in a round, the opener first.
+    private int InRound(int playerId) => (playerId - firstPlayer + sides.Count) % sides.Count;
 
     private Side Find(int playerId) => playerId >= 0 && playerId < sides.Count ? sides[playerId] : null;
 }
