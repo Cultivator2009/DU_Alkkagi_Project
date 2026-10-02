@@ -33,12 +33,35 @@ public static class KeyBindings
     // cancel key once per piece. Set and ResetAll drop it.
     private static KeyCode[] cache;
 
+    // For an action with nothing saved whose default another one already has
+    // (an action added after the player rebound a key to its default): the
+    // first of these still free.
+    private static readonly KeyCode[] Spares = { KeyCode.LeftShift, KeyCode.LeftControl, KeyCode.LeftAlt, KeyCode.Space, KeyCode.Q, KeyCode.E, KeyCode.F };
+
     public static KeyCode Get(GameAction action)
     {
         if (cache == null)
         {
             cache = new KeyCode[Defaults.Count];
-            foreach (var pair in Defaults) cache[(int)pair.Key] = (KeyCode)PlayerPrefs.GetInt(PrefsPrefix + pair.Key, (int)pair.Value);
+            var used = new HashSet<KeyCode>();
+            var unsaved = new List<GameAction>();
+            foreach (var pair in Defaults)
+            {
+                if (!PlayerPrefs.HasKey(PrefsPrefix + pair.Key))
+                {
+                    unsaved.Add(pair.Key);
+                    continue;
+                }
+                cache[(int)pair.Key] = (KeyCode)PlayerPrefs.GetInt(PrefsPrefix + pair.Key);
+                used.Add(cache[(int)pair.Key]);
+            }
+            foreach (var free in unsaved)
+            {
+                var key = Defaults[free];
+                if (used.Contains(key)) key = Array.Find(Spares, k => !used.Contains(k));
+                cache[(int)free] = key;
+                used.Add(key);
+            }
         }
         return cache[(int)action];
     }
