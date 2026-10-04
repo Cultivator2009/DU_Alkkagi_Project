@@ -126,6 +126,7 @@ public class BoardSetup : MonoBehaviour
             _ => blackTemplate,
         };
         PieceHeight = template.transform.position.y;
+        var grip = PieceSet.Of(pieceType).Grip;
 
         var parent = new GameObject("Pieces").transform;
         var pieces = new List<GamePieceDragAndReleaseForce>();
@@ -148,6 +149,10 @@ public class BoardSetup : MonoBehaviour
                 manager.playerIndex = player;
                 manager.pieceID = PieceId(player, i);
                 manager.footprint = Footprint.Of(piece.gameObject);
+                // Gripping the board harder (PieceSet.Grip): slowed the more, and
+                // flicked as much harder, so a shot goes as far.
+                piece.maxForce = template.maxForce * Mathf.Sqrt(grip);
+                piece.extraSlowing = GamePieceDragAndReleaseForce.BoardSlowing * (grip - 1);
                 piece.gameObject.SetActive(true);
                 pieces.Add(piece);
             }

@@ -8,8 +8,16 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
 {
     // A full-power flick. 50 until friction became real (improved patch
     // friction, half what PhysX's default gave): 50 / sqrt(2) sends every
-    // piece as far as before, a little slower.
+    // piece as far as before, a little slower. Pieces slowed harder on the
+    // board (PieceSet.Grip) are flicked harder (BoardSetup.Spawn).
     public float maxForce = 35.36f;
+    // A piece sliding on the board slows at about this from PhysX's friction
+    // alone (0.875 g); AIPlanner counts on it too.
+    public const float BoardSlowing = 8.8f;
+    // Slowing on top of that (m/s², PieceSet.Grip) while the piece is down
+    // on the board. Set at spawn.
+    [NonSerialized] public float extraSlowing;
+    private Collider solid; // what it touches the board with (not its big pick-up trigger)
     // The pull that reads as 100% power, as a share of the screen's height:
     // the same hand movement whatever the zoom, board or camera distance.
     // (It was a board unit, a third of the screen at the home view - too
@@ -37,8 +45,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     private int lowVelocityFrameCount = 0;
     private int powerNotch; // tenths of the pull's power reached so far, for the ratchet tick
     private bool pulling;   // isDragging as of the last frame: a new pull starts at the cursor
-    private Vector2 pullScreen; // where the pull is held, on the screen: the cursor, slowed by FineAim
-    private Vector2 lastMouse;
+    private Vector2 pullScreen; // where the pull is held, on the screen: from the cursor, the mouse's moves (slowed by FineAim)
 
     private Rigidbody rb;
     private GamePieceManager manager;
@@ -97,6 +104,14 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         // https://docs.unity3d.com/ScriptReference/Plane-ctor.html
         plane = new Plane(Vector3.up, 0);
     }
+    // Gone mid-pull (the match over, the piece out): the cursor comes back.
+    private void OnDisable()
+    {
+        if (!pulling) return;
+        pulling = false;
+        AimCursor.Release();
+    }
+
     private void Update()
     {
         if (isDragging)
@@ -109,13 +124,18 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             // Get the end position of the drag in the world space
             startPos = AimOrigin;
 
-            // The held point moves with the mouse, slower while FineAim is
-            // held. Off the window the pull holds where it was.
-            var mouse = (Vector2)mousePosInput;
-            if (!pulling) pullScreen = lastMouse = mouse;
-            if (Pointer.OnScreen) pullScreen += (mouse - lastMouse) * (KeyBindings.Held(GameAction.FineAim) ? fineAimFactor : 1f);
+            // The held point starts at the cursor and moves as the mouse
+            // does, slower while FineAim is held. The cursor is locked
+            // meanwhile (AimCursor), so it never runs off the window; the
+            // frame it locks on, the cursor's own jump isn't a move.
+            if (!pulling)
+            {
+                pullScreen = mousePosInput;
+                AimCursor.Hold();
+            }
+            else if (Time.frameCount > AimCursor.HeldFrame + 1)
+                pullScreen += (Vector2)Input.mousePositionDelta * (KeyBindings.Held(GameAction.FineAim) ? fineAimFactor : 1f);
             pullScreen = new Vector2(Mathf.Clamp(pullScreen.x, 0, Screen.width - 1), Mathf.Clamp(pullScreen.y, 0, Screen.height - 1));
-            lastMouse = mouse;
             ray = mainCam.ScreenPointToRay(pullScreen);
             // https://docs.unity3d.com/ScriptReference/Physics.Raycast.html
             if (plane.Raycast(ray, out float dist)) endPos = ray.GetPoint(dist);
@@ -134,6 +154,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             powerNotch = notch;
         }
         else powerNotch = 0;
+        if (pulling && !isDragging) AimCursor.Release(); // let go, cancelled, or the camera took over
         pulling = isDragging;
         // https://docs.unity3d.com/ScriptReference/Input.GetMouseButtonDown.html
         if (isDragging && KeyBindings.Down(GameAction.CancelAim)) Cancel();
@@ -168,7 +189,31 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             AimPower = 0;
         }
         LimitRise();
+        if (extraSlowing > 0 && !rb.isKinematic && GameManager.manager != null && GameManager.manager.Board != null)
+        {
+            if (solid == null) solid = Array.Find(GetComponentsInChildren<Collider>(), c => !c.isTrigger);
+            var board = GameManager.manager.Board;
+            Slow(rb, solid, extraSlowing, board.Active.transform.position.y, board.Playable);
+        }
         UpdateSettleState();
+    }
+
+    // The extra slowing on a piece down on the board (its foot at the
+    // board's top, not up on another piece or a hinge), through its centre
+    // of mass: friction at its foot would tip it. The AI's copies are slowed
+    // the same way (AIPlanner).
+    public static void Slow(Rigidbody body, Collider solid, float slowing, float boardTop, BoardShape board)
+    {
+        if (slowing <= 0 || solid == null || solid.bounds.min.y > boardTop + 0.003f) return;
+        var at = body.position;
+        if (!board.Contains(new Vector2(at.x, at.z))) return;
+        var velocity = body.linearVelocity;
+        var flat = new Vector3(velocity.x, 0, velocity.z);
+        // Not at a crawl: friction ends that by itself, and pushing it every
+        // step would keep the piece awake, never asleep - never settled.
+        var speed = flat.magnitude;
+        if (speed < 0.05f) return;
+        body.AddForce(-flat * (Mathf.Min(speed, slowing * Time.fixedDeltaTime) / speed), ForceMode.VelocityChange);
     }
 
     // Kinematic pieces (network guest, placement) are moved, not simulated.

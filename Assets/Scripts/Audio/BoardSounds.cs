@@ -43,6 +43,7 @@ public class BoardSounds : MonoBehaviour
     public float damageGapSeconds = 0.05f;   // one knock's damage sound at a time (a chain of them lands at once)
 
     private string material;
+    private float speedScale = 1f; // pieces gripping harder are flicked harder (PieceSet.Grip): the same knock is that much faster
     private int soundsThisStep;
     private float lastDamageAt = -1;
 
@@ -50,6 +51,7 @@ public class BoardSounds : MonoBehaviour
     {
         Instance = this;
         material = pieces.Sound;
+        speedScale = Mathf.Sqrt(pieces.Grip);
         GameManager.Damaged += PlayDamage;
     }
 
@@ -107,6 +109,7 @@ public class BoardSounds : MonoBehaviour
 
     private float Loudness(BoardSound kind, float speed)
     {
+        speed /= speedScale;
         switch (kind)
         {
             case BoardSound.Fall: return 0.8f;

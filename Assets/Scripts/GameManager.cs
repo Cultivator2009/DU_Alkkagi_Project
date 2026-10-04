@@ -143,6 +143,7 @@ public class GameManager : MonoBehaviour
         {
             Crumble = stage => Board.Crumble(stage, gamePieceScripts),
         };
+        TurnController.OnPlayerOut += RetirePieces;
         new GameObject("BoardZoneView").AddComponent<BoardZoneView>().Init(Board, TurnController);
         gameState = GameState.WaitingForPlayers;
         var humans = Enumerable.Range(0, totalPlayerCnt).ToList();
@@ -219,6 +220,24 @@ public class GameManager : MonoBehaviour
     public void RemovePiece(GamePieceDragAndReleaseForce piece)
     {
         gamePieceScripts.Remove(piece);
+    }
+
+    // A side knocked out with pieces still on the board (a battle of
+    // health's B, its health gone) has them break and go, counting for no
+    // one; a side that conceded or left keeps its pieces there, in the way.
+    // On the authority: a guest sees them break (BoardSounds) and go with
+    // the next turn's result.
+    private void RetirePieces(int playerId, MatchEndReason reason)
+    {
+        if (reason != MatchEndReason.Knockout || TurnController.IsMirror) return;
+        foreach (var piece in gamePieceScripts.Where(p => p != null && p.Manager.playerIndex == playerId && !p.Manager.isDestroyed).ToList())
+        {
+            piece.Manager.isDestroyed = true;
+            if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Shatter, 0f, piece.transform.position, piece: piece.Manager.pieceID);
+            RemovePiece(piece);
+            Destroy(piece.gameObject);
+        }
+        Sides[playerId].Pieces = 0;
     }
 
     // A piece is out (DeathTrigger, or broken by its knocks), on the authority.

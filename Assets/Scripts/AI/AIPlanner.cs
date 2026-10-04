@@ -37,9 +37,10 @@ public struct PlannedShot
 public class AIPlanner : IDisposable
 {
     // Both measured on the board: a flicked piece slows at about 8.8 m/s²
-    // (the friction, 0.875 g), and one piece hitting another square passes
-    // on about 70% of its speed.
-    private const float Deceleration = 8.8f;
+    // (the friction, 0.875 g) times how hard these pieces grip (PieceSet.Grip:
+    // go stones and janggi pieces twice that), and one piece hitting another
+    // square passes on about 70% of its speed.
+    private static float Deceleration => GamePieceDragAndReleaseForce.BoardSlowing * PieceSet.Current.Grip;
     private const float Restitution = 0.4f;
     private const int MaxSteps = 250;        // 5 s of play; nearly every shot has settled by then
     private const float OutHeight = -0.3f;
@@ -49,6 +50,7 @@ public class AIPlanner : IDisposable
     {
         public GamePieceDragAndReleaseForce Source;
         public Rigidbody Body;
+        public Collider Solid;      // the copy's own, for its foot on the board (GamePieceDragAndReleaseForce.Slow)
         public int Owner;
         public int Value;
         public float Radius;
@@ -71,6 +73,7 @@ public class AIPlanner : IDisposable
     private readonly PhysicsScene physics;
     private readonly List<Stand> stands = new List<Stand>();
     private readonly BoardShape shape;    // what's left of the board
+    private readonly float boardTop;      // the height of its top
     private readonly BoardShape afterShot; // and what will be once this turn is over (the edge may be coming in)
     private readonly BothOutRule bothOutRule;
     private readonly IRuleset ruleset;
@@ -91,14 +94,17 @@ public class AIPlanner : IDisposable
         bothOutRule = rule;
 
         Copy(board.Active.gameObject);
+        boardTop = board.Active.transform.position.y;
         foreach (var piece in pieces)
         {
             if (piece == null) continue;
             var manager = piece.Manager;
+            var copy = Copy(piece.gameObject);
             stands.Add(new Stand
             {
                 Source = piece,
-                Body = Copy(piece.gameObject).GetComponent<Rigidbody>(),
+                Body = copy.GetComponent<Rigidbody>(),
+                Solid = Array.Find(copy.GetComponentsInChildren<Collider>(), c => !c.isTrigger),
                 Owner = manager.playerIndex,
                 Value = ruleset.Value(manager),
                 Radius = manager.radius,
@@ -192,6 +198,7 @@ public class AIPlanner : IDisposable
                 if (stand.Out) continue;
                 var velocity = stand.Body.linearVelocity;
                 if (velocity.y > stand.MaxRise) stand.Body.linearVelocity = new Vector3(velocity.x, stand.MaxRise, velocity.z);
+                GamePieceDragAndReleaseForce.Slow(stand.Body, stand.Solid, stand.Source.extraSlowing, boardTop, shape);
                 if (velocity.sqrMagnitude > 0.0025f || stand.Body.angularVelocity.sqrMagnitude > 0.0025f) moving = true;
             }
             physics.Simulate(Time.fixedDeltaTime);
@@ -225,6 +232,7 @@ public class AIPlanner : IDisposable
         foreach (var stand in stands)
         {
             if (stand.Source == null) continue; // gone before this turn
+            if (!sides[stand.Owner].Standing) continue; // out: in the way, but worth nothing to anyone
             var mine = teamOf(stand.Owner) == teamOf(player);
             // A battle of health: knocks cost too, and (A) one that leaves a
             // piece nothing breaks it.
@@ -276,7 +284,7 @@ public class AIPlanner : IDisposable
     private IEnumerable<Candidate> Candidates(int player)
     {
         var mine = stands.Where(s => s.Owner == player && s.Source != null).ToList();
-        var theirs = stands.Where(s => teamOf(s.Owner) != teamOf(player) && s.Source != null).ToList();
+        var theirs = stands.Where(s => teamOf(s.Owner) != teamOf(player) && sides[s.Owner].Standing && s.Source != null).ToList();
         foreach (var shooter in mine)
         foreach (var target in theirs)
         {

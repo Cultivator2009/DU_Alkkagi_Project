@@ -127,10 +127,11 @@ public class AimIndicator : MonoBehaviour
 
     // The piece a click here would pick up (as PieceSelector takes it): the
     // nearest under the cursor that this screen may move. Not while the
-    // view moves, the game is paused, or the cursor is on the HUD.
+    // view moves, the game is paused, the cursor is on the HUD, or it's
+    // locked for a pull (AimCursor: it sits in the middle of the window).
     private GamePieceDragAndReleaseForce PieceUnderCursor()
     {
-        if (CameraRig.Busy || Time.timeScale <= 0 || !Pointer.OnScreen) return null;
+        if (CameraRig.Busy || Time.timeScale <= 0 || AimCursor.Held || !Pointer.OnScreen) return null;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
         return PiecePicker.UnderCursor(worldCamera).FirstOrDefault(p => game.MayPickUp(p.Manager.playerIndex));
     }
