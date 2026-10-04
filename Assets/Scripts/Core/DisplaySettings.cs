@@ -5,9 +5,24 @@ using UnityEngine;
 // Fullscreen or a window, and the window's size (Settings > Display).
 // Unity itself remembers the last mode and size between launches, so
 // nothing is saved here. Fullscreen is borderless at the display's own
-// resolution; only a window has a size to choose.
+// resolution; only a window has a size to choose. And the graphics: the
+// quality, vertical sync and, without it, a frame cap (kept in
+// GameSettings, applied at launch).
 public static class DisplaySettings
 {
+    // Low, Medium, High and Ultra of the project's quality levels: no
+    // shadows, hard ones, soft ones, and soft ones with 2x MSAA.
+    public static readonly int[] QualityLevels = { 1, 2, 3, 5 };
+    public static readonly int[] FrameCaps = { 30, 60, 120, 144, 240, -1 }; // -1: none
+
+    public static void ApplyGraphics()
+    {
+        QualitySettings.SetQualityLevel(QualityLevels[GameSettings.Quality], true);
+        // After the level, which carries a vertical sync of its own.
+        QualitySettings.vSyncCount = GameSettings.VSync ? 1 : 0;
+        Application.targetFrameRate = GameSettings.VSync ? -1 : FrameCaps[GameSettings.FrameCap];
+    }
+
     // 16:9 window sizes, offered while they fit on the display.
     private static readonly Vector2Int[] Sizes =
     {

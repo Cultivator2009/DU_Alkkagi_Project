@@ -10,6 +10,10 @@ public static class GameSettings
     private const string EffectsKey = "settings.effectsVolume";
     private const string JanggiHanjaKey = "settings.janggiHanja";
     private const string ScreenShakeKey = "settings.screenShake";
+    private const string ColorAssistKey = "settings.colorAssist";
+    private const string QualityKey = "settings.quality";
+    private const string VSyncKey = "settings.vsync";
+    private const string FrameCapKey = "settings.frameCap";
     public const float DefaultVolume = 0.8f;
 
     // 0..1. Scales everything through the AudioListener.
@@ -61,6 +65,35 @@ public static class GameSettings
         set => PlayerPrefs.SetInt(ScreenShakeKey, value ? 1 : 0);
     }
 
+    // Colourblind mode: the sides in colours told apart without red and
+    // green (PieceSet.Of). A match already on keeps its pieces' colours.
+    public static bool ColorAssist
+    {
+        get => PlayerPrefs.GetInt(ColorAssistKey, 0) == 1;
+        set => PlayerPrefs.SetInt(ColorAssistKey, value ? 1 : 0);
+    }
+
+    // Graphics (DisplaySettings.ApplyGraphics): an index into
+    // DisplaySettings.QualityLevels, the highest at first; vertical sync, on
+    // at first; and without it an index into DisplaySettings.FrameCaps.
+    public static int Quality
+    {
+        get => Mathf.Clamp(PlayerPrefs.GetInt(QualityKey, DisplaySettings.QualityLevels.Length - 1), 0, DisplaySettings.QualityLevels.Length - 1);
+        set => PlayerPrefs.SetInt(QualityKey, value);
+    }
+
+    public static bool VSync
+    {
+        get => PlayerPrefs.GetInt(VSyncKey, 1) == 1;
+        set => PlayerPrefs.SetInt(VSyncKey, value ? 1 : 0);
+    }
+
+    public static int FrameCap
+    {
+        get => Mathf.Clamp(PlayerPrefs.GetInt(FrameCapKey, 1), 0, DisplaySettings.FrameCaps.Length - 1);
+        set => PlayerPrefs.SetInt(FrameCapKey, value);
+    }
+
     public static void ResetVolumes()
     {
         MasterVolume = DefaultVolume;
@@ -73,5 +106,6 @@ public static class GameSettings
     private static void ApplyOnLaunch()
     {
         AudioListener.volume = MasterVolume;
+        DisplaySettings.ApplyGraphics();
     }
 }

@@ -6,7 +6,8 @@ using UnityEngine.UI;
 // The Settings card (built by Tools > Alkkagi UI > 3. Build main menu), a
 // page at a time behind tabs: general (language - its own LanguageToggle -,
 // janggi letters, the blocked players), display (fullscreen or a window and
-// its size, screen shake), sound (four volumes) and key bindings.
+// its size, graphics quality, vertical sync or a frame cap, screen shake,
+// colourblind mode), sound (four volumes) and key bindings.
 // Everything saves as it changes. A key row, once clicked, takes the next
 // key pressed; Escape backs out.
 public class SettingsPanel : MonoBehaviour
@@ -16,6 +17,13 @@ public class SettingsPanel : MonoBehaviour
     public SegmentedToggle janggiLetters; // 0 Hangul, 1 Hanja
     public SegmentedToggle windowMode;    // 0 fullscreen, 1 windowed
     public SegmentedToggle screenShake;   // 0 on, 1 off
+    public SegmentedToggle quality;       // DisplaySettings.QualityLevels order
+    public SegmentedToggle vsync;         // 0 on, 1 off
+    public TMP_Text frameCapText;
+    public Button frameCapLowerButton;
+    public Button frameCapHigherButton;
+    public CanvasGroup frameCapRow;       // dimmed while vertical sync is on
+    public SegmentedToggle colorAssist;   // 0 on, 1 off
     public TMP_Text windowSizeText;
     public Button windowSmallerButton;
     public Button windowLargerButton;
@@ -63,6 +71,15 @@ public class SettingsPanel : MonoBehaviour
         screenShake.OnSelected += index =>
         {
             GameSettings.ScreenShake = index == 0;
+            Render();
+        };
+        quality.OnSelected += index => SetGraphics(() => GameSettings.Quality = index);
+        vsync.OnSelected += index => SetGraphics(() => GameSettings.VSync = index == 0);
+        frameCapLowerButton.onClick.AddListener(() => SetGraphics(() => GameSettings.FrameCap--));
+        frameCapHigherButton.onClick.AddListener(() => SetGraphics(() => GameSettings.FrameCap++));
+        colorAssist.OnSelected += index =>
+        {
+            GameSettings.ColorAssist = index == 0;
             Render();
         };
         windowSmallerButton.onClick.AddListener(() => StepWindow(-1));
@@ -149,6 +166,8 @@ public class SettingsPanel : MonoBehaviour
         for (var i = 0; i < pages.Length; i++) pages[i].SetActive(i == page);
         janggiLetters.Show(GameSettings.JanggiHanja ? 1 : 0);
         screenShake.Show(GameSettings.ScreenShake ? 0 : 1);
+        colorAssist.Show(GameSettings.ColorAssist ? 0 : 1);
+        RenderGraphics();
         RenderDisplay();
         masterSlider.SetValueWithoutNotify(GameSettings.MasterVolume);
         interfaceSlider.SetValueWithoutNotify(GameSettings.InterfaceVolume);
@@ -176,6 +195,31 @@ public class SettingsPanel : MonoBehaviour
         windowSizeRow.alpha = fullscreen ? fixedAlpha : 1f;
         SetArrow(windowSmallerButton, !fullscreen && DisplaySettings.StepFrom(size, -1).HasValue);
         SetArrow(windowLargerButton, !fullscreen && DisplaySettings.StepFrom(size, 1).HasValue);
+    }
+
+    private void SetGraphics(System.Action change)
+    {
+        change();
+        DisplaySettings.ApplyGraphics();
+        Render();
+    }
+
+    private void RenderGraphics()
+    {
+        quality.Show(GameSettings.Quality);
+        vsync.Show(GameSettings.VSync ? 0 : 1);
+        var cap = DisplaySettings.FrameCaps[GameSettings.FrameCap];
+        frameCapText.text = cap > 0 ? Loc.Get("settings.fps", cap) : Loc.Get("settings.fpsNone");
+        var free = !GameSettings.VSync;
+        frameCapRow.alpha = free ? 1f : fixedAlpha;
+        SetStep(frameCapLowerButton, free && GameSettings.FrameCap > 0);
+        SetStep(frameCapHigherButton, free && GameSettings.FrameCap < DisplaySettings.FrameCaps.Length - 1);
+    }
+
+    private static void SetStep(Button arrow, bool available)
+    {
+        arrow.interactable = available;
+        arrow.transform.GetChild(0).GetComponent<Graphic>().canvasRenderer.SetAlpha(available ? 1f : 0.25f);
     }
 
     private static void StepWindow(int step)

@@ -160,7 +160,7 @@ namespace AlkkagiUIEditor
             const float width = 1000, pad = 64, rowHeight = 60, rowPitch = 76, labelSize = 26, firstRow = -236;
             const float column = width - pad * 2, left = pad;
             var actions = (GameAction[])System.Enum.GetValues(typeof(GameAction));
-            var pageRows = new[] { 3, 3, 4, actions.Length };
+            var pageRows = new[] { 3, 7, 4, actions.Length };
             var overlay = UIKit.Image(root, "SettingsPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             var panel = overlay.gameObject.AddComponent<SettingsPanel>();
@@ -228,10 +228,31 @@ namespace AlkkagiUIEditor
             panel.windowSizeText = sizeText;
             panel.windowSmallerButton = smaller;
             panel.windowLargerButton = larger;
-            RowLabel(display, "ScreenShakeLabel", "settings.screenShake", RowY(2));
+            RowLabel(display, "QualityLabel", "settings.quality", RowY(2));
+            panel.quality = UIKit.SegmentedToggle(display, "QualityToggle", new[] { "quality.low", "quality.medium", "quality.high", "quality.ultra" }, 72);
+            FitLabels(panel.quality);
+            Control(panel.quality.GetComponent<RectTransform>(), RowY(2), 440, 72);
+            RowLabel(display, "VSyncLabel", "settings.vsync", RowY(3));
+            panel.vsync = UIKit.SegmentedToggle(display, "VSyncToggle", new[] { "option.on", "option.off" }, 72);
+            FitLabels(panel.vsync);
+            Control(panel.vsync.GetComponent<RectTransform>(), RowY(3), 320, 72);
+            // Dimmed while vertical sync sets the pace.
+            var capRow = UIKit.Node("FrameCapRow", display).Place(topLeft, Vector2.zero, new Vector2(width, cardHeight));
+            panel.frameCapRow = capRow.gameObject.AddComponent<CanvasGroup>();
+            RowLabel(capRow, "FrameCapLabel", "settings.frameCap", RowY(4));
+            var (capFrame, capText, fewer, more) = UIKit.Stepper(capRow, "FrameCap", rowHeight, "60 fps", labelSize);
+            Control(capFrame.rectTransform, RowY(4), 320, rowHeight);
+            panel.frameCapText = capText;
+            panel.frameCapLowerButton = fewer;
+            panel.frameCapHigherButton = more;
+            RowLabel(display, "ScreenShakeLabel", "settings.screenShake", RowY(5));
             panel.screenShake = UIKit.SegmentedToggle(display, "ScreenShakeToggle", new[] { "option.on", "option.off" }, 72);
             FitLabels(panel.screenShake);
-            Control(panel.screenShake.GetComponent<RectTransform>(), RowY(2), 320, 72);
+            Control(panel.screenShake.GetComponent<RectTransform>(), RowY(5), 320, 72);
+            RowLabel(display, "ColorAssistLabel", "settings.colorAssist", RowY(6));
+            panel.colorAssist = UIKit.SegmentedToggle(display, "ColorAssistToggle", new[] { "option.on", "option.off" }, 72);
+            FitLabels(panel.colorAssist);
+            Control(panel.colorAssist.GetComponent<RectTransform>(), RowY(6), 320, 72);
 
             var sound = Page("SoundPage");
             (Slider, TMP_Text) VolumeRow(string name, string key, int row)

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 // What differs with the pieces in play (MatchSettings.PieceType), besides
@@ -39,6 +40,26 @@ public sealed class PieceSet
     private static readonly Color JanggiBlack = new Color32(0x2E, 0x24, 0x1A, 0xFF);
     private static readonly Color ChessWhite = new Color32(0xEC, 0xDF, 0xC4, 0xFF); // boxwood
     private static readonly Color ChessBlack = new Color32(0x2B, 0x24, 0x20, 0xFF); // ebony
+
+    // Colourblind mode's (GameSettings.ColorAssist), after Okabe and Ito:
+    // told apart without telling red from green. Cho's green goes blue and
+    // Han's red vermillion (both dark enough on the wood); the dyed third
+    // and fourth stones blue and orange, janggi's third side purple.
+    private static readonly Color AssistBlue = new Color32(0x00, 0x72, 0xB2, 0xFF);
+    private static readonly Color AssistOrange = new Color32(0xE6, 0x9F, 0x00, 0xFF);
+    private static readonly Color AssistVermillion = new Color32(0xC0, 0x4E, 0x00, 0xFF);
+    private static readonly Color AssistPurple = new Color32(0x8E, 0x3B, 0x78, 0xFF);
+    private static readonly Color AssistBlueRing = new Color32(0x00, 0x4A, 0x75, 0xFF);
+    private static readonly Color AssistOrangeRing = new Color32(0x8A, 0x5F, 0x00, 0xFF);
+    // Pieces' own colours, and the lines and letters on them.
+    private static readonly Dictionary<Color, Color> AssistFills = new Dictionary<Color, Color>
+    {
+        { StoneBlue, AssistBlue }, { StoneRed, AssistOrange },
+    };
+    private static readonly Dictionary<Color, Color> AssistLines = new Dictionary<Color, Color>
+    {
+        { Cho, AssistBlue }, { Han, AssistVermillion }, { JanggiBlue, AssistPurple }, { BlueRing, AssistBlueRing }, { RedRing, AssistOrangeRing },
+    };
 
     // Black and white go stones, and the third and fourth sides' dyed ones.
     private static PieceSet Stones(PieceType type, string sound, bool knocks, float grip) => new PieceSet
@@ -88,8 +109,27 @@ public sealed class PieceSet
         },
     };
 
+    private static readonly Dictionary<PieceType, PieceSet> assisted = sets.ToDictionary(entry => entry.Key, entry => entry.Value.Assisted());
+
+    private PieceSet Assisted()
+    {
+        Color Swap(Dictionary<Color, Color> palette, Color color) => palette.TryGetValue(color, out var swapped) ? swapped : color;
+        var set = (PieceSet)MemberwiseClone();
+        // Named as they now look: the red side orange, janggi's blue one purple.
+        set.SideKeys = SideKeys.Select(key => key == "player.red" ? "player.orange" : key == "player.blue" && Type == PieceType.JanggiPieces ? "player.purple" : key).ToArray();
+        set.Fills = Fills.Select(color => Swap(AssistFills, color)).ToArray();
+        set.Rings = Rings.Select(color => Swap(AssistLines, color)).ToArray();
+        set.Letters = Letters.Select(color => Swap(AssistLines, color)).ToArray();
+        return set;
+    }
+
     // Random is rolled before a match; anything unknown draws as go stones.
-    public static PieceSet Of(PieceType type) => sets.TryGetValue(type, out var set) ? set : sets[PieceType.GoStones];
+    // In colourblind mode, in its colours.
+    public static PieceSet Of(PieceType type)
+    {
+        var table = GameSettings.ColorAssist ? assisted : sets;
+        return table.TryGetValue(type, out var set) ? set : table[PieceType.GoStones];
+    }
 
     public static PieceSet Current => Of(MatchSettings.Current.PieceType);
 }

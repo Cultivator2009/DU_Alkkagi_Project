@@ -25,7 +25,7 @@ public static class SideStyle
 
     // The 3D stone of the third and fourth sides (the first two have their
     // own templates).
-    public static Color StoneColor(int playerId) => playerId == 2 ? StoneBlue : StoneRed;
+    public static Color StoneColor(int playerId) => Fill(playerId, PieceType.GoStones);
 
     // A piece's letter: a janggi side's own colour (the first and third
     // sides carry Cho's set - 楚, 卒 - the second and fourth Han's), or on
