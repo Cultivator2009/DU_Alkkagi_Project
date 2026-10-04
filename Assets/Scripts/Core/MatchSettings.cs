@@ -234,6 +234,22 @@ public sealed class MatchSettings
             v => Loc.Get("bothOut." + (global::BothOutRule)v), normal: new[] { (int)global::BothOutRule.ShooterLoses }, ranked: new[] { (int)global::BothOutRule.ShooterLoses }),
     };
 
+    // How the rule lists show the rules: in groups under headings, the
+    // players before the board (which boards fit depends on them). Only the
+    // lists' order: Defs keep theirs, which is the ids'.
+    public static readonly (string titleKey, MatchSettingId[] ids)[] Groups =
+    {
+        ("rules.group.game", new[] { MatchSettingId.Mode, MatchSettingId.Variant, MatchSettingId.HealthRule, MatchSettingId.PieceHealth, MatchSettingId.SideHealth, MatchSettingId.Barrier }),
+        ("rules.group.players", new[] { MatchSettingId.Seats, MatchSettingId.Teams }),
+        ("rules.group.board", new[] { MatchSettingId.BoardType, MatchSettingId.PieceType, MatchSettingId.BlackStones, MatchSettingId.WhiteStones, MatchSettingId.BlueStones, MatchSettingId.RedStones }),
+        ("rules.group.placement", new[] { MatchSettingId.SpawnMode, MatchSettingId.PlacementStyle, MatchSettingId.PlacementSeconds }),
+        ("rules.group.end", new[] { MatchSettingId.TurnSeconds, MatchSettingId.RoundLimit, MatchSettingId.Zone, MatchSettingId.BothOutRule }),
+        ("rules.group.assist", new[] { MatchSettingId.AimGuide }),
+    };
+
+    // The pieces' count rules, by side (StonesFor).
+    public static readonly MatchSettingId[] StoneIds = { MatchSettingId.BlackStones, MatchSettingId.WhiteStones, MatchSettingId.BlueStones, MatchSettingId.RedStones };
+
     // The match being played (or about to be), Random rolled. Set before
     // GameScene loads.
     public static MatchSettings Current { get; set; } = new MatchSettings();

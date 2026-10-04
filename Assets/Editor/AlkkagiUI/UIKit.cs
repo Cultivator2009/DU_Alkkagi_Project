@@ -497,23 +497,27 @@ namespace AlkkagiUIEditor
         }
 
         // Every match rule (MatchSettings.Defs) as a "label  ◀ value ▶" row,
-        // top to bottom inside a width-wide column. Rows bind by setting id, so
-        // a new rule only needs a rebuild to show up. MatchSettingsPanel stacks
-        // the rows that apply and scrolls them when there are more than fit
-        // in height.
-        // online: the lobby's card, with the online-only rules (seats, the
-        // third and fourth sides' pieces); the local setup card leaves them out.
-        public static int RuleRows(bool online) => MatchSettings.Defs.Count(d => online || !d.OnlineOnly);
+        // in MatchSettings.Groups' order under their headings, inside a
+        // width-wide column. Rows bind by setting id, so a new rule only needs
+        // a place in a group and a rebuild to show up. The pieces' count is
+        // one row for every side (with the button that opens it out) and
+        // then a row per side, labelled by the panel. MatchSettingsPanel
+        // stacks what applies and scrolls it when it's taller than the panel;
+        // a notice at its foot says when a rule moved because of another.
+        // online: the lobby's card, with the online-only rules (the mode); the
+        // local setup card leaves them out.
+        public static int RuleRows(bool online) => MatchSettings.Defs.Count(d => online || !d.OnlineOnly) + 1; // and the shared count
 
         public static MatchSettingsPanel RulesPanel(Transform parent, string name, float width, float rowHeight, float gap, float labelSize, bool online, float height)
         {
+            var headerHeight = Mathf.Round(rowHeight * 0.75f);
             var root = Node(name, parent);
             root.sizeDelta = new Vector2(width, height);
             var viewport = Node("Viewport", root).Stretch();
             viewport.gameObject.AddComponent<RectMask2D>();
             var hit = viewport.gameObject.AddComponent<Image>(); // takes the wheel and drags over the gaps
             hit.color = Color.clear;
-            var content = Node("Content", viewport).Place(new Vector2(0, 1), Vector2.zero, new Vector2(width, RuleRows(online) * (rowHeight + gap) - gap), new Vector2(0, 1));
+            var content = Node("Content", viewport).Place(new Vector2(0, 1), Vector2.zero, new Vector2(width, RuleRows(online) * (rowHeight + gap) + MatchSettings.Groups.Length * headerHeight), new Vector2(0, 1));
             var scroll = root.gameObject.AddComponent<ScrollRect>();
             scroll.content = content;
             scroll.viewport = viewport;
@@ -541,20 +545,25 @@ namespace AlkkagiUIEditor
             panel.modes = online;
             panel.content = content;
             panel.rowPitch = rowHeight + gap;
+            panel.headerPitch = headerHeight;
             var stepperWidth = Mathf.Min(360, width * 0.55f);
             var topLeft = new Vector2(0, 1);
 
             var rows = new List<MatchSettingRow>();
-            foreach (var def in MatchSettings.Defs.Where(d => online || !d.OnlineOnly))
+            var headers = new List<RectTransform>();
+            MatchSettingRow Row(MatchSettingDef def, string key, string labelKey, bool allSides, bool labelFollows)
             {
-                var i = rows.Count;
-                var rowRect = Node(def.Key, content).Place(topLeft, new Vector2(0, -i * (rowHeight + gap)), new Vector2(width, rowHeight));
+                var rowRect = Node(key, content).Place(topLeft, Vector2.zero, new Vector2(width, rowHeight));
                 var row = rowRect.gameObject.AddComponent<MatchSettingRow>();
                 row.settingId = def.Id;
+                row.group = headers.Count - 1;
+                row.allSides = allSides;
                 row.canvasGroup = rowRect.gameObject.AddComponent<CanvasGroup>();
-
-                Label(rowRect, "Label", def.LabelKey, labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
-                    .rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(width - stepperWidth - 16, rowHeight), new Vector2(0, 0.5f));
+                var label = labelFollows
+                    ? Text(rowRect, "Label", Loc.Get(def.LabelKey), labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
+                    : Label(rowRect, "Label", labelKey, labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+                label.rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(width - stepperWidth - 16, rowHeight), new Vector2(0, 0.5f));
+                if (labelFollows) row.labelText = label;
 
                 var (frame, valueText, previous, next) = Stepper(rowRect, "Stepper", rowHeight, def.Format(def.Default), labelSize);
                 frame.rectTransform.Place(new Vector2(1, 0.5f), Vector2.zero, new Vector2(stepperWidth, rowHeight), new Vector2(1, 0.5f));
@@ -562,8 +571,49 @@ namespace AlkkagiUIEditor
                 row.previousButton = previous;
                 row.nextButton = next;
                 rows.Add(row);
+                return row;
+            }
+            foreach (var (titleKey, ids) in MatchSettings.Groups)
+            {
+                // A heading: the group's name, and a line over it from the second on.
+                var header = Node("Heading " + titleKey, content).Place(topLeft, Vector2.zero, new Vector2(width, headerHeight), topLeft);
+                if (headers.Count > 0)
+                    Image(header, "Divider", null, Theme.Divider).rectTransform.Place(topLeft, new Vector2(0, -4), new Vector2(width, 2), topLeft);
+                Label(header, "Title", titleKey, labelSize * 0.8f, true, Theme.InkFaint, TextAlignmentOptions.BottomLeft)
+                    .rectTransform.Place(new Vector2(0, 0), new Vector2(0, 4), new Vector2(width, headerHeight - 10), new Vector2(0, 0));
+                headers.Add(header);
+                foreach (var id in ids)
+                {
+                    var def = MatchSettings.Defs[(int)id];
+                    if (!online && def.OnlineOnly) continue;
+                    var side = System.Array.IndexOf(MatchSettings.StoneIds, id);
+                    if (side == 0)
+                    {
+                        // Every side's count at once, and the button to open it out.
+                        var shared = Row(def, "stones", "match.stones", allSides: true, labelFollows: false);
+                        var buttonSize = new Vector2(Mathf.Round(labelSize * 5.2f), Mathf.Round(rowHeight * 0.72f));
+                        panel.perSideButton = CapsuleButton(shared.transform, "PerSide", "rules.perSide", buttonSize, false, labelSize * 0.68f);
+                        panel.perSideButton.GetComponent<RectTransform>().Place(new Vector2(1, 0.5f), new Vector2(-stepperWidth - 12, 0), buttonSize, new Vector2(1, 0.5f));
+                        panel.perSideText = panel.perSideButton.transform.Find("Label").GetComponent<TMP_Text>();
+                        Object.DestroyImmediate(panel.perSideText.GetComponent<LocalizedText>()); // the panel sets it
+                    }
+                    Row(def, def.Key, def.LabelKey, allSides: false, labelFollows: side >= 0);
+                }
             }
             panel.rows = rows.ToArray();
+            panel.headers = headers.ToArray();
+
+            // At the foot, over the rows: a moment's word on a rule that moved.
+            var notice = Capsule(root, "Notice", rowHeight * 0.8f, Theme.Ink, null);
+            notice.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0, 6), new Vector2(width - 24, rowHeight * 0.8f), new Vector2(0.5f, 0));
+            panel.notice = notice.gameObject.AddComponent<CanvasGroup>();
+            panel.notice.blocksRaycasts = false;
+            panel.notice.interactable = false;
+            panel.noticeText = Text(notice.transform, "Text", "", labelSize * 0.72f, false, Theme.Hanji, TextAlignmentOptions.Center);
+            panel.noticeText.rectTransform.Stretch();
+            panel.noticeText.rectTransform.offsetMin = new Vector2(rowHeight * 0.4f, 0);
+            panel.noticeText.rectTransform.offsetMax = new Vector2(-rowHeight * 0.4f, 0);
+            panel.noticeText.overflowMode = TextOverflowModes.Ellipsis;
             return panel;
         }
 

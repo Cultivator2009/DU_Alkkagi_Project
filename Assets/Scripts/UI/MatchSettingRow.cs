@@ -8,6 +8,9 @@ using UnityEngine.UI;
 public class MatchSettingRow : MonoBehaviour
 {
     public MatchSettingId settingId;
+    public int group;          // its heading's place in MatchSettings.Groups
+    public bool allSides;      // the pieces' count for every side at once (settingId is the first side's)
+    public TMP_Text labelText; // set by the panel where the label follows the pieces (a side's count); else localized as built
     public TMP_Text valueText;
     public Button previousButton;
     public Button nextButton;
