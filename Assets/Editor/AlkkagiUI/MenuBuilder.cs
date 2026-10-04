@@ -160,7 +160,7 @@ namespace AlkkagiUIEditor
             const float width = 1000, pad = 64, rowHeight = 60, rowPitch = 76, labelSize = 26, firstRow = -236;
             const float column = width - pad * 2, left = pad;
             var actions = (GameAction[])System.Enum.GetValues(typeof(GameAction));
-            var pageRows = new[] { 3, 7, 4, actions.Length };
+            var pageRows = new[] { 4, 7, 4, actions.Length };
             var overlay = UIKit.Image(root, "SettingsPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             var panel = overlay.gameObject.AddComponent<SettingsPanel>();
@@ -214,6 +214,11 @@ namespace AlkkagiUIEditor
             panel.blockedText.rectTransform.Place(topLeft, new Vector2(left, RowY(2)), new Vector2(520, rowHeight));
             panel.unblockAllButton = UIKit.CapsuleButton(general, "UnblockAllButton", "settings.unblockAll", new Vector2(236, rowHeight), false, 24);
             Control(panel.unblockAllButton.GetComponent<RectTransform>(), RowY(2), 236, rowHeight);
+            // The version, and who made it and with what (the credits card, over this one).
+            panel.versionText = UIKit.Text(general, "VersionLabel", "0.1", labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+            panel.versionText.rectTransform.Place(topLeft, new Vector2(left, RowY(3)), new Vector2(520, rowHeight));
+            panel.creditsButton = UIKit.CapsuleButton(general, "CreditsButton", "settings.credits", new Vector2(236, rowHeight), false, 24);
+            Control(panel.creditsButton.GetComponent<RectTransform>(), RowY(3), 236, rowHeight);
 
             var display = Page("DisplayPage");
             RowLabel(display, "WindowModeLabel", "settings.windowMode", RowY(0));
@@ -301,6 +306,25 @@ namespace AlkkagiUIEditor
             panel.resetButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(pad, 48), new Vector2(240, 84));
             closeButton = UIKit.CapsuleButton(c, "CloseButton", "settings.close", new Vector2(240, 84), true, 32);
             closeButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 48), new Vector2(240, 84));
+
+            const float creditsWidth = 860, creditsHeight = 880;
+            var credits = UIKit.Image(overlay.transform, "Credits", null, Theme.Overlay, raycast: true);
+            credits.rectTransform.Stretch();
+            panel.creditsPanel = credits.gameObject;
+            var creditsCard = UIKit.Panel(credits.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(credits, creditsCard.rectTransform);
+            creditsCard.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(creditsWidth, creditsHeight));
+            UIKit.Label(creditsCard.transform, "Title", "credits.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
+                .rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -44), new Vector2(creditsWidth - pad * 2, 64));
+            // ASCII placeholder: SettingsPanel writes the credits.
+            panel.creditsText = UIKit.Text(creditsCard.transform, "Body", "Credits", 24, false, Theme.InkSoft, TextAlignmentOptions.Top);
+            panel.creditsText.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -132), new Vector2(creditsWidth - pad * 2, creditsHeight - 132 - 160));
+            panel.creditsText.textWrappingMode = TextWrappingModes.Normal;
+            panel.creditsText.lineSpacing = 6;
+            panel.creditsCloseButton = UIKit.CapsuleButton(creditsCard.transform, "CloseButton", "settings.close", new Vector2(240, 84), true, 32);
+            panel.creditsCloseButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 48), new Vector2(240, 84), new Vector2(0.5f, 0));
+            credits.gameObject.SetActive(false);
+
             overlay.gameObject.SetActive(false);
             return panel;
         }

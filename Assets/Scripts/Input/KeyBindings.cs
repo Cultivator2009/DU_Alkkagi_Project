@@ -8,7 +8,8 @@ public enum GameAction
     CancelAim,
     PanView,    // hold and drag: move the main view across the board
     ResetView,
-    FineAim     // hold while pulling: the pull follows the mouse slower
+    FineAim,    // hold while pulling: the pull follows the mouse slower
+    HideHud     // photo mode: the HUD out of the way, back with it again (or Esc)
 }
 
 // Rebindable keys (Settings > Controls), saved on this machine. Any KeyCode
@@ -25,6 +26,7 @@ public static class KeyBindings
         { GameAction.PanView, KeyCode.Mouse2 },
         { GameAction.ResetView, KeyCode.R },
         { GameAction.FineAim, KeyCode.LeftShift },
+        { GameAction.HideHud, KeyCode.H },
     };
 
     public static event Action OnChanged;

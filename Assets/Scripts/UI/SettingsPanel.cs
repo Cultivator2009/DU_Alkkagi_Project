@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 // The Settings card (built by Tools > Alkkagi UI > 3. Build main menu), a
 // page at a time behind tabs: general (language - its own LanguageToggle -,
-// janggi letters, the blocked players), display (fullscreen or a window and
+// janggi letters, the blocked players, the version and the credits), display (fullscreen or a window and
 // its size, graphics quality, vertical sync or a frame cap, screen shake,
 // colourblind mode), sound (four volumes) and key bindings.
 // Everything saves as it changes. A key row, once clicked, takes the next
@@ -41,6 +41,11 @@ public class SettingsPanel : MonoBehaviour
     public Button resetButton;
     public TMP_Text blockedText;      // how many players this one has blocked
     public Button unblockAllButton;
+    public TMP_Text versionText;
+    public Button creditsButton;
+    public GameObject creditsPanel;   // over the card
+    public TMP_Text creditsText;
+    public Button creditsCloseButton;
 
     private static readonly KeyCode[] AllKeys = (KeyCode[])Enum.GetValues(typeof(KeyCode));
     private KeyBindRow capturing;
@@ -114,6 +119,8 @@ public class SettingsPanel : MonoBehaviour
             });
         }
         unblockAllButton.onClick.AddListener(BlockList.Clear);
+        creditsButton.onClick.AddListener(() => creditsPanel.SetActive(true));
+        creditsCloseButton.onClick.AddListener(() => creditsPanel.SetActive(false));
         resetButton.onClick.AddListener(() =>
         {
             capturing = null;
@@ -134,6 +141,7 @@ public class SettingsPanel : MonoBehaviour
     private void OnDisable()
     {
         capturing = null;
+        creditsPanel.SetActive(false);
         Loc.OnLanguageChanged -= Render;
         KeyBindings.OnChanged -= Render;
         BlockList.OnChanged -= Render;
@@ -180,6 +188,8 @@ public class SettingsPanel : MonoBehaviour
         foreach (var row in keyRows)
             row.keyText.text = row == capturing ? Loc.Get("bind.press") : KeyBindings.DisplayName(KeyBindings.Get(row.action));
         blockedText.text = Loc.Get("settings.blocked", BlockList.Count);
+        versionText.text = Loc.Get("settings.version", Application.version);
+        creditsText.text = Credits();
         unblockAllButton.interactable = BlockList.Count > 0;
         var group = unblockAllButton.GetComponent<CanvasGroup>();
         if (group != null) group.alpha = BlockList.Count > 0 ? 1f : fixedAlpha;
@@ -236,6 +246,27 @@ public class SettingsPanel : MonoBehaviour
         arrow.interactable = available;
         arrow.transform.GetChild(0).GetComponent<Graphic>().canvasRenderer.SetAlpha(available ? 1f : 0.25f);
     }
+
+    // The names stay as their owners write them; the full licenses ship in
+    // StreamingAssets/Licenses.
+    private static string Credits() => string.Join("\n", new[]
+    {
+        $"<size=130%><b><color=#2E241A>{Loc.Get("menu.title")}</color></b></size>",
+        Loc.Get("credits.madeBy", Application.companyName),
+        "",
+        $"<b><color=#2E241A>{Loc.Get("credits.fonts")}</color></b>",
+        "Pretendard - Kil Hyung-jin · SIL Open Font License 1.1",
+        "Noto Serif KR - Adobe · SIL Open Font License 1.1",
+        "Liberation Sans - Red Hat · SIL Open Font License 1.1",
+        "",
+        $"<b><color=#2E241A>{Loc.Get("credits.libraries")}</color></b>",
+        "Facepunch.Steamworks - Facepunch Studios · MIT License",
+        "Unity Logs Viewer - aliessmael",
+        "Steamworks SDK - Valve Corporation",
+        "Made with Unity",
+        "",
+        $"<size=80%>{Loc.Get("credits.licenses")}</size>",
+    });
 
     private static string Percent(float value) => $"{Mathf.RoundToInt(value * 100)}%";
 }

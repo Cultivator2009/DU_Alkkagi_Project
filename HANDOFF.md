@@ -767,6 +767,25 @@ Claude Code로 진행한 작업의 인계용 요약입니다. 새 머신이나 �
 - 로컬 AI 대전을 시험할 때 `local.seat<번호>`(예전 `local.opponent`)를 바꾸면 끝나고 원래대로 돌려 두세요.
 - **`EditorApplication.update`로 돌리는 하네스는 반드시 try/catch로 감싸고 예외가 나면 구독을 끊으세요.** 예외가 매 프레임 나면 같은 update에 걸린 Unity-MCP 플러그인까지 멈춰 아무 명령도 받지 않습니다(2026-10-04, 판 밖으로 떨어져 없어진 알을 계속 읽다가 실제로 일어남). 시험 중인 알은 판 끝 전에 세우고, 하네스마다 시간 제한을 두세요.
 
+## 출시 꾸러미 (2026-10-05)
+
+- **크레딧과 버전**: 설정 → 일반 맨 아래 줄에 "버전 0.1"(`Application.version`)과 "크레딧" 버튼. 크레딧 카드에 만든 이(`Application.companyName`), 글꼴(Pretendard, Noto Serif KR, TMP 기본 글꼴 Liberation Sans: 모두 SIL OFL 1.1), 라이브러리(Facepunch.Steamworks MIT, Unity Logs Viewer, Steamworks SDK), Made with Unity가 나옵니다(`SettingsPanel.Credits`). 이름은 원래 표기 그대로라 번역하지 않습니다.
+- **라이선스 전문** (`Assets/StreamingAssets/Licenses/`): 글꼴 셋의 OFL 전문, Facepunch.Steamworks MIT 전문(GitHub에서 가져옴). 빌드의 데이터 폴더에 그대로 들어갑니다(OFL과 MIT는 같이 배포하는 쪽에 전문을 요구). Unity Logs Viewer(`Assets/Unity-Logs-Viewer`)는 라이선스 파일이 없고 GitHub에서도 확인하지 못했습니다. 출시 전에 확인하거나, 릴리스 빌드에서 어차피 바로 없애므로(Reporter) 빼는 것도 방법입니다.
+- **사진 모드** (`GameAction.HideHud`, 기본 H, 바인딩 가능): 대전 중 HUD 전체를 숨깁니다. 다시 누르거나 Esc(메뉴가 열림)로 돌아옵니다. 자유 시점(Ctrl), 시점 이동, 확대와 같이 쓰면 스토어 스크린샷을 찍을 수 있습니다. 조작 안내(HUD 오른쪽)에는 넣지 않았고 설정 → 조작에 있습니다.
+- **앱 아이콘** (`Tools > Alkkagi UI > 5. Build app icon`): 메인 메뉴의 인장(빨강 바탕에 "알")을 1024로 그려 `Assets/UI/AppIcon.png`에 저장하고 Player Settings 기본 아이콘으로 넣습니다. **자리 표시용**입니다. 진짜 아이콘은 같은 파일에 덮어쓰면 됩니다.
+
+### 출시 전 체크리스트 (사용자가 정하거나 해야 하는 것)
+
+1. **제품 이름**: 지금 `productName`이 `DU_Alkkagi_Project`라 창 제목, 앱 이름, 저장 폴더에 그대로 나옵니다. Player Settings에서 정하세요(바꾸면 PlayerPrefs 위치도 바뀌어 기존 설정·기록이 새로 시작됩니다). 회사 이름 `Cultivator`는 크레딧의 "만든 이"로 나옵니다.
+2. **버전**: `bundleVersion` 0.1 → 출시 버전.
+3. **Steam App ID** ($100): `steam_appid.txt`가 지금 480(Spacewar). 받은 뒤 Steamworks에 업적 17개(위 표), Rich Presence 현지화 파일 둘(`Steam/`), 리더보드(`RankBoard.BoardName`, 없으면 처음 쓸 때 만들어짐)를 확인하세요.
+4. **아이콘**: `Assets/UI/AppIcon.png`를 진짜 아이콘으로.
+5. **음악·녹음 효과음**: `Assets/Audio/Music/`에 `music_menu`, `music_match`. 효과음은 README 규칙대로 덮어쓰기.
+6. **Unity-MCP 제거**: `unity-mcp-cli remove-plugin`. `Assets/Plugins/NuGet`, `scriptingDefineSymbols`의 `UNITY_MCP_*`, `Packages/manifest.json` 항목이 다 빠졌는지 확인(셀프체크가 메모로 알려 줌).
+7. **Windows 빌드는 Windows 머신에서**: 이 Mac에는 Windows 빌드 모듈이 없습니다(Mac Mono만). 스크립팅 백엔드는 지금 Mono입니다. IL2CPP는 Windows에 Visual Studio C++ 도구가 있어야 하고, 성능·디컴파일 방지에 낫지만 필수는 아닙니다.
+8. **스플래시**: Unity 6는 Personal도 "Made with Unity" 스플래시를 끌 수 있습니다. 지금은 켜져 있습니다(`m_ShowUnitySplashScreen`).
+9. **스토어 스크린샷**: 사진 모드(H)로.
+
 ## 미결정/보류 사항
 
 ### 일부러 미뤄 둔 QoL (2026-09-28 메모, 2026-09-29 갱신)

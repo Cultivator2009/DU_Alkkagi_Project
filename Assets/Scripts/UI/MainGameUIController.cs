@@ -141,6 +141,9 @@ public class MainGameUIController : MonoBehaviour
     private void Update()
     {
         resetViewButton.gameObject.SetActive(CameraRig.Instance != null && CameraRig.Instance.IsMoved);
+        // Photo mode: the whole HUD hidden for a clean shot of the board.
+        // Esc brings it back with the menu it opens.
+        if (KeyBindings.Down(GameAction.HideHud) || (HudHidden && Input.GetKeyDown(KeyCode.Escape))) HudHidden = !HudHidden;
         if (turnController == null) return;
         // The bridge rates the match once it's set up: its result shows
         // on the scoreboard as it comes in.
@@ -298,6 +301,12 @@ public class MainGameUIController : MonoBehaviour
 
     private const float ButtonGap = 16; // between the Menu and Reset view buttons, and a panel and its skip button
     private RectTransform CanvasRect => (RectTransform)transform;
+
+    private bool HudHidden
+    {
+        get => !GetComponent<Canvas>().enabled;
+        set => GetComponent<Canvas>().enabled = !value;
+    }
 
     // Canvas units between the screen's side and the board's, in the home view.
     private float SideRoom()
