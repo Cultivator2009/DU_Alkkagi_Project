@@ -225,9 +225,13 @@ namespace AlkkagiUIEditor
             panel.windowSizeText = sizeText;
             panel.windowSmallerButton = smaller;
             panel.windowLargerButton = larger;
+            RowLabel(c, "ScreenShakeLabel", "settings.screenShake", left, RowY(display, 2), 220);
+            panel.screenShake = UIKit.SegmentedToggle(c, "ScreenShakeToggle", new[] { "option.on", "option.off" }, 72);
+            FitLabels(panel.screenShake);
+            Control(panel.screenShake.GetComponent<RectTransform>(), left, RowY(display, 2), 320, 72);
 
             // Online: the players this player blocked (BlockList), all let go at once.
-            var online = SectionAfter(display, 2);
+            var online = SectionAfter(display, 3);
             Section("Online", "settings.online", left, online);
             panel.blockedText = UIKit.Text(c, "BlockedLabel", Loc.Get("settings.blocked", 0), labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
             panel.blockedText.rectTransform.Place(topLeft, new Vector2(left, RowY(online, 0)), new Vector2(300, rowHeight));

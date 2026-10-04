@@ -47,7 +47,23 @@ public class CameraRig : MonoBehaviour
     private bool freeLook;
     private bool resetting;
 
+    // A hard knock's shake (Shake): the most, in board units, and how long it
+    // takes to settle, in real seconds.
+    public float shakeAmplitude = 0.03f;
+    public float shakeSeconds = 0.3f;
+    public float shakeFrequency = 28f;
+    private float shake;         // 1 at the knock, down to 0
+    private Vector3 shaken;      // the view's offset by it, this frame
+
     public bool IsMoved => offset.sqrMagnitude > 1e-6f || !Mathf.Approximately(zoomTarget, 1f);
+
+    // strength 0..1 (the hardest knock). Not while the player has it off
+    // (GameSettings.ScreenShake). Real time: a slowed match shakes as fast.
+    public static void Shake(float strength)
+    {
+        if (Instance == null || !GameSettings.ScreenShake) return;
+        Instance.shake = Mathf.Max(Instance.shake, Mathf.Clamp01(strength));
+    }
 
     // vcams: the scene's tagged virtual cameras; the main view is the plain
     // one with the highest priority, the free look's target is its pivot.
@@ -158,13 +174,26 @@ public class CameraRig : MonoBehaviour
         }
     }
 
+    // The shake on top of wherever the view is, easing out (the square of
+    // what's left), on noise rather than a sine so it doesn't hum.
+    private void LateUpdate()
+    {
+        if (shake <= 0 && shaken == Vector3.zero) return;
+        shake = Mathf.Max(0, shake - Time.unscaledDeltaTime / shakeSeconds);
+        var t = Time.unscaledTime * shakeFrequency;
+        var amount = shakeAmplitude * shake * shake;
+        var jitter = new Vector3(Mathf.PerlinNoise(t, 0.37f) - 0.5f, 0, Mathf.PerlinNoise(0.71f, t) - 0.5f) * (2 * amount);
+        mainView.position += jitter - shaken;
+        shaken = jitter;
+    }
+
     private void MoveTo(Vector3 to)
     {
         var at = pivotHome + new Vector3(to.x, 0, to.z);
         at.x = Mathf.Clamp(at.x, limits.xMin, limits.xMax);
         at.z = Mathf.Clamp(at.z, limits.yMin, limits.yMax);
         offset = at - pivotHome;
-        mainView.position = mainHome + offset - mainView.forward * (homeDistance * (zoom - 1));
+        mainView.position = mainHome + offset - mainView.forward * (homeDistance * (zoom - 1)) + shaken;
         pivot.position = at;
     }
 

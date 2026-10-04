@@ -7,6 +7,7 @@ public static class GameSettings
     private const string MasterKey = "settings.masterVolume";
     private const string InterfaceKey = "settings.interfaceVolume";
     private const string JanggiHanjaKey = "settings.janggiHanja";
+    private const string ScreenShakeKey = "settings.screenShake";
     public const float DefaultVolume = 0.8f;
 
     // 0..1. Scales everything through the AudioListener.
@@ -34,6 +35,14 @@ public static class GameSettings
     {
         get => PlayerPrefs.GetInt(JanggiHanjaKey, 0) == 1;
         set => PlayerPrefs.SetInt(JanggiHanjaKey, value ? 1 : 0);
+    }
+
+    // The view shakes a moment on a hard knock (CameraRig.Shake). On unless
+    // the player turns it off.
+    public static bool ScreenShake
+    {
+        get => PlayerPrefs.GetInt(ScreenShakeKey, 1) == 1;
+        set => PlayerPrefs.SetInt(ScreenShakeKey, value ? 1 : 0);
     }
 
     public static void ResetVolumes()

@@ -12,6 +12,7 @@ public class SettingsPanel : MonoBehaviour
 {
     public SegmentedToggle janggiLetters; // 0 Hangul, 1 Hanja
     public SegmentedToggle windowMode;    // 0 fullscreen, 1 windowed
+    public SegmentedToggle screenShake;   // 0 on, 1 off
     public TMP_Text windowSizeText;
     public Button windowSmallerButton;
     public Button windowLargerButton;
@@ -45,6 +46,11 @@ public class SettingsPanel : MonoBehaviour
             Render();
         };
         windowMode.OnSelected += index => DisplaySettings.SetFullscreen(index == 0);
+        screenShake.OnSelected += index =>
+        {
+            GameSettings.ScreenShake = index == 0;
+            Render();
+        };
         windowSmallerButton.onClick.AddListener(() => StepWindow(-1));
         windowLargerButton.onClick.AddListener(() => StepWindow(1));
         masterSlider.onValueChanged.AddListener(value =>
@@ -116,6 +122,7 @@ public class SettingsPanel : MonoBehaviour
     private void Render()
     {
         janggiLetters.Show(GameSettings.JanggiHanja ? 1 : 0);
+        screenShake.Show(GameSettings.ScreenShake ? 0 : 1);
         RenderDisplay();
         masterSlider.SetValueWithoutNotify(GameSettings.MasterVolume);
         interfaceSlider.SetValueWithoutNotify(GameSettings.InterfaceVolume);

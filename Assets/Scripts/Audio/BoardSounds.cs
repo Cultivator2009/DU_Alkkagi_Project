@@ -41,6 +41,11 @@ public class BoardSounds : MonoBehaviour
     public int maxSoundsPerStep = 4;         // a break into a cluster stays a clatter, not a roar
 
     public float damageGapSeconds = 0.05f;   // one knock's damage sound at a time (a chain of them lands at once)
+    // Hard knocks shake the view from this loudness up (every screen, as
+    // they're heard); the very hardest stop time a blink, where the physics runs.
+    public float shakeFrom = 0.72f;
+    public float hitStopFrom = 0.93f;
+    public float hitStopSeconds = 0.06f;
 
     private string material;
     private float speedScale = 1f; // pieces gripping harder are flicked harder (PieceSet.Grip): the same knock is that much faster
@@ -85,6 +90,7 @@ public class BoardSounds : MonoBehaviour
         if (kind != BoardSound.Shatter && soundsThisStep >= maxSoundsPerStep) return;
         soundsThisStep++;
         var sound = new BoardSoundEvent { Kind = kind, Volume = Loudness(kind, speed), Pan = Pan(at), Owner = owner, Position = at, Piece = piece };
+        if ((kind == BoardSound.Hit || kind == BoardSound.Wall) && sound.Volume >= hitStopFrom) GamePace.HitStop(hitStopSeconds);
         Play(sound);
         OnEmitted?.Invoke(sound);
     }
@@ -129,6 +135,8 @@ public class BoardSounds : MonoBehaviour
             else if (sound.Kind == BoardSound.Fall) effects.PlayFall(sound.Position);
             else if (sound.Kind == BoardSound.Flick) effects.PlayFlick(sound.Position, sound.Volume);
         }
+        if ((sound.Kind == BoardSound.Hit || sound.Kind == BoardSound.Wall) && sound.Volume >= shakeFrom) CameraRig.Shake(Mathf.InverseLerp(shakeFrom, 1f, sound.Volume));
+        else if (sound.Kind == BoardSound.Shatter) CameraRig.Shake(0.35f);
         if (sound.Kind == BoardSound.Shatter) Break(sound.Piece);
         var key = sound.Kind switch
         {

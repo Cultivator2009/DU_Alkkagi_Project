@@ -79,6 +79,7 @@ public class GameManager : MonoBehaviour
 
     private void Update()
     {
+        GamePace.Tick(); // a hit stop or the last fall's slow motion, over
         if (gameState == GameState.GameReadyProcess)
         {
             GamePreparation();
@@ -222,6 +223,22 @@ public class GameManager : MonoBehaviour
         gamePieceScripts.Remove(piece);
     }
 
+    // A piece going over the edge (PieceSounds), on the authority. Its side's
+    // last on the board, leaving one side (or team) at most with any: the
+    // match turns on it, and the moment is slowed (GamePace.SlowMotion). A
+    // guest sees it slowed too, as the host's snapshots come.
+    public void PieceFalling(GamePieceManager piece)
+    {
+        if (TurnController == null || TurnController.IsMirror || TurnController.State != GameState.ProcessingTurn) return;
+        bool OnBoard(GamePieceDragAndReleaseForce p) => p != null && !p.Manager.isDestroyed && p.Body.position.y > -0.05f;
+        bool HasPieces(int side) => gamePieceScripts.Any(p => p != null && p.Manager.playerIndex == side && OnBoard(p));
+        if (HasPieces(piece.playerIndex)) return;
+        var teamsLeft = Sides.Where(s => s.Standing && HasPieces(s.Id)).Select(s => TeamOf(s.Id)).Distinct().Count();
+        if (teamsLeft <= 1) GamePace.SlowMotion(SlowMotionSeconds);
+    }
+
+    private const float SlowMotionSeconds = 1.4f; // real
+
     // A side knocked out with pieces still on the board (a battle of
     // health's B, its health gone) has them break and go, counting for no
     // one; a side that conceded or left keeps its pieces there, in the way.
@@ -307,6 +324,7 @@ public class GameManager : MonoBehaviour
         teams = false;
         SkipLocalTurnProcessing = false;
         gameState = GameState.Mainmenu;
+        GamePace.Release();
         GamePace.SetFastForward(false);
         Time.timeScale = 1f; // menus run at full speed
     }

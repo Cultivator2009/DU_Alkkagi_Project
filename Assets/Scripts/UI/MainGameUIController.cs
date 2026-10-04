@@ -59,6 +59,9 @@ public class MainGameUIController : MonoBehaviour
     private readonly Dictionary<int, MatchEndReason> outSides = new Dictionary<int, MatchEndReason>(); // out while the match went on
     private float matchSeconds; // real seconds of turns so far, pauses left out
     private int? winnerPlayerId; // set once the result is in; -1 = draw
+    private MatchEndReason resultReason;
+    private float resultAt = -1; // real time the result card comes up (ShowResult)
+    private const float ResultBeat = 0.6f; // real seconds after a match won on the board
     private bool turnsStarted;
     private bool anyTurnAnnounced;
     private float noticeUntil;
@@ -162,6 +165,7 @@ public class MainGameUIController : MonoBehaviour
             if (!anyTurnAnnounced) AnnounceTurn(chime: false);
             Render();
         }
+        if (resultAt >= 0 && Time.realtimeSinceStartup >= resultAt) ShowResultCard();
         if (noticeUntil > 0 && Time.time >= noticeUntil)
         {
             noticeUntil = 0;
@@ -457,7 +461,10 @@ public class MainGameUIController : MonoBehaviour
     {
         int? localPlayer = networkBridge != null ? networkBridge.LocalPlayerId : (int?)null;
         killFeed.Add(events, GameManager.manager.Board, MatchSettings.Current.PieceType, localPlayer);
-        if (events.Any(e => e.Kind == KillKind.Kill || e.Kind == KillKind.Nongae)) GameAudio.PlayInterface(GameAudio.Bank.kill, 0.8f);
+        // Two or more of the others' off in one shot: called out, the kill rung higher.
+        var kills = events.Count(e => e.Kind == KillKind.Kill || e.Kind == KillKind.Nongae);
+        if (kills > 0) GameAudio.PlayInterface(GameAudio.Bank.kill, 0.8f, 1f + 0.08f * Mathf.Min(kills - 1, 3));
+        if (kills >= 2) ShowNotice(Loc.Get(kills == 2 ? "hud.double" : kills == 3 ? "hud.triple" : "hud.multi", ColorName(events.First(e => e.Kind == KillKind.Kill || e.Kind == KillKind.Nongae).ShooterId), kills));
     }
 
     private void ShowPassNotice(int playerId, TurnEnd why)
@@ -515,12 +522,24 @@ public class MainGameUIController : MonoBehaviour
     {
         if (winnerPlayerId.HasValue) return;
         winnerPlayerId = winnerId;
+        resultReason = reason;
         if (reason != MatchEndReason.HostLeft) MatchSeries.Record(winnerId);
+        // Won on the board, the last fall plays out (GamePace's slow motion)
+        // and a beat passes before the result comes up.
+        var onBoard = reason == MatchEndReason.Knockout || reason == MatchEndReason.BothOut;
+        resultAt = Time.realtimeSinceStartup + (onBoard ? GamePace.HeldFor + ResultBeat : 0);
+        Render();
+    }
+
+    private void ShowResultCard()
+    {
+        resultAt = -1;
         var bank = GameAudio.Bank;
         var gameManager = GameManager.manager;
+        var winnerId = winnerPlayerId.Value;
         var lost = OwnSide.HasValue && winnerId >= 0 && gameManager.TeamOf(winnerId) != gameManager.TeamOf(OwnSide.Value);
         GameAudio.PlayInterface(winnerId < 0 ? bank.draw : lost ? bank.lose : bank.win);
-        result.Show(this, winnerId, reason, matchSeconds);
+        result.Show(this, winnerId, resultReason, matchSeconds);
         Render();
     }
 

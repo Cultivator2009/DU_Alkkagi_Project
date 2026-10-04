@@ -81,6 +81,7 @@ public class PieceSounds : MonoBehaviour
         {
             fallen = true;
             BoardSounds.Instance.Emit(BoardSound.Fall, 0f, body.position);
+            if (GameManager.manager != null) GameManager.manager.PieceFalling(GetComponent<GamePieceManager>());
         }
         if (y > shatterHeight) return;
         shattered = true;
