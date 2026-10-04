@@ -43,6 +43,9 @@ public class Tutorial : MonoBehaviour
 
     private static Tutorial instance;
 
+    // This match is the practice one.
+    public static bool Running => instance != null;
+
     private Step step;
     private TutorialCard card;
     private AIOpponent white;

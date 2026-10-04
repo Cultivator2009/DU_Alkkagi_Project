@@ -15,7 +15,7 @@ public class MainMenuUI : MonoBehaviour
     public Button offerStartButton;
     public Button offerLaterButton;
     public Button settingsButton;
-    public Button rankingButton;
+    public Button recordsButton;    // the records card, the rankings a button further
     public Button quitButton;
     public GameObject settingsPanel;
     public Button settingsCloseButton;
@@ -33,6 +33,7 @@ public class MainMenuUI : MonoBehaviour
     public Button setupCancelButton;
     public GameObject steamUserRow;
     public TMP_Text steamUserText; // name and rating
+    public RecordsPanel records;
     public LeaderboardPanel leaderboard;
 
     private void Awake()
@@ -69,7 +70,7 @@ public class MainMenuUI : MonoBehaviour
             offerPanel.SetActive(false);
         });
         settingsButton.onClick.AddListener(() => settingsPanel.SetActive(true));
-        rankingButton.onClick.AddListener(leaderboard.Open);
+        recordsButton.onClick.AddListener(() => records.gameObject.SetActive(true));
         settingsCloseButton.onClick.AddListener(() => settingsPanel.SetActive(false));
         quitButton.onClick.AddListener(Quit);
         settingsPanel.SetActive(false);
@@ -113,6 +114,7 @@ public class MainMenuUI : MonoBehaviour
     private void Start()
     {
         PlayerRating.SettlePending(); // a rated match left before its result
+        Achievements.Sync(PlayerRecords.Current.Earned); // any earned while Steam wasn't running
         // The first start: practice first?
         offerPanel.SetActive(!Tutorial.Done && !Tutorial.Offered);
         PlayerRating.OnChanged += RenderSteamUser;

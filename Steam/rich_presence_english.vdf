@@ -1,0 +1,14 @@
+"lang"
+{
+	"Language"	"english"
+	"Tokens"
+	{
+		"#Status_Menu"	"In the main menu"
+		"#Status_Lobby"	"Waiting in a lobby"
+		"#Status_Practice"	"Practicing"
+		"#Status_AI"	"Playing against the AI"
+		"#Status_Local"	"Playing at one screen"
+		"#Status_Online"	"Playing online"
+		"#Status_Ranked"	"Playing ranked"
+	}
+}

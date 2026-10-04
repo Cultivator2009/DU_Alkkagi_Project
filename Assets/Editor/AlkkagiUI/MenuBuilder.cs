@@ -55,7 +55,7 @@ namespace AlkkagiUIEditor
             menu.localButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(112, -366 + fromTop), new Vector2(600, 120), topLeft);
             menu.onlineButton = UIKit.CapsuleButton(root, "OnlineButton", "menu.online", new Vector2(600, 120), false, 40, "menu.onlineSub");
             menu.onlineButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(112, -518 + fromTop), new Vector2(600, 120), topLeft);
-            // Practice, Settings, Rankings, Quit: four to a row under the two big buttons.
+            // Practice, Settings, Records, Quit: four to a row under the two big buttons.
             var small = new Vector2(141, 104);
             Button Small(string name, string key, int index)
             {
@@ -65,7 +65,7 @@ namespace AlkkagiUIEditor
             }
             menu.practiceButton = Small("PracticeButton", "menu.practice", 0);
             menu.settingsButton = Small("SettingsButton", "menu.settings", 1);
-            menu.rankingButton = Small("RankingButton", "menu.ranking", 2);
+            menu.recordsButton = Small("RecordsButton", "menu.records", 2);
             menu.quitButton = Small("QuitButton", "menu.quit", 3);
 
             var steamRow = UIKit.Node("SteamUser", root).Place(new Vector2(0, 0), new Vector2(112, 56), new Vector2(760, 40));
@@ -80,7 +80,9 @@ namespace AlkkagiUIEditor
 
             menu.settingsPanel = BuildSettingsPanel(root, out menu.settingsCloseButton).gameObject;
             BuildSetupPanel(root, menu);
-            menu.leaderboard = BuildLeaderboardPanel(root);
+            menu.records = BuildRecordsPanel(root);
+            menu.leaderboard = BuildLeaderboardPanel(root); // over the records card, which opens it
+            menu.records.leaderboard = menu.leaderboard;
             BuildPracticeOffer(root, menu);
             return canvas.gameObject;
         }
@@ -333,6 +335,95 @@ namespace AlkkagiUIEditor
 
         // The rankings: Top / Around me / Friends, this player's own line, ten
         // rows of place, name, rating and record. LeaderboardPanel fills it.
+        // This player's record and the achievements, a page each behind tabs,
+        // and the rankings a button away (RecordsPanel).
+        private static RecordsPanel BuildRecordsPanel(Transform root)
+        {
+            const float width = 1000, pad = 64, firstRow = -236, gap = 12;
+            const float inner = width - pad * 2;
+            const int columns = 3;
+            const float tileWidth = (inner - gap * (columns - 1)) / columns, tileHeight = 76, tilePitch = tileHeight + 8;
+            var tileRows = (Achievements.All.Length + columns - 1) / columns;
+            var cardHeight = -firstRow + tileRows * tilePitch - 8 + 40 + 84 + 48;
+            var overlay = UIKit.Image(root, "RecordsPanel", null, Theme.Overlay, raycast: true);
+            overlay.rectTransform.Stretch();
+            var panel = overlay.gameObject.AddComponent<RecordsPanel>();
+            var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(overlay, card.rectTransform);
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, cardHeight));
+            var c = card.transform;
+            var topLeft = new Vector2(0, 1);
+            var topRight = new Vector2(1, 1);
+
+            UIKit.Label(c, "Title", "records.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
+                .rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -44), new Vector2(inner, 64));
+            panel.tabs = UIKit.SegmentedToggle(c, "Tabs", new[] { "records.tab.stats", "records.tab.achievements" }, 72);
+            panel.tabs.GetComponent<RectTransform>().Place(new Vector2(0.5f, 1), new Vector2(0, -124), new Vector2(560, 72));
+            Transform Page(string name) => UIKit.Node(name, c).Place(topLeft, Vector2.zero, new Vector2(width, cardHeight));
+
+            // The record: a label over each value, two to a row.
+            var stats = Page("StatsPage");
+            var statKeys = new[] { "records.played", "records.record", "records.ai", "records.online", "records.knockedOff", "records.bestShot", "records.streak", "records.time" };
+            const float statWidth = (inner - gap) / 2, statHeight = 100;
+            panel.statValues = new TMP_Text[statKeys.Length];
+            for (var i = 0; i < statKeys.Length; i++)
+            {
+                var tile = UIKit.Panel(stats, "Stat" + i, Theme.HanjiField, Theme.FieldBorder, 2f);
+                tile.rectTransform.Place(topLeft, new Vector2(pad + i % 2 * (statWidth + gap), firstRow - i / 2 * (statHeight + gap)), new Vector2(statWidth, statHeight));
+                UIKit.Label(tile.transform, "Label", statKeys[i], 22, false, Theme.InkFaint, TextAlignmentOptions.MidlineLeft)
+                    .rectTransform.Place(topLeft, new Vector2(24, -12), new Vector2(statWidth - 48, 32));
+                // ASCII placeholder: the value is set at runtime.
+                var value = UIKit.Text(tile.transform, "Value", "0", 34, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+                value.rectTransform.Place(topLeft, new Vector2(24, -46), new Vector2(statWidth - 48, 44));
+                panel.statValues[i] = value;
+            }
+            var note = UIKit.Label(stats, "Note", "records.note", 20, false, Theme.InkFaint, TextAlignmentOptions.Center);
+            note.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, firstRow - 4 * (statHeight + gap) - 4), new Vector2(inner, 32));
+
+            // The achievements, three to a row: the seal's ring, stamped once earned.
+            var achievements = Page("AchievementsPage");
+            panel.tiles = new AchievementTile[Achievements.All.Length];
+            for (var i = 0; i < panel.tiles.Length; i++)
+            {
+                var def = Achievements.All[i];
+                var bg = UIKit.Panel(achievements, "Achievement" + def.Id, Theme.HanjiField, Theme.FieldBorder, 2f);
+                bg.rectTransform.Place(topLeft, new Vector2(pad + i % columns * (tileWidth + gap), firstRow - i / columns * tilePitch), new Vector2(tileWidth, tileHeight));
+                var tile = bg.gameObject.AddComponent<AchievementTile>();
+                tile.group = bg.gameObject.AddComponent<CanvasGroup>();
+                var markAt = new Vector2(0, 0.5f);
+                tile.ring = UIKit.Image(bg.transform, "Ring", UIKit.CircleOutline, Theme.FieldBorder);
+                tile.ring.rectTransform.Place(markAt, new Vector2(14, 0), new Vector2(40, 40), markAt);
+                tile.seal = UIKit.Image(bg.transform, "Seal", UIKit.Circle, Theme.Seal);
+                tile.seal.rectTransform.Place(markAt, new Vector2(14, 0), new Vector2(40, 40), markAt);
+                // ASCII placeholders: the strings are set at runtime.
+                tile.titleText = UIKit.Text(bg.transform, "Title", "Title", 22, true, Theme.Ink, TextAlignmentOptions.MidlineLeft);
+                tile.titleText.rectTransform.Place(topLeft, new Vector2(66, -8), new Vector2(tileWidth - 78 - (def.Goal > 0 ? 64 : 0), 28));
+                tile.titleText.enableAutoSizing = true;
+                tile.titleText.fontSizeMin = 16;
+                tile.titleText.fontSizeMax = 22;
+                tile.progressText = UIKit.Text(bg.transform, "Progress", "0/0", 18, true, Theme.InkSoft, TextAlignmentOptions.MidlineRight);
+                tile.progressText.rectTransform.Place(topRight, new Vector2(-12, -8), new Vector2(64, 28));
+                tile.descriptionText = UIKit.Text(bg.transform, "Description", "Description", 17, false, Theme.InkSoft, TextAlignmentOptions.TopLeft);
+                tile.descriptionText.rectTransform.Place(topLeft, new Vector2(66, -36), new Vector2(tileWidth - 78, 38));
+                tile.descriptionText.textWrappingMode = TextWrappingModes.Normal;
+                tile.descriptionText.enableAutoSizing = true;
+                tile.descriptionText.fontSizeMin = 14;
+                tile.descriptionText.fontSizeMax = 17;
+                panel.tiles[i] = tile;
+            }
+            panel.earnedText = UIKit.Text(achievements, "Earned", "0/0", 24, true, Theme.InkSoft, TextAlignmentOptions.Center);
+            panel.earnedText.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0, 48), new Vector2(360, 84), new Vector2(0.5f, 0));
+            panel.pages = new[] { stats.gameObject, achievements.gameObject };
+            achievements.gameObject.SetActive(false);
+
+            panel.rankingButton = UIKit.CapsuleButton(c, "RankingButton", "records.ranking", new Vector2(240, 84), false, 30);
+            panel.rankingButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(pad, 48), new Vector2(240, 84));
+            panel.closeButton = UIKit.CapsuleButton(c, "CloseButton", "settings.close", new Vector2(240, 84), true, 32);
+            panel.closeButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 48), new Vector2(240, 84));
+            overlay.gameObject.SetActive(false);
+            return panel;
+        }
+
         private static LeaderboardPanel BuildLeaderboardPanel(Transform root)
         {
             const float width = 1000, pad = 64, rowHeight = 48, rowGap = 2;

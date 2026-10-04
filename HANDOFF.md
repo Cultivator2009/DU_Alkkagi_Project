@@ -110,6 +110,35 @@ Claude Code로 진행한 작업의 인계용 요약입니다. 새 머신이나 �
 - **마지막 낙하 슬로모션** (`GameManager.PieceFalling`, `GamePace.SlowMotion`): 떨어지는 알이 그 쪽의 마지막 알이고, 그러면 알이 남은 쪽(팀)이 하나 이하가 되면, 1.4초(실제) 동안 0.3배로 느려집니다. 결과판은 슬로모션이 끝나고 0.6초 뒤에 뜹니다(`MainGameUIController.ResultBeat`, 판 위에서 끝났을 때만. 기권·나감·라운드 제한은 바로). 일시정지 중에는 걸리지 않고, 매치가 끝나면(`EndMatch`) 풀립니다.
 - **한 번에 여럿** (`MainGameUIController.HandleKills`): 한 샷에 상대 알을 2개 이상 떨어뜨리면 "흑 더블! 한 번에 2개"(3개 트리플, 4개 이상 "한 번에 N개!") 알림이 뜨고, 킬 소리가 개수만큼 조금씩 높아집니다.
 
+## 기록·업적·Steam 상태 (2026-10-05)
+
+- **내 기록** (`PlayerRecords`, 이 기기 PlayerPrefs `records`에 JSON): 결과판이 뜰 때 한 번 셉니다(`MainGameUIController.RecordMatch`). 대전 수와 플레이 시간은 모든 판, 승·패·무와 AI전/온라인 승패, 떨어뜨린 알(논개 포함), 한 번에 최다, 연승(최다·지금)은 이 화면이 한 쪽을 맡은 판(AI전, 온라인)만 셉니다. 한 화면 2인(핫시트)은 대전 수만. 호스트가 나간 판은 세지 않고, 연습 판은 "연습 완료" 업적만.
+- **업적 17개** (`Achievements`, 문자열 `ach.<Id>.title/desc`): 달성하면 결과판 위 알림에 "업적 달성 · 이름"이 뜨고, Steam이 켜져 있으면 Steam에도 설정합니다. Steam 없이 달성한 것은 다음에 메인 메뉴가 열릴 때 Steam에 넣습니다(`Achievements.Sync`). 메인 메뉴 "기록"(전에 "랭킹" 자리) 카드에 "내 기록" · "업적" 탭이 있고, 랭킹 카드는 그 카드의 "랭킹" 버튼으로 엽니다.
+- **Steamworks에 업적을 같은 API 이름으로 만들어야 합니다** (App ID를 받은 뒤, Stats & Achievements → Achievements). 지금은 테스트용 480(Spacewar)이라 Steam 쪽 설정은 조용히 무시됩니다. 아이콘(달성/미달성 64×64 JPG)도 필요합니다.
+
+  | API 이름 | 이름 | 조건 |
+  |---|---|---|
+  | ACH_PRACTICE | 연습 완료 / Practice done | 연습 판을 끝까지 |
+  | ACH_FIRST_WIN | 첫 승리 / First win | AI전이나 온라인에서 처음 이김 |
+  | ACH_DOUBLE | 더블 / Double | 한 샷에 상대 알 2개 |
+  | ACH_TRIPLE | 트리플 / Triple | 한 샷에 상대 알 3개 |
+  | ACH_NONGAE | 논개 / Nongae | 논개 킬 한 번 |
+  | ACH_FLAWLESS | 완봉승 / Flawless | 1:1에서 알을 잃지 않고 이김(판 위에서 끝난 판) |
+  | ACH_COMEBACK | 구사일생 / By a thread | 1:1에서 알 하나만 남기고 이김 |
+  | ACH_BEAT_HARD | 고수를 넘어 / Past the master | 어려움 AI가 낀 로컬 판에서 이김 |
+  | ACH_ONLINE_WIN | 온라인 첫 승 / Online win | 온라인에서 이김 |
+  | ACH_RANKED_SERIES | 랭크전 승리 / Ranked victory | 랭크전 3판 2선승 시리즈를 이김 |
+  | ACH_LAST_STANDING | 최후의 1인 / Last one standing | 3·4인 개인전에서 이김 |
+  | ACH_TEAM_WIN | 팀워크 / Teamwork | 팀전에서 이김 |
+  | ACH_HEALTH_WIN | 버티기 / Hold the line | 체력전에서 이김 |
+  | ACH_ALL_PIECES | 알 박사 / Piece master | 알 네 종류로 한 번씩 이김 (진행 4) |
+  | ACH_KILLS_100 | 백 개 / A hundred | 상대 알 누적 100개 (진행 100) |
+  | ACH_MATCHES_50 | 단골 / Regular | 50판 (진행 50) |
+  | ACH_STREAK_5 | 5연승 / Five in a row | AI전·온라인 5연승 (진행 5) |
+
+  - 진행도는 게임 안 카드에만 보이고, Steam 쪽 진행 표시(통계 연결)는 하지 않았습니다. 업적을 추가하려면 `AchievementId`의 맨 뒤, `Achievements.All`의 같은 자리, `Loc`의 두 문자열, 조건(`PlayerRecords.Count`)을 넣고 메뉴를 다시 빌드하세요. 셀프체크가 순서와 문자열을 확인합니다.
+- **Steam 친구 목록의 상태** (`RichPresence`): 메인 메뉴 / 로비에서 대기 중 / 연습 중 / AI와 대전 중 / 한 화면에서 대전 중 / 온라인 대전 중 / 랭크전 중. 장면이 바뀔 때 `steam_display`를 설정합니다. **Steamworks의 Rich Presence 현지화에 `Steam/rich_presence_koreana.vdf`, `Steam/rich_presence_english.vdf`를 올려야** 보입니다(그 전에는 게임 이름만).
+
 ## 대전 규칙 (`MatchSettings`, 2026-09-23)
 
 규칙은 모두 로비 단위입니다. 온라인은 호스트가 로비에서 정하고, 로컬은 "로컬 대전"을 누르면 뜨는 대전 설정 카드에서 정합니다. 승부에 영향이 없는 개인 설정은 아래 "설정 화면과 조작"에 있습니다.
@@ -452,7 +481,7 @@ Claude Code로 진행한 작업의 인계용 요약입니다. 새 머신이나 �
   - 게임을 켤 때 리더보드의 내 기록과 비교합니다. 판수가 더 많은 쪽을 믿습니다. 다른 기기에서 더 했으면 받아 오고, 못 올린 기록이 있으면 다시 올립니다.
   - 리더보드는 처음 찾는 게임이 만듭니다(`FindOrCreateLeaderboardAsync`). 480 테스트 앱은 모든 개발자가 같이 쓰므로 이름에 게임 이름을 붙였습니다. 2026-09-26 에디터 확인 중에 빈 보드가 생성되었고, 점수는 아직 올리지 않았습니다.
 - **화면**
-  - 메인 메뉴: "랭킹" 버튼(설정·랭킹·종료 세 개), 아래 Steam 줄에 내 레이팅
+  - 메인 메뉴: "기록" 카드의 "랭킹" 버튼(2026-10-05부터. 전에는 메인 메뉴의 "랭킹" 버튼), 아래 Steam 줄에 내 레이팅
   - 랭킹 카드(`LeaderboardPanel`): 전체 / 내 주변 / 친구 탭, 10줄, 내 줄 강조, 위에 "내 레이팅 1104 · 17승 6패 · 4위"
   - 로비: 이름 옆 레이팅 칩. 아직 공유하지 않은 사람은 칩이 없습니다.
   - 결과판: "레이팅" 줄에 새 레이팅과 변화(초록 +, 빨강 -). 랭크 매치에서만 보입니다.

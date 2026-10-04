@@ -62,6 +62,7 @@ public class MainGameUIController : MonoBehaviour
     private MatchEndReason resultReason;
     private float resultAt = -1; // real time the result card comes up (ShowResult)
     private const float ResultBeat = 0.6f; // real seconds after a match won on the board
+    private int bestOwnShot; // this screen's side's most knocked off in one shot (PlayerRecords)
     private bool turnsStarted;
     private bool anyTurnAnnounced;
     private float noticeUntil;
@@ -463,6 +464,8 @@ public class MainGameUIController : MonoBehaviour
         killFeed.Add(events, GameManager.manager.Board, MatchSettings.Current.PieceType, localPlayer);
         // Two or more of the others' off in one shot: called out, the kill rung higher.
         var kills = events.Count(e => e.Kind == KillKind.Kill || e.Kind == KillKind.Nongae);
+        if (kills > 0 && OwnSide.HasValue && events.Any(e => e.ShooterId == OwnSide.Value && (e.Kind == KillKind.Kill || e.Kind == KillKind.Nongae)))
+            bestOwnShot = Mathf.Max(bestOwnShot, kills);
         if (kills > 0) GameAudio.PlayInterface(GameAudio.Bank.kill, 0.8f, 1f + 0.08f * Mathf.Min(kills - 1, 3));
         if (kills >= 2) ShowNotice(Loc.Get(kills == 2 ? "hud.double" : kills == 3 ? "hud.triple" : "hud.multi", ColorName(events.First(e => e.Kind == KillKind.Kill || e.Kind == KillKind.Nongae).ShooterId), kills));
     }
@@ -542,6 +545,47 @@ public class MainGameUIController : MonoBehaviour
         MusicPlayer.Stop(); // the match's music gives way to the result's sound
         result.Show(this, winnerId, resultReason, matchSeconds);
         Render();
+        RecordMatch();
+    }
+
+    // Into this player's records (PlayerRecords), the practice match only
+    // for its achievement; whatever it newly earned is called out.
+    private void RecordMatch()
+    {
+        var newly = Tutorial.Running ? PlayerRecords.Earn(AchievementId.Practice) : PlayerRecords.Record(Facts());
+        if (newly.Count > 0) ShowNotice(Loc.Get("hud.achievement", string.Join(" · ", newly.Select(id => Achievements.Of(id).Title))));
+    }
+
+    private MatchFacts Facts()
+    {
+        var gameManager = GameManager.manager;
+        var rules = MatchSettings.Current;
+        var facts = new MatchFacts
+        {
+            Own = OwnSide,
+            Online = IsOnline,
+            Reason = resultReason,
+            Sides = gameManager.Sides.Count,
+            Teams = gameManager.Teams,
+            Variant = rules.Variant,
+            Pieces = rules.PieceType,
+            Seconds = matchSeconds,
+        };
+        if (!OwnSide.HasValue) return facts;
+        var side = OwnSide.Value;
+        var winner = winnerPlayerId.Value;
+        var kills = turnController.Kills;
+        facts.Won = winner >= 0 && gameManager.TeamOf(winner) == gameManager.TeamOf(side);
+        facts.Lost = winner >= 0 && !facts.Won;
+        facts.PiecesAtStart = rules.Get(MatchSettings.StoneIds[side]);
+        facts.PiecesLeft = gameManager.Sides[side].Pieces;
+        facts.Kills = kills.Kills(side) + kills.Nongae(side);
+        facts.Nongae = kills.Nongae(side);
+        facts.BestShot = bestOwnShot;
+        var series = networkBridge != null ? networkBridge.Series : null;
+        facts.SeriesWon = series != null && series.Over && series.Winner == side;
+        facts.BeatHard = !IsOnline && Enumerable.Range(0, facts.Sides).Any(s => gameManager.TeamOf(s) != gameManager.TeamOf(side) && LocalOpponent.Of(s) == Opponent.AIHard);
+        return facts;
     }
 
     private void Render()

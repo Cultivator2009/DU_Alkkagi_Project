@@ -1,0 +1,14 @@
+"lang"
+{
+	"Language"	"koreana"
+	"Tokens"
+	{
+		"#Status_Menu"	"메인 메뉴"
+		"#Status_Lobby"	"로비에서 대기 중"
+		"#Status_Practice"	"연습 중"
+		"#Status_AI"	"AI와 대전 중"
+		"#Status_Local"	"한 화면에서 대전 중"
+		"#Status_Online"	"온라인 대전 중"
+		"#Status_Ranked"	"랭크전 중"
+	}
+}

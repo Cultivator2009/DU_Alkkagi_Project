@@ -223,6 +223,12 @@ internal static class SelfCheck
             var missing = UsedStringKeys().Where(k => !Loc.Has(k)).Distinct().OrderBy(k => k).ToList();
             return (missing.Count == 0, string.Join(", ", missing.Take(20)));
         });
+        report.Try("every achievement has its name and what it takes, in its place", () =>
+        {
+            var wrong = Achievements.All.Where((def, i) => (int)def.Id != i || !Loc.Has("ach." + def.Id + ".title") || !Loc.Has("ach." + def.Id + ".desc")).Select(def => def.Id.ToString()).ToList();
+            var ok = wrong.Count == 0 && Achievements.All.Length == Enum.GetValues(typeof(AchievementId)).Length;
+            return (ok, ok ? $"{Achievements.All.Length} achievements" : string.Join(", ", wrong));
+        });
         report.Try("the fonts have every character the strings use", () =>
         {
             var regular = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/UI/Kit/Fonts/Pretendard-Regular SDF.asset");
