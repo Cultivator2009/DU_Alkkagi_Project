@@ -16,6 +16,7 @@ using UnityEngine;
 internal sealed class SoundLibrary : AssetPostprocessor
 {
     public const string AudioDir = "Assets/Audio";
+    public const string MusicDir = AudioDir + "/Music";
     private const string BankPath = "Assets/Resources/SoundBank.asset";
     private static readonly Regex SoundName = new Regex(@"^(?<key>[a-z0-9]+(?:_[a-z0-9]+)*?)(?:_(?<tier>soft|mid|hard))?(?:_(?<take>\d+))?$");
 
@@ -30,6 +31,19 @@ internal sealed class SoundLibrary : AssetPostprocessor
             queued = false;
             Load();
         };
+    }
+
+    // Music, new to the project, streams from disk compressed rather than
+    // sitting decoded in memory. A file's settings changed by hand stay.
+    private void OnPreprocessAudio()
+    {
+        if (!assetPath.StartsWith(MusicDir + "/") || !assetImporter.importSettingsMissing) return;
+        var importer = (AudioImporter)assetImporter;
+        var settings = importer.defaultSampleSettings;
+        settings.loadType = AudioClipLoadType.Streaming;
+        settings.compressionFormat = AudioCompressionFormat.Vorbis;
+        settings.quality = 0.7f;
+        importer.defaultSampleSettings = settings;
     }
 
     [MenuItem("Tools/Alkkagi/Load sounds")]

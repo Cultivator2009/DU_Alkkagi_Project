@@ -1,9 +1,10 @@
 using UnityEngine;
 
-// Plays the SoundBank's sounds through a small pool of 2D sources. Board
-// sounds follow the master volume only (AudioListener); interface sounds are
-// scaled by GameSettings.InterfaceVolume as well. The host object is made on
-// first use and outlives scenes.
+// Plays the SoundBank's sounds through a small pool of 2D sources. Under
+// the master volume (AudioListener), board sounds are scaled by
+// GameSettings.EffectsVolume and interface sounds by InterfaceVolume. The
+// host object is made on first use and outlives scenes. Music is
+// MusicPlayer's.
 public static class GameAudio
 {
     private const int Voices = 12;
@@ -25,7 +26,7 @@ public static class GameAudio
     // strength: which take (SoundSet.Pick), 0 a tap .. 1 full power.
     public static void PlayBoard(SoundSet set, float volume, float pitch = 1f, float pan = 0f, float strength = 0.5f)
     {
-        Play(set?.Pick(strength), volume, pitch, pan);
+        Play(set?.Pick(strength), volume * GameSettings.EffectsVolume, pitch, pan);
     }
 
     public static void PlayInterface(SoundSet set, float volume = 1f, float pitch = 1f, float strength = 0.5f)

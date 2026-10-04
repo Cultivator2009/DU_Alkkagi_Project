@@ -3,13 +3,16 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// The Settings card (built by Tools > Alkkagi UI > 3. Build main menu):
-// language (its own LanguageToggle), janggi letters, fullscreen or a window
-// and its size, the two volumes, and key bindings.
+// The Settings card (built by Tools > Alkkagi UI > 3. Build main menu), a
+// page at a time behind tabs: general (language - its own LanguageToggle -,
+// janggi letters, the blocked players), display (fullscreen or a window and
+// its size, screen shake), sound (four volumes) and key bindings.
 // Everything saves as it changes. A key row, once clicked, takes the next
 // key pressed; Escape backs out.
 public class SettingsPanel : MonoBehaviour
 {
+    public SegmentedToggle tabs;          // general, display, sound, controls
+    public GameObject[] pages;            // in the tabs' order
     public SegmentedToggle janggiLetters; // 0 Hangul, 1 Hanja
     public SegmentedToggle windowMode;    // 0 fullscreen, 1 windowed
     public SegmentedToggle screenShake;   // 0 on, 1 off
@@ -22,6 +25,10 @@ public class SettingsPanel : MonoBehaviour
     public TMP_Text masterValue;
     public Slider interfaceSlider;
     public TMP_Text interfaceValue;
+    public Slider musicSlider;
+    public TMP_Text musicValue;
+    public Slider effectsSlider;
+    public TMP_Text effectsValue;
     public KeyBindRow[] keyRows;
     public Button resetButton;
     public TMP_Text blockedText;      // how many players this one has blocked
@@ -29,6 +36,7 @@ public class SettingsPanel : MonoBehaviour
 
     private static readonly KeyCode[] AllKeys = (KeyCode[])Enum.GetValues(typeof(KeyCode));
     private KeyBindRow capturing;
+    private static int page; // the page last shown, while the game runs
     // What the display rows show. A new mode or size lands at the end of
     // the frame, and the window can also be resized or switched from
     // outside, so Update re-renders whenever the screen differs from this.
@@ -40,6 +48,12 @@ public class SettingsPanel : MonoBehaviour
 
     private void Awake()
     {
+        tabs.OnSelected += index =>
+        {
+            page = index;
+            capturing = null;
+            Render();
+        };
         janggiLetters.OnSelected += index =>
         {
             GameSettings.JanggiHanja = index == 1;
@@ -61,6 +75,16 @@ public class SettingsPanel : MonoBehaviour
         interfaceSlider.onValueChanged.AddListener(value =>
         {
             GameSettings.InterfaceVolume = value;
+            Render();
+        });
+        musicSlider.onValueChanged.AddListener(value =>
+        {
+            GameSettings.MusicVolume = value;
+            Render();
+        });
+        effectsSlider.onValueChanged.AddListener(value =>
+        {
+            GameSettings.EffectsVolume = value;
             Render();
         });
         foreach (var row in keyRows)
@@ -121,6 +145,8 @@ public class SettingsPanel : MonoBehaviour
 
     private void Render()
     {
+        tabs.Show(page);
+        for (var i = 0; i < pages.Length; i++) pages[i].SetActive(i == page);
         janggiLetters.Show(GameSettings.JanggiHanja ? 1 : 0);
         screenShake.Show(GameSettings.ScreenShake ? 0 : 1);
         RenderDisplay();
@@ -128,6 +154,10 @@ public class SettingsPanel : MonoBehaviour
         interfaceSlider.SetValueWithoutNotify(GameSettings.InterfaceVolume);
         masterValue.text = Percent(GameSettings.MasterVolume);
         interfaceValue.text = Percent(GameSettings.InterfaceVolume);
+        musicSlider.SetValueWithoutNotify(GameSettings.MusicVolume);
+        effectsSlider.SetValueWithoutNotify(GameSettings.EffectsVolume);
+        musicValue.text = Percent(GameSettings.MusicVolume);
+        effectsValue.text = Percent(GameSettings.EffectsVolume);
         foreach (var row in keyRows)
             row.keyText.text = row == capturing ? Loc.Get("bind.press") : KeyBindings.DisplayName(KeyBindings.Get(row.action));
         blockedText.text = Loc.Get("settings.blocked", BlockList.Count);

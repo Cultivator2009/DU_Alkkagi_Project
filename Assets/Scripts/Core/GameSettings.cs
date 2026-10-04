@@ -6,6 +6,8 @@ public static class GameSettings
 {
     private const string MasterKey = "settings.masterVolume";
     private const string InterfaceKey = "settings.interfaceVolume";
+    private const string MusicKey = "settings.musicVolume";
+    private const string EffectsKey = "settings.effectsVolume";
     private const string JanggiHanjaKey = "settings.janggiHanja";
     private const string ScreenShakeKey = "settings.screenShake";
     public const float DefaultVolume = 0.8f;
@@ -29,6 +31,20 @@ public static class GameSettings
         set => PlayerPrefs.SetFloat(InterfaceKey, Mathf.Clamp01(value));
     }
 
+    // 0..1, for the music (MusicPlayer).
+    public static float MusicVolume
+    {
+        get => PlayerPrefs.GetFloat(MusicKey, DefaultVolume);
+        set => PlayerPrefs.SetFloat(MusicKey, Mathf.Clamp01(value));
+    }
+
+    // 0..1, for the board's sounds (knocks, falls, flicks).
+    public static float EffectsVolume
+    {
+        get => PlayerPrefs.GetFloat(EffectsKey, DefaultVolume);
+        set => PlayerPrefs.SetFloat(EffectsKey, Mathf.Clamp01(value));
+    }
+
     // Janggi piece letters in Hanja (楚 車 包...) rather than Hangul. Display
     // only, and each player's own: both sides play the same pieces.
     public static bool JanggiHanja
@@ -49,6 +65,8 @@ public static class GameSettings
     {
         MasterVolume = DefaultVolume;
         InterfaceVolume = DefaultVolume;
+        MusicVolume = DefaultVolume;
+        EffectsVolume = DefaultVolume;
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]

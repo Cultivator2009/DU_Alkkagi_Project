@@ -252,6 +252,11 @@ internal static class SelfCheck
                 if (((SoundSet)property.GetValue(bank))?.Pick() == null) missing.Add(property.Name);
             return (missing.Count == 0, string.Join(", ", missing));
         });
+        {
+            var bank = AssetDatabase.LoadAssetAtPath<SoundBank>("Assets/Resources/SoundBank.asset");
+            var music = new[] { "music_menu", "music_match" }.Where(k => bank.Get(k)?.Pick() == null).ToList();
+            if (music.Count > 0) report.Note("no music yet (Assets/Audio/Music): " + string.Join(", ", music));
+        }
         report.Try("the three scenes are in the build, the menu first", () =>
         {
             var scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => Path.GetFileNameWithoutExtension(s.path)).ToList();

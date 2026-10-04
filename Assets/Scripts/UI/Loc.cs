@@ -249,6 +249,8 @@ public static class Loc
         { "settings.sound", ("소리", "Sound") },
         { "settings.masterVolume", ("전체 음량", "Master volume") },
         { "settings.interfaceVolume", ("인터페이스 음량", "Interface volume") },
+        { "settings.musicVolume", ("음악 음량", "Music volume") },
+        { "settings.effectsVolume", ("효과음 음량", "Effects volume") },
         { "settings.controls", ("조작", "Controls") },
         { "settings.reset", ("기본값으로", "Reset") },
         { "settings.janggiLetters", ("장기말 글자", "Janggi letters") },

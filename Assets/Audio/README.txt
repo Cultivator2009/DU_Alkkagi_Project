@@ -31,6 +31,13 @@ Unity가 알아서 다시 읽습니다(수동: Tools > Alkkagi > Load sounds).
   notch(조준 세기 눈금), cancel, stamp(결과 도장), open(창 열기),
   damage(체력전 피해, 세기별 권장), zone_warn(자기장 예고), countdown(랭크전 다음 판 3·2·1)
 
+음악 (Music 폴더, MusicPlayer)
+  music_menu      메인 메뉴와 로비 (로비로 가도 이어서)
+  music_match     대전 중. music_match_1, _2 ... 여럿이면 판마다 하나 (직전 것은 피해서)
+  모두 반복 재생되고, 장면이 바뀌면 1.5초에 걸쳐 바뀝니다. 결과가 뜨면 대전 음악은 사라집니다.
+  Music 폴더에 처음 넣는 파일은 스트리밍·Vorbis로 가져옵니다(메모리에 풀어 두지 않음).
+  끝과 처음이 이어지게(루프) 만든 파일을 쓰세요. 없으면 조용합니다.
+
 녹음으로 바꿀 때
   - 지금 파일은 코드로 합성한 임시 소리입니다(Tools > Alkkagi > Build sounds).
     녹음을 넣은 뒤에는 Build sounds를 다시 돌리지 마세요. 같은 이름 파일을 덮어씁니다.

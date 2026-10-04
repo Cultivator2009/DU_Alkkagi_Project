@@ -148,25 +148,23 @@ namespace AlkkagiUIEditor
             return toggle;
         }
 
-        // General (language, janggi letters) and display on the left, sound
-        // and controls on the right. SettingsPanel keeps each control and its
-        // saved value in step. The in-game menu (HUD) uses the same card, so
-        // it has to fit the HUD's narrowest canvas (5:4, 1350 wide).
+        // Four pages behind tabs, one column each: general (language, janggi
+        // letters, the blocked players), display, sound and controls.
+        // SettingsPanel keeps each control and its saved value in step and
+        // shows one page. The in-game menu (HUD) uses the same card, so it
+        // has to fit the HUD's narrowest canvas (5:4, 1350 wide).
         internal static SettingsPanel BuildSettingsPanel(Transform root, out Button closeButton)
         {
-            const float width = 1320, pad = 64, columnGap = 80, rowHeight = 60, rowPitch = 76, labelSize = 26;
-            const float column = (width - pad * 2 - columnGap) / 2;
-            const float left = pad, right = pad + column + columnGap;
-            const float firstSection = -130;
+            const float width = 1000, pad = 64, rowHeight = 60, rowPitch = 76, labelSize = 26, firstRow = -236;
+            const float column = width - pad * 2, left = pad;
             var actions = (GameAction[])System.Enum.GetValues(typeof(GameAction));
+            var pageRows = new[] { 3, 3, 4, actions.Length };
             var overlay = UIKit.Image(root, "SettingsPanel", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             var panel = overlay.gameObject.AddComponent<SettingsPanel>();
 
-            float RowY(float section, int row) => section - 54 - row * rowPitch;
-            float SectionAfter(float section, int rows) => RowY(section, rows - 1) - rowHeight - 36;
-            var controlsSection = SectionAfter(firstSection, 2);
-            var cardHeight = -RowY(controlsSection, actions.Length - 1) + rowHeight + 40 + 84 + 48;
+            float RowY(int row) => firstRow - row * rowPitch;
+            var cardHeight = -RowY(pageRows.Max() - 1) + rowHeight + 40 + 84 + 48;
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             UIKit.Appear(overlay, card.rectTransform);
@@ -177,18 +175,12 @@ namespace AlkkagiUIEditor
             UIKit.Label(c, "Title", "settings.title", 48, true, Theme.Ink, TextAlignmentOptions.Center)
                 .rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -44), new Vector2(width - pad * 2, 64));
 
-            void RowLabel(Transform parent, string name, string key, float x, float y, float labelWidth = 300) =>
+            void RowLabel(Transform parent, string name, string key, float y, float labelWidth = 520) =>
                 UIKit.Label(parent, name, key, labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft)
-                    .rectTransform.Place(topLeft, new Vector2(x, y), new Vector2(labelWidth, rowHeight));
-            void Section(string name, string key, float x, float y)
-            {
-                UIKit.Label(c, name, key, 24, true, Theme.InkFaint, TextAlignmentOptions.MidlineLeft)
-                    .rectTransform.Place(topLeft, new Vector2(x, y), new Vector2(column, 32));
-                UIKit.Image(c, name + "Divider", null, Theme.Divider).rectTransform.Place(topLeft, new Vector2(x, y - 38), new Vector2(column, 2));
-            }
+                    .rectTransform.Place(topLeft, new Vector2(left, y), new Vector2(labelWidth, rowHeight));
             // At the right edge of the column, centred on the row.
-            void Control(RectTransform rect, float x, float y, float controlWidth, float height) =>
-                rect.Place(topLeft, new Vector2(x + column - controlWidth, y - (rowHeight - height) / 2), new Vector2(controlWidth, height));
+            void Control(RectTransform rect, float y, float controlWidth, float height) =>
+                rect.Place(topLeft, new Vector2(left + column - controlWidth, y - (rowHeight - height) / 2), new Vector2(controlWidth, height));
 
             // English ("Hangul", "Fullscreen") runs wider than half a capsule
             // at the usual size.
@@ -203,63 +195,66 @@ namespace AlkkagiUIEditor
                 }
             }
 
-            Section("General", "settings.general", left, firstSection);
-            RowLabel(c, "LanguageLabel", "settings.language", left, RowY(firstSection, 0));
-            Control(BuildLanguageToggle(c, "LanguageToggle").GetComponent<RectTransform>(), left, RowY(firstSection, 0), 236, 72);
-            RowLabel(c, "LettersLabel", "settings.janggiLetters", left, RowY(firstSection, 1));
-            panel.janggiLetters = UIKit.SegmentedToggle(c, "LettersToggle", new[] { "settings.hangul", "settings.hanja" }, 72);
-            FitLabels(panel.janggiLetters);
-            Control(panel.janggiLetters.GetComponent<RectTransform>(), left, RowY(firstSection, 1), 236, 72);
+            panel.tabs = UIKit.SegmentedToggle(c, "Tabs", new[] { "settings.general", "settings.display", "settings.sound", "settings.controls" }, 72);
+            FitLabels(panel.tabs);
+            panel.tabs.GetComponent<RectTransform>().Place(new Vector2(0.5f, 1), new Vector2(0, -124), new Vector2(column, 72));
+            Transform Page(string name) => UIKit.Node(name, c).Place(topLeft, Vector2.zero, new Vector2(width, cardHeight));
 
-            var display = SectionAfter(firstSection, 2);
-            Section("Display", "settings.display", left, display);
-            RowLabel(c, "WindowModeLabel", "settings.windowMode", left, RowY(display, 0), 220);
-            panel.windowMode = UIKit.SegmentedToggle(c, "WindowModeToggle", new[] { "settings.fullscreen", "settings.windowed" }, 72);
+            var general = Page("GeneralPage");
+            RowLabel(general, "LanguageLabel", "settings.language", RowY(0));
+            Control(BuildLanguageToggle(general, "LanguageToggle").GetComponent<RectTransform>(), RowY(0), 236, 72);
+            RowLabel(general, "LettersLabel", "settings.janggiLetters", RowY(1));
+            panel.janggiLetters = UIKit.SegmentedToggle(general, "LettersToggle", new[] { "settings.hangul", "settings.hanja" }, 72);
+            FitLabels(panel.janggiLetters);
+            Control(panel.janggiLetters.GetComponent<RectTransform>(), RowY(1), 236, 72);
+            // The players this player blocked online (BlockList), all let go at once.
+            panel.blockedText = UIKit.Text(general, "BlockedLabel", Loc.Get("settings.blocked", 0), labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
+            panel.blockedText.rectTransform.Place(topLeft, new Vector2(left, RowY(2)), new Vector2(520, rowHeight));
+            panel.unblockAllButton = UIKit.CapsuleButton(general, "UnblockAllButton", "settings.unblockAll", new Vector2(236, rowHeight), false, 24);
+            Control(panel.unblockAllButton.GetComponent<RectTransform>(), RowY(2), 236, rowHeight);
+
+            var display = Page("DisplayPage");
+            RowLabel(display, "WindowModeLabel", "settings.windowMode", RowY(0));
+            panel.windowMode = UIKit.SegmentedToggle(display, "WindowModeToggle", new[] { "settings.fullscreen", "settings.windowed" }, 72);
             FitLabels(panel.windowMode);
-            Control(panel.windowMode.GetComponent<RectTransform>(), left, RowY(display, 0), 320, 72);
-            var sizeRow = UIKit.Node("WindowSizeRow", c).Place(topLeft, Vector2.zero, new Vector2(width, cardHeight));
+            Control(panel.windowMode.GetComponent<RectTransform>(), RowY(0), 320, 72);
+            var sizeRow = UIKit.Node("WindowSizeRow", display).Place(topLeft, Vector2.zero, new Vector2(width, cardHeight));
             panel.windowSizeRow = sizeRow.gameObject.AddComponent<CanvasGroup>();
-            RowLabel(sizeRow, "WindowSizeLabel", "settings.windowSize", left, RowY(display, 1), 220);
+            RowLabel(sizeRow, "WindowSizeLabel", "settings.windowSize", RowY(1));
             var (sizeFrame, sizeText, smaller, larger) = UIKit.Stepper(sizeRow, "WindowSize", rowHeight, "1920 × 1080", labelSize);
-            Control(sizeFrame.rectTransform, left, RowY(display, 1), 320, rowHeight);
+            Control(sizeFrame.rectTransform, RowY(1), 320, rowHeight);
             panel.windowSizeText = sizeText;
             panel.windowSmallerButton = smaller;
             panel.windowLargerButton = larger;
-            RowLabel(c, "ScreenShakeLabel", "settings.screenShake", left, RowY(display, 2), 220);
-            panel.screenShake = UIKit.SegmentedToggle(c, "ScreenShakeToggle", new[] { "option.on", "option.off" }, 72);
+            RowLabel(display, "ScreenShakeLabel", "settings.screenShake", RowY(2));
+            panel.screenShake = UIKit.SegmentedToggle(display, "ScreenShakeToggle", new[] { "option.on", "option.off" }, 72);
             FitLabels(panel.screenShake);
-            Control(panel.screenShake.GetComponent<RectTransform>(), left, RowY(display, 2), 320, 72);
+            Control(panel.screenShake.GetComponent<RectTransform>(), RowY(2), 320, 72);
 
-            // Online: the players this player blocked (BlockList), all let go at once.
-            var online = SectionAfter(display, 3);
-            Section("Online", "settings.online", left, online);
-            panel.blockedText = UIKit.Text(c, "BlockedLabel", Loc.Get("settings.blocked", 0), labelSize, false, Theme.InkSoft, TextAlignmentOptions.MidlineLeft);
-            panel.blockedText.rectTransform.Place(topLeft, new Vector2(left, RowY(online, 0)), new Vector2(300, rowHeight));
-            panel.unblockAllButton = UIKit.CapsuleButton(c, "UnblockAllButton", "settings.unblockAll", new Vector2(236, rowHeight), false, 24);
-            Control(panel.unblockAllButton.GetComponent<RectTransform>(), left, RowY(online, 0), 236, rowHeight);
-
-            Section("Sound", "settings.sound", right, firstSection);
+            var sound = Page("SoundPage");
             (Slider, TMP_Text) VolumeRow(string name, string key, int row)
             {
-                var y = RowY(firstSection, row);
-                RowLabel(c, name + "Label", key, right, y, 250);
-                var slider = UIKit.Slider(c, name + "Slider", new Vector2(200, 36));
-                slider.GetComponent<RectTransform>().Place(topLeft, new Vector2(right + column - 100 - 200, y - (rowHeight - 36) / 2), new Vector2(200, 36));
-                var value = UIKit.Text(c, name + "Value", "80%", 26, true, Theme.Ink, TextAlignmentOptions.MidlineRight);
-                Control(value.rectTransform, right, y, 84, rowHeight);
+                var y = RowY(row);
+                RowLabel(sound, name + "Label", key, y, 360);
+                var slider = UIKit.Slider(sound, name + "Slider", new Vector2(320, 36));
+                slider.GetComponent<RectTransform>().Place(topLeft, new Vector2(left + column - 100 - 320, y - (rowHeight - 36) / 2), new Vector2(320, 36));
+                var value = UIKit.Text(sound, name + "Value", "80%", 26, true, Theme.Ink, TextAlignmentOptions.MidlineRight);
+                Control(value.rectTransform, y, 84, rowHeight);
                 return (slider, value);
             }
             (panel.masterSlider, panel.masterValue) = VolumeRow("Master", "settings.masterVolume", 0);
-            (panel.interfaceSlider, panel.interfaceValue) = VolumeRow("Interface", "settings.interfaceVolume", 1);
+            (panel.musicSlider, panel.musicValue) = VolumeRow("Music", "settings.musicVolume", 1);
+            (panel.effectsSlider, panel.effectsValue) = VolumeRow("Effects", "settings.effectsVolume", 2);
+            (panel.interfaceSlider, panel.interfaceValue) = VolumeRow("Interface", "settings.interfaceVolume", 3);
 
-            Section("Controls", "settings.controls", right, controlsSection);
+            var controls = Page("ControlsPage");
             var rows = new System.Collections.Generic.List<KeyBindRow>();
             for (var i = 0; i < actions.Length; i++)
             {
-                var y = RowY(controlsSection, i);
-                RowLabel(c, "Bind" + actions[i] + "Label", "bind." + actions[i], right, y);
-                var button = UIKit.CapsuleButton(c, "Bind" + actions[i], "settings.reset", new Vector2(240, rowHeight), false, 24);
-                Control(button.GetComponent<RectTransform>(), right, y, 240, rowHeight);
+                var y = RowY(i);
+                RowLabel(controls, "Bind" + actions[i] + "Label", "bind." + actions[i], y);
+                var button = UIKit.CapsuleButton(controls, "Bind" + actions[i], "settings.reset", new Vector2(240, rowHeight), false, 24);
+                Control(button.GetComponent<RectTransform>(), y, 240, rowHeight);
                 var keyText = button.GetComponentInChildren<TMP_Text>();
                 // The key name is set by SettingsPanel, not a Loc key.
                 Object.DestroyImmediate(keyText.GetComponent<LocalizedText>());
@@ -276,6 +271,8 @@ namespace AlkkagiUIEditor
                 rows.Add(row);
             }
             panel.keyRows = rows.ToArray();
+            panel.pages = new[] { general, display, sound, controls }.Select(page => page.gameObject).ToArray();
+            for (var i = 1; i < panel.pages.Length; i++) panel.pages[i].SetActive(false);
 
             panel.resetButton = UIKit.CapsuleButton(c, "ResetButton", "settings.reset", new Vector2(240, 84), false, 30);
             panel.resetButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(pad, 48), new Vector2(240, 84));

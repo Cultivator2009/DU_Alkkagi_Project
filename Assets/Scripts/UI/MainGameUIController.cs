@@ -539,6 +539,7 @@ public class MainGameUIController : MonoBehaviour
         var winnerId = winnerPlayerId.Value;
         var lost = OwnSide.HasValue && winnerId >= 0 && gameManager.TeamOf(winnerId) != gameManager.TeamOf(OwnSide.Value);
         GameAudio.PlayInterface(winnerId < 0 ? bank.draw : lost ? bank.lose : bank.win);
+        MusicPlayer.Stop(); // the match's music gives way to the result's sound
         result.Show(this, winnerId, resultReason, matchSeconds);
         Render();
     }
