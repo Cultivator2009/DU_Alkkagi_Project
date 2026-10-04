@@ -13,6 +13,7 @@ public class AIOpponent : MonoBehaviour
     public int playerId = 1;
     public AILevel level = AILevel.Normal;
     public float thinkSeconds = 0.9f; // at the least, so a shot doesn't land the instant the turn starts
+    public bool paused;               // sits its turns out (the practice match's lessons)
 
     // Spread (one sigma) of the aim, in degrees, and of the strength, as a
     // fraction. Planning itself is near perfect: with no error the AI
@@ -36,7 +37,7 @@ public class AIOpponent : MonoBehaviour
     private void Update()
     {
         var gameManager = GameManager.manager;
-        if (busy || gameManager == null) return;
+        if (busy || paused || gameManager == null) return;
         if (gameManager.gameState == GameManager.GameState.Placement)
         {
             if (gameManager.Placement != null && gameManager.Placement.CanAct(playerId)) StartCoroutine(Place(gameManager));

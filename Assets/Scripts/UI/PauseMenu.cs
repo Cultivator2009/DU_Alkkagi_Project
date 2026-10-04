@@ -2,8 +2,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// The in-game menu (Esc, or the HUD's Menu button): resume, settings,
-// concede, back to the main menu. A local game stands still while it's open;
+// The in-game menu (Esc, or the HUD's Menu button): resume, this match's
+// rules, settings, concede, back to the main menu. A local game stands still while it's open;
 // an online one can't, and says so. Concede and Main menu take a second
 // press to go through.
 public class PauseMenu : MonoBehaviour
@@ -12,6 +12,10 @@ public class PauseMenu : MonoBehaviour
     public GameObject overlay;
     public Button openButton;
     public Button resumeButton;
+    public Button rulesButton;
+    public GameObject rulesPanel;   // over the menu: the match's rules (RulesSummary)
+    public TMP_Text rulesText;
+    public Button rulesCloseButton;
     public Button settingsButton;
     public Button concedeButton;
     public TMP_Text concedeLabel;
@@ -31,6 +35,8 @@ public class PauseMenu : MonoBehaviour
     {
         openButton.onClick.AddListener(Open);
         resumeButton.onClick.AddListener(Close);
+        rulesButton.onClick.AddListener(ShowRules);
+        rulesCloseButton.onClick.AddListener(() => rulesPanel.SetActive(false));
         settingsButton.onClick.AddListener(() => settings.gameObject.SetActive(true));
         settingsCloseButton.onClick.AddListener(() => settings.gameObject.SetActive(false));
         concedeButton.onClick.AddListener(() => Confirm(concedeButton, () =>
@@ -45,6 +51,14 @@ public class PauseMenu : MonoBehaviour
         }));
         overlay.SetActive(false);
         settings.gameObject.SetActive(false);
+        rulesPanel.SetActive(false);
+    }
+
+    private void ShowRules()
+    {
+        var gameManager = GameManager.manager;
+        rulesText.text = RulesSummary.Text(MatchSettings.Current, gameManager.Sides.Count, gameManager.Teams);
+        rulesPanel.SetActive(true);
     }
 
     private void OnEnable()
@@ -72,6 +86,7 @@ public class PauseMenu : MonoBehaviour
         if (!Input.GetKeyDown(KeyCode.Escape) || settings.EscapeUsedFrame == Time.frameCount) return;
 
         if (settings.gameObject.activeSelf) settings.gameObject.SetActive(false);
+        else if (rulesPanel.activeSelf) rulesPanel.SetActive(false);
         else if (IsOpen) Close();
         else Open();
     }
@@ -92,6 +107,7 @@ public class PauseMenu : MonoBehaviour
     {
         overlay.SetActive(false);
         settings.gameObject.SetActive(false);
+        rulesPanel.SetActive(false);
         Time.timeScale = GamePace.Current;
         armed = null;
     }

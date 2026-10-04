@@ -223,6 +223,8 @@ public class MainGameUIController : MonoBehaviour
         Scale(feed, Fit(feed));
         var placement = GetComponentInChildren<PlacementHud>(true);
         if (placement != null) Scale((RectTransform)placement.panel.transform, Fit((RectTransform)placement.panel.transform));
+        var lesson = GetComponentInChildren<TutorialCard>(true);
+        if (lesson != null) Scale((RectTransform)lesson.panel.transform, Fit((RectTransform)lesson.panel.transform));
         // Menu in the corner, Reset view to its left.
         var menu = (RectTransform)GetComponent<PauseMenu>().openButton.transform;
         var reset = (RectTransform)resetViewButton.transform;
@@ -460,6 +462,7 @@ public class MainGameUIController : MonoBehaviour
 
     private void ShowPassNotice(int playerId, TurnEnd why)
     {
+        if (Tutorial.QuietPasses) return; // white sitting the lessons out
         ShowNotice(Loc.Get(why == TurnEnd.Timeout ? "hud.timeout" : "hud.skipped", ColorName(playerId)));
     }
 

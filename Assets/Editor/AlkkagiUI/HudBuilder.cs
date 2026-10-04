@@ -66,6 +66,7 @@ namespace AlkkagiUIEditor
             controller.fastForwardLabel = controller.fastForwardButton.GetComponentInChildren<LocalizedText>();
             controller.fastForwardButton.gameObject.SetActive(false);
             BuildControlsHint(root, controller);
+            BuildTutorialCard(root);
             BuildGameOverPanel(root, controller);
             BuildPauseMenu(root, controller);
             return canvas.gameObject;
@@ -219,6 +220,33 @@ namespace AlkkagiUIEditor
 
             hud.readyButton = UIKit.CapsuleButton(t, "ReadyButton", "placement.ready", new Vector2(width, 72), true, 30);
             hud.readyButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, Pad), new Vector2(width, 72), new Vector2(0.5f, 0));
+            bg.gameObject.SetActive(false);
+        }
+
+        // The practice match's lesson (Tutorial), on the left above the middle:
+        // under the kill feed, clear of black's panel and its Skip turn
+        // button, wide enough for a lesson in two lines beside the board.
+        private static void BuildTutorialCard(Transform root)
+        {
+            var size = new Vector2(520, 300);
+            var area = UIKit.Node("Tutorial", root).Stretch();
+            var card = area.gameObject.AddComponent<TutorialCard>();
+            var bg = UIKit.Panel(area, "Panel", Theme.Hanji, Theme.Ink);
+            bg.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(Margin, 120), size, new Vector2(0, 0.5f));
+            card.panel = bg.gameObject;
+            card.pulse = Pulse(bg.gameObject, 1.04f, 0.25f);
+            var t = bg.transform;
+            var topLeft = new Vector2(0, 1);
+            var width = size.x - Pad * 2;
+            card.stepText = UIKit.Text(t, "Step", "연습 1/6", 22, true, Theme.Seal, TextAlignmentOptions.TopLeft);
+            card.stepText.rectTransform.Place(topLeft, new Vector2(Pad, -Pad), new Vector2(width, 30));
+            card.titleText = UIKit.Text(t, "Title", "당기기", 36, true, Theme.Ink, TextAlignmentOptions.TopLeft);
+            card.titleText.rectTransform.Place(topLeft, new Vector2(Pad, -Pad - 34), new Vector2(width, 46));
+            card.bodyText = UIKit.Text(t, "Body", "", 24, false, Theme.InkSoft, TextAlignmentOptions.TopLeft);
+            card.bodyText.rectTransform.Place(topLeft, new Vector2(Pad, -Pad - 90), new Vector2(width, 70));
+            card.bodyText.textWrappingMode = TextWrappingModes.Normal;
+            card.skipButton = UIKit.CapsuleButton(t, "SkipButton", "tutorial.skip", new Vector2(180, 60), false, 24);
+            card.skipButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-Pad, Pad), new Vector2(180, 60), new Vector2(1, 0));
             bg.gameObject.SetActive(false);
         }
 
@@ -534,7 +562,7 @@ namespace AlkkagiUIEditor
             var overlay = UIKit.Image(root, "PauseMenu", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             menu.overlay = overlay.gameObject;
-            var height = 148 + 4 * buttonHeight + 3 * gap + 40 + 36 + 48;
+            var height = 148 + 5 * buttonHeight + 4 * gap + 40 + 36 + 48;
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             UIKit.Appear(overlay, card.rectTransform);
             card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, height));
@@ -549,9 +577,10 @@ namespace AlkkagiUIEditor
                 return button;
             }
             menu.resumeButton = Row("ResumeButton", "pause.resume", 0, true);
-            menu.settingsButton = Row("SettingsButton", "menu.settings", 1, false);
-            menu.concedeButton = Row("ConcedeButton", "pause.concede", 2, false);
-            menu.mainMenuButton = Row("MainMenuButton", "pause.mainMenu", 3, false);
+            menu.rulesButton = Row("RulesButton", "pause.rules", 1, false);
+            menu.settingsButton = Row("SettingsButton", "menu.settings", 2, false);
+            menu.concedeButton = Row("ConcedeButton", "pause.concede", 3, false);
+            menu.mainMenuButton = Row("MainMenuButton", "pause.mainMenu", 4, false);
             // Set by PauseMenu (the side conceding, or "press again").
             menu.concedeLabel = menu.concedeButton.GetComponentInChildren<TMP_Text>();
             Object.DestroyImmediate(menu.concedeLabel.GetComponent<LocalizedText>());
@@ -561,6 +590,24 @@ namespace AlkkagiUIEditor
             menu.caption = UIKit.Text(card.transform, "Caption", Loc.Get("pause.captionLocal"), 22, false, Theme.InkFaint, TextAlignmentOptions.Center);
             menu.caption.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0, 48), new Vector2(width - pad * 2, 36), new Vector2(0.5f, 0));
             overlay.gameObject.SetActive(false);
+
+            // This match's rules, over the menu.
+            const float rulesWidth = 820, rulesHeight = 640;
+            var rulesOverlay = UIKit.Image(root, "RulesPanel", null, Theme.Overlay, raycast: true);
+            rulesOverlay.rectTransform.Stretch();
+            menu.rulesPanel = rulesOverlay.gameObject;
+            var rulesCard = UIKit.Panel(rulesOverlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(rulesOverlay, rulesCard.rectTransform);
+            rulesCard.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(rulesWidth, rulesHeight));
+            UIKit.Label(rulesCard.transform, "Title", "rules.title", 44, true, Theme.Ink, TextAlignmentOptions.Center)
+                .rectTransform.Place(top, new Vector2(0, -40), new Vector2(rulesWidth - pad * 2, 60));
+            menu.rulesText = UIKit.Text(rulesCard.transform, "Rules", "", 26, false, Theme.InkSoft, TextAlignmentOptions.TopLeft);
+            menu.rulesText.rectTransform.Place(top, new Vector2(0, -124), new Vector2(rulesWidth - pad * 2, rulesHeight - 124 - 140));
+            menu.rulesText.textWrappingMode = TextWrappingModes.Normal;
+            menu.rulesText.lineSpacing = 18;
+            menu.rulesCloseButton = UIKit.CapsuleButton(rulesCard.transform, "CloseButton", "rules.close", new Vector2(280, 84), true, 32);
+            menu.rulesCloseButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 44), new Vector2(280, 84), new Vector2(0.5f, 0));
+            rulesOverlay.gameObject.SetActive(false);
 
             // Above the menu, as it's opened from it.
             menu.settings = MenuBuilder.BuildSettingsPanel(root, out menu.settingsCloseButton);

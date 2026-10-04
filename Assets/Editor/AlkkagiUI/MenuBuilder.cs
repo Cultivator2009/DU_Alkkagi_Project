@@ -55,14 +55,18 @@ namespace AlkkagiUIEditor
             menu.localButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(112, -366 + fromTop), new Vector2(600, 120), topLeft);
             menu.onlineButton = UIKit.CapsuleButton(root, "OnlineButton", "menu.online", new Vector2(600, 120), false, 40, "menu.onlineSub");
             menu.onlineButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(112, -518 + fromTop), new Vector2(600, 120), topLeft);
-            // Settings, Rankings, Quit: three to a row under the two big buttons.
-            var small = new Vector2(190, 104);
-            menu.settingsButton = UIKit.CapsuleButton(root, "SettingsButton", "menu.settings", small, false, 36);
-            menu.settingsButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(112, -670 + fromTop), small, topLeft);
-            menu.rankingButton = UIKit.CapsuleButton(root, "RankingButton", "menu.ranking", small, false, 36);
-            menu.rankingButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(317, -670 + fromTop), small, topLeft);
-            menu.quitButton = UIKit.CapsuleButton(root, "QuitButton", "menu.quit", small, false, 36);
-            menu.quitButton.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(522, -670 + fromTop), small, topLeft);
+            // Practice, Settings, Rankings, Quit: four to a row under the two big buttons.
+            var small = new Vector2(141, 104);
+            Button Small(string name, string key, int index)
+            {
+                var button = UIKit.CapsuleButton(root, name, key, small, false, 32);
+                button.GetComponent<RectTransform>().Place(leftMiddle, new Vector2(112 + index * (small.x + 12), -670 + fromTop), small, topLeft);
+                return button;
+            }
+            menu.practiceButton = Small("PracticeButton", "menu.practice", 0);
+            menu.settingsButton = Small("SettingsButton", "menu.settings", 1);
+            menu.rankingButton = Small("RankingButton", "menu.ranking", 2);
+            menu.quitButton = Small("QuitButton", "menu.quit", 3);
 
             var steamRow = UIKit.Node("SteamUser", root).Place(new Vector2(0, 0), new Vector2(112, 56), new Vector2(760, 40));
             UIKit.Image(steamRow, "Dot", UIKit.Circle, Theme.StatusOk).rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(16, 16), new Vector2(0, 0.5f));
@@ -77,7 +81,31 @@ namespace AlkkagiUIEditor
             menu.settingsPanel = BuildSettingsPanel(root, out menu.settingsCloseButton).gameObject;
             BuildSetupPanel(root, menu);
             menu.leaderboard = BuildLeaderboardPanel(root);
+            BuildPracticeOffer(root, menu);
             return canvas.gameObject;
+        }
+
+        // The first start: a card offering the practice match.
+        private static void BuildPracticeOffer(Transform root, MainMenuUI menu)
+        {
+            const float width = 760, height = 420, pad = 64;
+            var overlay = UIKit.Image(root, "PracticeOffer", null, Theme.Overlay, raycast: true);
+            overlay.rectTransform.Stretch();
+            menu.offerPanel = overlay.gameObject;
+            var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(overlay, card.rectTransform);
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, height));
+            var top = new Vector2(0.5f, 1);
+            UIKit.Label(card.transform, "Title", "practice.offerTitle", 48, true, Theme.Ink, TextAlignmentOptions.Center)
+                .rectTransform.Place(top, new Vector2(0, -48), new Vector2(width - pad * 2, 64));
+            var body = UIKit.Label(card.transform, "Body", "practice.offerBody", 28, false, Theme.InkSoft, TextAlignmentOptions.Center);
+            body.rectTransform.Place(top, new Vector2(0, -132), new Vector2(width - pad * 2, 120));
+            body.textWrappingMode = TextWrappingModes.Normal;
+            menu.offerLaterButton = UIKit.CapsuleButton(card.transform, "LaterButton", "practice.later", new Vector2(240, 84), false, 32);
+            menu.offerLaterButton.GetComponent<RectTransform>().Place(new Vector2(0, 0), new Vector2(pad, 48), new Vector2(240, 84));
+            menu.offerStartButton = UIKit.CapsuleButton(card.transform, "StartButton", "practice.start", new Vector2(320, 84), true, 32);
+            menu.offerStartButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 48), new Vector2(320, 84), new Vector2(1, 0));
+            overlay.gameObject.SetActive(false);
         }
 
         // The real board texture, drawn flat, with a few stones mid-game.

@@ -10,6 +10,10 @@ public class MainMenuUI : MonoBehaviour
 {
     public Button localButton;
     public Button onlineButton;
+    public Button practiceButton;   // the practice match (Tutorial)
+    public GameObject offerPanel;   // the first start's offer of it
+    public Button offerStartButton;
+    public Button offerLaterButton;
     public Button settingsButton;
     public Button rankingButton;
     public Button quitButton;
@@ -57,12 +61,26 @@ public class MainMenuUI : MonoBehaviour
         setupStartButton.onClick.AddListener(StartLocalMatch);
         setupCancelButton.onClick.AddListener(() => setupPanel.SetActive(false));
         onlineButton.onClick.AddListener(() => SceneManager.LoadScene("LobbyScene"));
+        practiceButton.onClick.AddListener(StartPractice);
+        offerStartButton.onClick.AddListener(StartPractice);
+        offerLaterButton.onClick.AddListener(() =>
+        {
+            Tutorial.Offered = true;
+            offerPanel.SetActive(false);
+        });
         settingsButton.onClick.AddListener(() => settingsPanel.SetActive(true));
         rankingButton.onClick.AddListener(leaderboard.Open);
         settingsCloseButton.onClick.AddListener(() => settingsPanel.SetActive(false));
         quitButton.onClick.AddListener(Quit);
         settingsPanel.SetActive(false);
         setupPanel.SetActive(false);
+        offerPanel.SetActive(false);
+    }
+
+    private static void StartPractice()
+    {
+        MatchSeries.Reset();
+        Tutorial.Begin();
     }
 
     private float cardHeight;
@@ -95,6 +113,8 @@ public class MainMenuUI : MonoBehaviour
     private void Start()
     {
         PlayerRating.SettlePending(); // a rated match left before its result
+        // The first start: practice first?
+        offerPanel.SetActive(!Tutorial.Done && !Tutorial.Offered);
         PlayerRating.OnChanged += RenderSteamUser;
         Loc.OnLanguageChanged += RenderSteamUser;
         RenderSteamUser();

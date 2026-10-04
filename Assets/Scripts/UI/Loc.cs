@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public enum Language
@@ -43,6 +44,11 @@ public static class Loc
     }
 
     public static string Get(string key, params object[] args) => string.Format(Get(key), args);
+
+    public static bool Has(string key) => Table.ContainsKey(key);
+
+    // Every string in both languages, for the self check (SelfCheck).
+    public static IEnumerable<(string key, string ko, string en)> Entries => Table.Select(kv => (kv.Key, kv.Value.ko, kv.Value.en));
 
     private static readonly Dictionary<string, (string ko, string en)> Table = new Dictionary<string, (string ko, string en)>
     {
@@ -324,6 +330,45 @@ public static class Loc
         { "rules.autoChanged", ("함께 바뀜 · {0}", "Changed to fit · {0}") },
         { "rules.change", ("{0} {1} → {2}", "{0} {1} → {2}") },
         { "rules.andMore", (" 외 {0}개", " and {0} more") },
+        { "menu.practice", ("연습", "Practice") },
+        { "practice.offerTitle", ("처음이신가요?", "New to alkkagi?") },
+        { "practice.offerBody", ("2분이면 기본 조작을 익힐 수 있어요.\n메인 메뉴의 '연습'에서 언제든 다시 할 수 있어요.", "Two minutes to learn the controls.\nPractice stays on the main menu for whenever you want it.") },
+        { "practice.later", ("나중에", "Later") },
+        { "practice.start", ("연습하기", "Practice") },
+        { "tutorial.step", ("연습 {0}/{1}", "Practice {0}/{1}") },
+        { "tutorial.skip", ("건너뛰기", "Skip") },
+        { "tutorial.pull", ("당기기", "Pull") },
+        { "tutorial.pullBody", ("흑 알을 누른 채 뒤로 끌어 보세요. 끈 반대쪽으로 날아가요.", "Press one of your black stones and drag back. It flies the other way.") },
+        { "tutorial.release", ("놓기", "Let go") },
+        { "tutorial.releaseBody", ("버튼을 놓으면 튕겨 나가요. 멀리 당길수록 세게 나가요.", "Let go of the button to flick it. The further you pull, the harder it goes.") },
+        { "tutorial.knock", ("떨어뜨리기", "Knock off") },
+        { "tutorial.knockBody", ("백 알을 맞혀 판 밖으로 떨어뜨려 보세요. 그동안 백은 쉬어요.", "Hit a white stone off the board. White sits out meanwhile.") },
+        { "tutorial.fine", ("미세 조준", "Fine aim") },
+        { "tutorial.fineBody", ("당기는 동안 {0} 누르고 있기. 당김이 4배 천천히 따라와서 세밀하게 맞출 수 있어요.", "Hold {0} while you pull: the pull follows four times slower, for a finer aim.") },
+        { "tutorial.view", ("시점", "View") },
+        { "tutorial.viewBody", ("판 옮기기: {0} 누른 채 끌기 · 확대·축소: 휠. 판을 옮겨 보세요.", "Move the board: hold {0} and drag. Zoom: the wheel. Move the board now.") },
+        { "tutorial.viewBack", ("이제 되돌려 보세요: {0}, 또는 오른쪽 아래 '시점 초기화'.", "Now put it back: {0}, or Reset view at the bottom right.") },
+        { "tutorial.play", ("한 판", "A real game") },
+        { "tutorial.playBody", ("이제 백도 둬요. 백 알을 모두 떨어뜨리면 이기고, 내 알이 다 떨어지면 져요.", "White plays now. Knock all its stones off to win; lose all yours and you lose.") },
+        { "pause.rules", ("이번 판 규칙", "This match's rules") },
+        { "rules.title", ("이번 판 규칙", "This match's rules") },
+        { "rules.close", ("닫기", "Close") },
+        { "rules.ranked", ("랭크전 · 3판 2선승 · 레이팅에 반영", "Ranked · best of three · rated") },
+        { "rules.win", ("상대 알을 모두 판 밖으로 떨어뜨리면 이겨요.", "Knock all the other side's pieces off the board to win.") },
+        { "rules.winMulti", ("알이 마지막까지 남은 진영이 이겨요.", "The last side with pieces on the board wins.") },
+        { "rules.winTeams", ("두 명씩 두 팀, 팀원은 마주 앉아요. 상대 팀의 알을 모두 떨어뜨리면 이겨요.", "Two teams of two, teammates across from each other. Knock all the other team's pieces off to win.") },
+        { "rules.healthPiece", ("체력전 A: 알마다 체력 {0}. 부딪히면 깎이고(톡 1 ~ 정면 풀파워 {1}), 다 되면 그 알은 깨져요.", "Health A: each piece has {0}. Knocks cost from 1 for a tap to {1} for a full-power hit; a piece with none left breaks.") },
+        { "rules.healthSide", ("체력전 B: 진영 체력 {0}. 부딪히면 깎이고(톡 1 ~ 정면 풀파워 {1}), 알이 떨어지면 {2}. 다 되면 탈락이에요.", "Health B: each side has {0}. Knocks cost 1 up to {1}, a piece off the board {2}; with none left, the side is out.") },
+        { "rules.walls", ("사방에 벽이 있어 알이 떨어지지 않아요. 벽에 부딪혀도 체력이 깎여요.", "Walls all round: nothing falls off, and hitting a wall hurts too.") },
+        { "rules.board", ("{0} · {1} · 진영마다 {2}", "{0} · {1} · {2} a side") },
+        { "rules.boardBySide", ("{0} · {1} · 알 {2}", "{0} · {1} · pieces {2}") },
+        { "rules.placement", ("알은 직접 놓고 시작해요 ({0}).", "Each side places its own pieces first ({0}).") },
+        { "rules.turn", ("한 턴에 {0}초. 시간이 다 되면 차례가 넘어가요.", "{0} seconds a turn; run out and the turn passes.") },
+        { "rules.turnFree", ("턴 시간 제한은 없어요.", "No turn clock.") },
+        { "rules.zone", ("3라운드 동안 아무것도 안 떨어지면 판 가장자리가 무너지기 시작해요. 1턴 전에 예고해요.", "Three rounds with nothing knocked off and the edge starts to crumble, announced a turn ahead.") },
+        { "rules.rounds", ("{0}라운드가 끝나면 남은 알(체력전은 체력)이 많은 쪽이 이겨요.", "After {0} rounds, the side with the most left (health, in a battle of health) wins.") },
+        { "rules.bothOut", ("마지막 알끼리 함께 떨어지면: {0}", "If the last pieces go off together: {0}") },
+        { "rules.noGuide", ("조준 가이드는 없어요.", "No aim guide.") },
         { "match.seats", ("인원", "Players") },
         { "match.spawn", ("알 배치", "Setup") },
         { "match.placementStyle", ("배치 방식", "Placement") },

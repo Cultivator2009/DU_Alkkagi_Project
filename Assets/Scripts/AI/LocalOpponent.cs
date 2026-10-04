@@ -17,7 +17,10 @@ public static class LocalOpponent
     private const string PrefsKey = "local.seat";
     private const string LegacyKey = "local.opponent"; // white's, from before seats
 
-    public static Opponent Of(int seat) => (Opponent)PlayerPrefs.GetInt(PrefsKey + seat, (int)Default(seat));
+    // Seats for one match only, not saved (the practice match); null: as picked.
+    public static Opponent[] Override { get; set; }
+
+    public static Opponent Of(int seat) => Override != null && seat < Override.Length ? Override[seat] : (Opponent)PlayerPrefs.GetInt(PrefsKey + seat, (int)Default(seat));
 
     public static void Set(int seat, Opponent who) => PlayerPrefs.SetInt(PrefsKey + seat, (int)who);
 
