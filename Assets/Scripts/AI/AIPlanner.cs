@@ -119,12 +119,16 @@ public class AIPlanner : IDisposable
         if (scene.IsValid() && scene.isLoaded) SceneManager.UnloadSceneAsync(scene);
     }
 
-    // Colliders and bodies only: no scripts, nothing drawn.
+    // Colliders and bodies only: no scripts, nothing drawn, no joints (an
+    // item's glue, tied to the real board). Simulated even where the real
+    // pieces only follow the host's word (a network guest's foresight).
     private GameObject Copy(GameObject original)
     {
         var copy = Object.Instantiate(original, original.transform.position, original.transform.rotation);
         foreach (var behaviour in copy.GetComponentsInChildren<MonoBehaviour>(true)) Object.DestroyImmediate(behaviour);
+        foreach (var joint in copy.GetComponentsInChildren<Joint>(true)) Object.DestroyImmediate(joint);
         foreach (var renderer in copy.GetComponentsInChildren<Renderer>(true)) renderer.enabled = false;
+        foreach (var body in copy.GetComponentsInChildren<Rigidbody>(true)) body.isKinematic = false;
         copy.SetActive(true);
         SceneManager.MoveGameObjectToScene(copy, scene);
         return copy;
@@ -164,9 +168,39 @@ public class AIPlanner : IDisposable
         done(new PlannedShot { Piece = pick.candidate.Shooter.Source, Direction = pick.candidate.Direction, Power = pick.candidate.Power, Score = pick.score });
     }
 
+    // Foresight (ItemId.Foresight): where this shot would send what it
+    // moves, stepped on the copy as a candidate is: a line for each piece
+    // that moved (the shot's own first), a point every other step.
+    public IEnumerator Trace(GamePieceDragAndReleaseForce piece, Vector3 direction, float power, List<(GamePieceDragAndReleaseForce piece, List<Vector3> path)> paths)
+    {
+        var shooter = stands.Find(s => s.Source == piece);
+        if (shooter == null) yield break;
+        var tracks = new Dictionary<Stand, List<Vector3>>();
+        void Record(int step)
+        {
+            if (step % 2 != 0) return;
+            foreach (var stand in stands)
+            {
+                if (stand.Source == null || !stand.Body.gameObject.activeSelf) continue;
+                if (!tracks.TryGetValue(stand, out var track)) tracks[stand] = track = new List<Vector3> { stand.Source.Body.position };
+                track.Add(stand.Body.position);
+            }
+        }
+        var frame = Stopwatch.StartNew();
+        var run = Run(piece.Manager.playerIndex, new Candidate { Shooter = shooter, Direction = direction, Power = power }, _ => { }, frame, Record);
+        while (run.MoveNext())
+        {
+            yield return null;
+            frame.Restart();
+        }
+        paths.Clear();
+        foreach (var (stand, track) in tracks.OrderBy(t => t.Key == shooter ? 0 : 1))
+            if ((track[track.Count - 1] - track[0]).sqrMagnitude > 0.02f * 0.02f) paths.Add((stand.Source, track));
+    }
+
     // One candidate, from the board as it is now, stepping until everything
     // stops. Yields (hands the frame back) whenever the frame budget is spent.
-    private IEnumerator Run(int player, Candidate candidate, Action<float> score, Stopwatch frame)
+    private IEnumerator Run(int player, Candidate candidate, Action<float> score, Stopwatch frame, Action<int> onStep = null)
     {
         foreach (var stand in stands)
         {
@@ -187,7 +221,7 @@ public class AIPlanner : IDisposable
         var shooter = candidate.Shooter;
         var impacts = ruleset is HealthRuleset; // the flicked piece takes none
         var flick = candidate.Direction * (candidate.Power * shooter.Source.maxForce);
-        shooter.Body.linearVelocity = flick / shooter.Source.referenceMass * Mathf.Pow(shooter.Source.referenceMass / shooter.Body.mass, shooter.Source.massExponent);
+        shooter.Body.linearVelocity = flick / shooter.Source.referenceMass * Mathf.Pow(shooter.Source.referenceMass / shooter.Source.LaunchMass, shooter.Source.massExponent);
 
         var still = 0;
         for (var step = 0; step < MaxSteps && still < 3; step++)
@@ -202,6 +236,7 @@ public class AIPlanner : IDisposable
                 if (velocity.sqrMagnitude > 0.0025f || stand.Body.angularVelocity.sqrMagnitude > 0.0025f) moving = true;
             }
             physics.Simulate(Time.fixedDeltaTime);
+            onStep?.Invoke(step);
             foreach (var stand in stands)
             {
                 if (stand.Out) continue;
@@ -283,7 +318,7 @@ public class AIPlanner : IDisposable
 
     private IEnumerable<Candidate> Candidates(int player)
     {
-        var mine = stands.Where(s => s.Owner == player && s.Source != null).ToList();
+        var mine = stands.Where(s => s.Owner == player && s.Source != null && (PieceSelector.MayMove == null || PieceSelector.MayMove(s.Source))).ToList();
         var theirs = stands.Where(s => teamOf(s.Owner) != teamOf(player) && sides[s.Owner].Standing && s.Source != null).ToList();
         foreach (var shooter in mine)
         foreach (var target in theirs)
@@ -321,7 +356,7 @@ public class AIPlanner : IDisposable
         var gap = Mathf.Max(0, distance - shooter.Radius - target.Radius);
         var launch = Mathf.Sqrt(impact * impact + 2 * Deceleration * gap);
         var source = shooter.Source;
-        var fullSpeed = source.maxForce / source.referenceMass * Mathf.Pow(source.referenceMass / m1, source.massExponent);
+        var fullSpeed = source.maxForce / source.referenceMass * Mathf.Pow(source.referenceMass / source.LaunchMass, source.massExponent);
         return Mathf.Clamp(launch / fullSpeed, 0.12f, 1f);
     }
 

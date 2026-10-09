@@ -5,14 +5,15 @@ using UnityEngine;
 
 // What an online lobby plays for. Normal plays the standard rules (those
 // that sway the balance fixed, MatchSettingDef.NormalValues; the board and
-// pieces the host's) for no rating; Custom opens every rule; Ranked is
+// pieces the host's) for no rating; Item plays them with the items
+// (ItemSystem); Custom opens every rule; Ranked is
 // the competitive match - every rule fixed (RankedValues), one on one, the
 // best of three (RankedSeries) - and the only one that moves the rating.
 // A ranked lobby only comes from the ranked quick match.
 public enum MatchMode : byte
 {
     Normal,
-    Item,  // reserved for the item mode; not offered yet
+    Item,  // Normal's rules with the items on
     Custom,
     Ranked
 }
@@ -99,7 +100,10 @@ public enum MatchSettingId : byte
     TurnSeconds,
     Zone,
     RoundLimit,
-    BothOutRule
+    BothOutRule,
+    Items,
+    ItemBoxes,
+    ItemCatchUp
 }
 
 // One lobby-level match rule: the values it may take and how to show them.
@@ -120,13 +124,15 @@ public sealed class MatchSettingDef
     public readonly bool OnlineOnly; // a lobby rule: local games are always two at one screen
     // What Normal and Ranked allow, in display order: one value fixes the
     // rule, null leaves it open. The fallback is where the mode puts it.
+    // Item plays Normal's, but for what it fixes of its own (ItemValues).
     public readonly int[] NormalValues;
     public readonly int NormalFallback;
+    public readonly int[] ItemValues;
     public readonly int[] RankedValues;
     public readonly int RankedFallback;
     private readonly Func<int, string> format;
 
-    public MatchSettingDef(MatchSettingId id, string key, string labelKey, int[] values, int defaultValue, Func<int, string> format, Func<MatchSettings, bool> isRelevant = null, bool onlineOnly = false, int[] normal = null, int? normalFallback = null, Func<MatchSettings, int, bool> isAvailable = null, int[] ranked = null, int? rankedFallback = null)
+    public MatchSettingDef(MatchSettingId id, string key, string labelKey, int[] values, int defaultValue, Func<int, string> format, Func<MatchSettings, bool> isRelevant = null, bool onlineOnly = false, int[] normal = null, int? normalFallback = null, Func<MatchSettings, int, bool> isAvailable = null, int[] ranked = null, int? rankedFallback = null, int[] item = null)
     {
         IsAvailable = isAvailable;
         Id = id;
@@ -141,11 +147,19 @@ public sealed class MatchSettingDef
         NormalFallback = normalFallback ?? (normal != null ? normal[0] : defaultValue);
         RankedValues = ranked == null ? null : values.Where(ranked.Contains).ToArray();
         RankedFallback = rankedFallback ?? (ranked != null ? ranked[0] : defaultValue);
+        ItemValues = item == null ? null : values.Where(item.Contains).ToArray();
     }
 
     // What a lobby's mode allows (null: anything) and where it puts the rule.
-    public int[] FixedValues(MatchMode mode) => mode == MatchMode.Ranked ? RankedValues : mode == MatchMode.Custom ? null : NormalValues;
-    public int Fallback(MatchMode mode) => mode == MatchMode.Ranked ? RankedFallback : NormalFallback;
+    public int[] FixedValues(MatchMode mode) => mode switch
+    {
+        MatchMode.Ranked => RankedValues,
+        MatchMode.Custom => null,
+        MatchMode.Item => ItemValues ?? NormalValues,
+        _ => NormalValues,
+    };
+
+    public int Fallback(MatchMode mode) => mode == MatchMode.Ranked ? RankedFallback : mode == MatchMode.Item && ItemValues != null ? ItemValues[0] : NormalFallback;
 
     public string Format(int value) => format(value);
 }
@@ -171,9 +185,8 @@ public sealed class MatchSettings
 
     public static readonly MatchSettingDef[] Defs =
     {
-        // Item joins the list with the item mode. Ranked is only ever set by
-        // the ranked quick match, never picked.
-        new MatchSettingDef(MatchSettingId.Mode, "mode", "match.mode", new[] { (int)MatchMode.Normal, (int)MatchMode.Custom, (int)MatchMode.Ranked }, (int)MatchMode.Normal,
+        // Ranked is only ever set by the ranked quick match, never picked.
+        new MatchSettingDef(MatchSettingId.Mode, "mode", "match.mode", new[] { (int)MatchMode.Normal, (int)MatchMode.Item, (int)MatchMode.Custom, (int)MatchMode.Ranked }, (int)MatchMode.Normal,
             v => Loc.Get("mode." + (MatchMode)v), onlineOnly: true, isAvailable: (s, v) => v != (int)MatchMode.Ranked || s.Mode == MatchMode.Ranked),
         new MatchSettingDef(MatchSettingId.Variant, "variant", "match.variant", new[] { (int)GameVariant.Classic, (int)GameVariant.Health }, (int)GameVariant.Classic,
             v => Loc.Get("variant." + (GameVariant)v), normal: new[] { (int)GameVariant.Classic }, ranked: new[] { (int)GameVariant.Classic }),
@@ -232,6 +245,15 @@ public sealed class MatchSettings
         new MatchSettingDef(MatchSettingId.BothOutRule, "bothOut", "match.bothOut",
             new[] { (int)global::BothOutRule.ShooterLoses, (int)global::BothOutRule.ShooterWins, (int)global::BothOutRule.Draw }, (int)global::BothOutRule.ShooterLoses,
             v => Loc.Get("bothOut." + (global::BothOutRule)v), normal: new[] { (int)global::BothOutRule.ShooterLoses }, ranked: new[] { (int)global::BothOutRule.ShooterLoses }),
+        // The items (ItemSystem): on or off, how often an item box turns up
+        // on the board (rounds; 0 none), and an item for a side down to its
+        // last fifth. The Item mode turns them on, Normal and Ranked off.
+        new MatchSettingDef(MatchSettingId.Items, "items", "match.items", new[] { 0, 1 }, 0,
+            v => Loc.Get(v == 1 ? "option.on" : "option.off"), normal: new[] { 0 }, item: new[] { 1 }, ranked: new[] { 0 }),
+        new MatchSettingDef(MatchSettingId.ItemBoxes, "itemBoxes", "match.itemBoxes", new[] { 0, 1, 2, 3 }, 2,
+            v => v == 0 ? Loc.Get("option.off") : v == 1 ? Loc.Get("option.everyRound") : Loc.Get("option.everyRounds", v), s => s.ItemsOn),
+        new MatchSettingDef(MatchSettingId.ItemCatchUp, "itemCatchUp", "match.itemCatchUp", new[] { 1, 0 }, 1,
+            v => Loc.Get(v == 1 ? "option.on" : "option.off"), s => s.ItemsOn),
     };
 
     // How the rule lists show the rules: in groups under headings, the
@@ -240,6 +262,7 @@ public sealed class MatchSettings
     public static readonly (string titleKey, MatchSettingId[] ids)[] Groups =
     {
         ("rules.group.game", new[] { MatchSettingId.Mode, MatchSettingId.Variant, MatchSettingId.HealthRule, MatchSettingId.PieceHealth, MatchSettingId.SideHealth, MatchSettingId.Barrier }),
+        ("rules.group.items", new[] { MatchSettingId.Items, MatchSettingId.ItemBoxes, MatchSettingId.ItemCatchUp }),
         ("rules.group.players", new[] { MatchSettingId.Seats, MatchSettingId.Teams }),
         ("rules.group.board", new[] { MatchSettingId.BoardType, MatchSettingId.PieceType, MatchSettingId.BlackStones, MatchSettingId.WhiteStones, MatchSettingId.BlueStones, MatchSettingId.RedStones }),
         ("rules.group.placement", new[] { MatchSettingId.SpawnMode, MatchSettingId.PlacementStyle, MatchSettingId.PlacementSeconds }),
@@ -305,6 +328,9 @@ public sealed class MatchSettings
     public bool Zone => Get(MatchSettingId.Zone) == 1 && !Walled;
     public int RoundLimit => Get(MatchSettingId.RoundLimit); // 0 = none
     public BothOutRule BothOutRule => (BothOutRule)Get(MatchSettingId.BothOutRule);
+    public bool ItemsOn => Get(MatchSettingId.Items) == 1;
+    public int ItemBoxRounds => Get(MatchSettingId.ItemBoxes); // 0 = none
+    public bool ItemCatchUp => Get(MatchSettingId.ItemCatchUp) == 1;
 
     // Whether a board is fair to this many sides: every side sits as the
     // others do. Three round a rectangle leave one with no one across from

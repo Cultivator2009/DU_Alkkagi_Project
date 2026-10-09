@@ -223,6 +223,24 @@ internal static class SelfCheck
             var missing = UsedStringKeys().Where(k => !Loc.Has(k)).Distinct().OrderBy(k => k).ToList();
             return (missing.Count == 0, string.Join(", ", missing.Take(20)));
         });
+        report.Try("every item has its name and what it does, in its place, and the items' state keeps every value", () =>
+        {
+            var wrong = ItemDefs.All.Where((def, i) => (int)def.Id != i || !Loc.Has("item." + def.Id + ".name") || !Loc.Has("item." + def.Id + ".desc")).Select(def => def.Id.ToString()).ToList();
+            var placed = wrong.Count == 0 && ItemDefs.All.Length == Enum.GetValues(typeof(ItemId)).Length;
+            var state = new ItemState { FogSide = 1, FogTurn = 7, UsedTurn = 6, ShotItem = (byte)ItemId.Curve, CurveSign = -1, ExtraTurn = true, RewindReady = true, NextId = 9 };
+            state.Sides.Add(new SideItems { Slots = new[] { (byte)ItemId.Blast, SideItems.None }, Pending = (byte)ItemId.Heal, CaughtUp = true, UsedRares = 1 << (int)ItemId.Rewind });
+            state.Sides.Add(new SideItems());
+            state.Boxes.Add(new ItemBox { Id = 3, Position = new Vector2(0.25f, -0.5f) });
+            state.Effects.Add(new PieceEffect { Piece = 'A', Kind = ItemId.Glue, Owner = 0, Expires = 4, TargetTurn = -1, Partner = 'b' });
+            state.Objects.Add(new BoardObject { Id = 4, Kind = ItemId.Pillar, Position = new Vector2(-0.3f, 0.1f), Owner = 1, Expires = 5 });
+            var w = new NetWriter();
+            state.Write(w);
+            var once = w.ToArray();
+            var back = new NetWriter();
+            ItemState.Read(new NetReader(once)).Write(back);
+            var kept = once.SequenceEqual(back.ToArray());
+            return (placed && kept, placed ? $"{ItemDefs.All.Length} items, state kept {kept}" : string.Join(", ", wrong));
+        });
         report.Try("every achievement has its name and what it takes, in its place", () =>
         {
             var wrong = Achievements.All.Where((def, i) => (int)def.Id != i || !Loc.Has("ach." + def.Id + ".title") || !Loc.Has("ach." + def.Id + ".desc")).Select(def => def.Id.ToString()).ToList();
@@ -324,7 +342,8 @@ internal static class SelfCheck
             steps.Enqueue(("go stones and janggi pieces slow at about 17.4 m/s², gonggi stones at 8.6", Slowing));
             steps.Enqueue(("nothing catches on the cross board's seams", Seams));
             foreach (var (name, rules) in AiMatches()) steps.Enqueue(("AI match: " + name, () => AiMatch(rules)));
-            steps.Enqueue(("network: the host's match with bots, replayed into a guest, ends the same", Network));
+            steps.Enqueue(("network: the host's match with bots, replayed into a guest, ends the same", () => Network(false)));
+            steps.Enqueue(("network, items: the host's match, every item it used replayed into a guest, ends the same", () => Network(true)));
             Application.logMessageReceived += Logged;
             EditorApplication.update += Tick;
             began = Time.realtimeSinceStartup;
@@ -549,6 +568,40 @@ internal static class SelfCheck
             sideHealth.Set(MatchSettingId.SideHealth, 400);
             yield return ("cross, go stones, 4, health B", sideHealth);
             yield return ("ranked rules", MatchSettings.ForRanked().Resolve(2));
+            var items = Rules(BoardType.Go, PieceType.GoStones, 2, 6);
+            items.Set(MatchSettingId.Items, 1);
+            items.Set(MatchSettingId.ItemBoxes, 1);
+            yield return ("go board, go stones, 2, items", items);
+            var itemsHealth = Rules(BoardType.Cross, PieceType.GonggiStones, 4, 4);
+            itemsHealth.Set(MatchSettingId.Items, 1);
+            itemsHealth.Set(MatchSettingId.Variant, (int)GameVariant.Health);
+            itemsHealth.Set(MatchSettingId.PieceHealth, 50);
+            yield return ("cross, gonggi stones, 4, items, health A", itemsHealth);
+        }
+
+        // The item mode, tried hard: every side to move with an empty slot
+        // gets an item (as a box would give it), so the AI uses many.
+        // Counts what was used, and by kind.
+        private static Func<string> GrantItems()
+        {
+            var items = ItemSystem.Instance;
+            if (items == null) return () => string.Empty;
+            var used = new HashSet<ItemId>();
+            var count = 0;
+            items.OnEvent += e =>
+            {
+                if (e.Kind != ItemEventKind.Used) return;
+                count++;
+                used.Add(e.Item);
+            };
+            var give = typeof(ItemSystem).GetMethod("Give", BindingFlags.NonPublic | BindingFlags.Instance);
+            GameManager.manager.TurnController.OnTurnStarted += side =>
+            {
+                var state = items.ItemsOf(side);
+                if (state.Full || state.Pending != SideItems.None) return;
+                give.Invoke(items, new object[] { side, items.Draw(side), ItemEventKind.Gained, Vector2.zero });
+            };
+            return () => $", {count} items used ({used.Count} kinds)";
         }
 
         private IEnumerator AiMatch(MatchSettings rules)
@@ -565,6 +618,7 @@ internal static class SelfCheck
                 over = true;
                 winner = w;
             };
+            var itemsUsed = GrantItems();
             var started = Time.realtimeSinceStartup;
             var state = turns.State;
             var since = started;
@@ -586,14 +640,17 @@ internal static class SelfCheck
                 }
                 yield return null;
             }
-            Result(over, over ? $"winner {winner}, {turns.TurnsEnded} turns, longest shot {longest:F1}s, {Time.realtimeSinceStartup - started:F0}s" : $"not over after 150 s ({turns.TurnsEnded} turns)");
+            Result(over, over ? $"winner {winner}, {turns.TurnsEnded} turns, longest shot {longest:F1}s, {Time.realtimeSinceStartup - started:F0}s{itemsUsed()}" : $"not over after 150 s ({turns.TurnsEnded} turns)");
         }
 
         // ---- Network ----
 
         private const ulong HostId = 100, GuestId = 200;
 
-        private IEnumerator Network()
+        // items: one on one in the item mode, every side to move given an
+        // item (GrantItems), the guest's items checked against the host's
+        // too; otherwise two teams with bots, a battle of health, placement.
+        private IEnumerator Network(bool items)
         {
             Seats(Opponent.Human);
             var rules = Rules(BoardType.Go, PieceType.GoStones, 4, 3);
@@ -605,6 +662,16 @@ internal static class SelfCheck
             rules.Set(MatchSettingId.PlacementStyle, (int)PlacementStyle.Alternating);
             rules.Set(MatchSettingId.TurnSeconds, 20);
             var roster = new MatchRoster(new[] { HostId, GuestId, MatchRoster.BotId(0), MatchRoster.BotId(1) }, null, new[] { Opponent.Human, Opponent.Human, Opponent.AINormal, Opponent.AIHard });
+            if (items)
+            {
+                rules = Rules(BoardType.Go, PieceType.GoStones, 2, 5);
+                rules.Set(MatchSettingId.Items, 1);
+                rules.Set(MatchSettingId.ItemBoxes, 1);
+                rules.Set(MatchSettingId.TurnSeconds, 20);
+                roster = new MatchRoster(new[] { HostId, GuestId }, null, new[] { Opponent.Human, Opponent.Human });
+            }
+            Func<string> itemsUsed = () => string.Empty;
+            byte[] hostItems = null, guestItems = null;
             var saved = NetSession.Current;
             var hostSide = new FakeTransport(HostId);
             var guestSide = new FakeTransport(GuestId);
@@ -624,6 +691,7 @@ internal static class SelfCheck
                 var turns = gameManager.TurnController;
                 var over = false;
                 turns.OnMatchEnded += (w, r) => over = true;
+                if (items) itemsUsed = GrantItems();
                 var started = Time.realtimeSinceStartup;
                 while (!over && Time.realtimeSinceStartup - started < 150)
                 {
@@ -633,7 +701,8 @@ internal static class SelfCheck
                 var toBots = hostSide.Sent.Count(m => MatchRoster.IsBotId(m.to));
                 var recording = hostSide.Sent.Where(m => m.to == 0 || m.to == GuestId).ToList();
                 final = recording.Select(m => Decode(m.data)).OfType<Msg.TurnResult>().LastOrDefault();
-                detail = $"waited for the guest {waiting}, over {over}, {recording.Count} messages, {toBots} to bots";
+                if (items && ItemSystem.Instance != null) hostItems = Bytes(ItemSystem.Instance.State);
+                detail = $"waited for the guest {waiting}, over {over}, {recording.Count} messages, {toBots} to bots{itemsUsed()}";
                 if (!over || final == null || toBots > 0 || !waiting)
                 {
                     Result(false, detail);
@@ -654,6 +723,7 @@ internal static class SelfCheck
                 while (settle.MoveNext()) yield return null;
                 guestState = GameManager.manager.TurnController.Snapshot();
                 foreach (var piece in GameManager.manager.gamePieceScripts.Where(p => p != null)) guestPieces[piece.Manager.pieceID] = (piece.Body.position, piece.Manager.health);
+                if (items && ItemSystem.Instance != null) guestItems = Bytes(ItemSystem.Instance.State);
             }
             finally
             {
@@ -662,7 +732,15 @@ internal static class SelfCheck
             var same = guestState.Over == final.State.Over && guestState.Winner == final.State.Winner && guestState.TurnsEnded == final.State.TurnsEnded
                        && guestState.Sides.Select(s => s.Health).SequenceEqual(final.State.Sides.Select(s => s.Health));
             var off = final.Pieces.Count(t => !guestPieces.TryGetValue(t.PieceId, out var g) || Vector3.Distance(g.position, t.Position) > 0.001f || g.health != t.Health);
-            Result(same && off == 0, $"{detail}; guest: winner {guestState.Winner} (host {final.State.Winner}), turns {guestState.TurnsEnded}/{final.State.TurnsEnded}, pieces off {off}/{final.Pieces.Count}");
+            var itemsSame = !items || (hostItems != null && guestItems != null && hostItems.SequenceEqual(guestItems));
+            Result(same && off == 0 && itemsSame, $"{detail}; guest: winner {guestState.Winner} (host {final.State.Winner}), turns {guestState.TurnsEnded}/{final.State.TurnsEnded}, pieces off {off}/{final.Pieces.Count}{(items ? $", items the same {itemsSame}" : "")}");
+        }
+
+        private static byte[] Bytes(ItemState state)
+        {
+            var w = new NetWriter();
+            state.Write(w);
+            return w.ToArray();
         }
 
         // GameScene with a match bridge over a fake transport, as the

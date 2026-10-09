@@ -38,6 +38,9 @@ public class AIOpponent : MonoBehaviour
     {
         var gameManager = GameManager.manager;
         if (busy || paused || gameManager == null) return;
+        // The item mode: a third item, one of the three let go at once.
+        var items = ItemSystem.Instance;
+        if (items != null && !items.IsMirror && items.ItemsOf(playerId).Pending != SideItems.None) items.Discard(playerId, ItemAI.DiscardIndex(items.ItemsOf(playerId)));
         if (gameManager.gameState == GameManager.GameState.Placement)
         {
             if (gameManager.Placement != null && gameManager.Placement.CanAct(playerId)) StartCoroutine(Place(gameManager));
@@ -51,6 +54,20 @@ public class AIOpponent : MonoBehaviour
     private IEnumerator TakeTurn(GameManager gameManager, TurnController turns)
     {
         busy = true;
+        // The item mode: an item first, if one's worth it; whatever it set
+        // moving comes to rest before the shot is planned.
+        var items = ItemSystem.Instance;
+        if (items != null && ItemAI.TryUse(items, gameManager, playerId, level))
+        {
+            yield return new WaitForSeconds(0.6f);
+            var settle = Time.time + 10f;
+            while (Time.time < settle && turns.InMotion) yield return null;
+            if (turns.State != GameManager.GameState.WaitingForInput || turns.CurrentPlayerID != playerId)
+            {
+                busy = false;
+                yield break;
+            }
+        }
         var started = Time.time;
         // Leave a second and a half of a timed turn for the shot itself.
         var budget = turns.TurnSeconds > 0 ? Mathf.Max(0.3f, turns.TurnTimeRemaining - thinkSeconds - 1.5f) : 4f;
@@ -66,6 +83,12 @@ public class AIOpponent : MonoBehaviour
             if (shot.HasValue && shot.Value.Piece != null)
             {
                 var (aimError, powerError) = Error[level];
+                // Aiming blind in an item's fog.
+                if (items != null && items.IsFogged(playerId))
+                {
+                    aimError *= 2.5f;
+                    powerError *= 2.5f;
+                }
                 var direction = Quaternion.Euler(0, Gaussian() * aimError, 0) * shot.Value.Direction;
                 var power = Mathf.Clamp(shot.Value.Power * (1 + Gaussian() * powerError), 0.05f, 1f);
                 var piece = shot.Value.Piece;

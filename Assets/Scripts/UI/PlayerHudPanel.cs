@@ -23,9 +23,24 @@ public class PlayerHudPanel : MonoBehaviour
     [Range(0f, 1f)] public float idleAlpha = 0.8f;
     [Range(0f, 1f)] public float outAlpha = 0.45f;
     public float minStoneSpacing = 4f;
+    // The item mode's (ItemControls): the side's two items, under the rest,
+    // the panel that much taller.
+    public GameObject itemTray;
+    public ItemSlotView[] itemSlots;
+    public float itemTrayHeight = 84f;
+    private bool itemsShown;
 
     private readonly List<GameObject> stones = new List<GameObject>();
     private int shownRemaining = -1;
+
+    public void ShowItems(bool shown)
+    {
+        if (itemTray == null || shown == itemsShown) return;
+        itemsShown = shown;
+        itemTray.SetActive(shown);
+        var rect = (RectTransform)transform;
+        rect.sizeDelta += new Vector2(0, shown ? itemTrayHeight : -itemTrayHeight);
+    }
 
     public void Build(int stoneCount)
     {

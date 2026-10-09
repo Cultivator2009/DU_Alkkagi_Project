@@ -102,6 +102,7 @@ public class NetworkMatchBridge : MonoBehaviour
 
     private IEnumerable<ulong> Guests => roster.SteamIds.Skip(1).Where(id => !MatchRoster.IsBotId(id)); // the bots are the host's
     private TurnController Controller => gameManager.TurnController;
+    private static ItemSystem Items => ItemSystem.Instance; // the item mode's, or null
 
     private void Start()
     {
@@ -143,6 +144,8 @@ public class NetworkMatchBridge : MonoBehaviour
             .On<Msg.PlaceRequest>(HandlePlaceRequest)
             .On<Msg.PlacementReady>(HandlePlacementReady)
             .On<Msg.Concede>((sender, _) => Controller.Concede(roster.PlayerOf(sender)))
+            .On<Msg.UseItem>(HandleUseItem)
+            .On<Msg.DiscardItem>(HandleDiscardItem)
             // The guests'
             .On<Msg.StartMatch>((_, m) => ApplyGuestRole(m.PlayerId, m.Owners))
             .On<Msg.PlacementState>(HandleGuestPlacementState)
@@ -155,6 +158,7 @@ public class NetworkMatchBridge : MonoBehaviour
             .On<Msg.MatchStateUpdate>((_, m) => Controller.ApplyRemote(m.State, Array.Empty<KillEvent>()))
             .On<Msg.FastForward>((_, m) => HostFastForwarding = m.On)
             .On<Msg.Damage>(HandleGuestDamage)
+            .On<Msg.ItemUpdate>(HandleGuestItemUpdate)
             .On<Msg.LoadGameScene>(HandleGuestLoadGameScene);
     }
 
@@ -165,6 +169,7 @@ public class NetworkMatchBridge : MonoBehaviour
         if (lobby != null) lobby.OnMemberLeft -= HandleMemberLeft;
         BoardSounds.OnEmitted -= ForwardBoardSound;
         GameManager.Damaged -= ForwardDamage;
+        if (Items != null) Items.OnUpdate -= BroadcastItems;
     }
 
     // ---- Players leaving, rematch, back to lobby ----
@@ -380,6 +385,12 @@ public class NetworkMatchBridge : MonoBehaviour
         };
         BoardSounds.OnEmitted += ForwardBoardSound;
         GameManager.Damaged += ForwardDamage;
+        if (Items != null)
+        {
+            Items.OnUpdate += BroadcastItems;
+            // An item's motion over: the side to move's turn goes on, on every screen.
+            controller.OnMotionEnded += BroadcastTurnResult;
+        }
         inPlayAtLastResult = new HashSet<char>(pieceLookup.Keys);
         hostInitialized = true;
         TryBeginMatch();
@@ -468,6 +479,7 @@ public class NetworkMatchBridge : MonoBehaviour
             Kills = Controller.LastTurnEnd == TurnEnd.Shot || Controller.LastTurnEnd == TurnEnd.Collapse ? Controller.Kills.LastShot.ToList() : new List<KillEvent>(),
             Removed = inPlayAtLastResult.Where(id => !inPlay.Contains(id)).ToList(),
             Pieces = CurrentTransforms(),
+            Items = Items?.State,
         };
         inPlayAtLastResult = inPlay;
         return result;
@@ -495,8 +507,55 @@ public class NetworkMatchBridge : MonoBehaviour
         {
             State = Controller.Snapshot(),
             Pieces = CurrentTransforms(),
-            Removed = pieceLookup.Keys.Where(id => pieceLookup[id] == null).ToList(),
+            Removed = pieceLookup.Keys.Where(id => pieceLookup[id] == null || !pieceLookup[id].gameObject.activeSelf).ToList(),
+            Items = Items?.State,
         });
+    }
+
+    // ---- Items (ItemSystem) ----
+
+    // A guest's item: the host decides. Turned down, the guest is told the
+    // items as they are, so it stops waiting.
+    private void HandleUseItem(ulong sender, Msg.UseItem message)
+    {
+        if (Items != null && !Items.TryUse(roster.PlayerOf(sender), message.Slot, message.Target)) Items.Resend();
+    }
+
+    private void HandleDiscardItem(ulong sender, Msg.DiscardItem message)
+    {
+        if (Items != null && !Items.Discard(roster.PlayerOf(sender), message.Index)) Items.Resend();
+    }
+
+    private void BroadcastItems(IReadOnlyList<ItemEvent> events, IReadOnlyList<char> moved, IReadOnlyList<char> revived)
+    {
+        var shown = new HashSet<char>(moved.Concat(revived));
+        session.Broadcast(new Msg.ItemUpdate
+        {
+            State = Items.State,
+            Events = events.ToList(),
+            Pieces = CurrentTransforms().Where(t => shown.Contains(t.PieceId)).ToList(),
+            Revived = revived.ToList(),
+            Sides = Controller.Snapshot().Sides,
+        });
+    }
+
+    // The host's items: pieces it brought back come back here too, pieces
+    // it moved jump there (no easing: they went in an instant), and the
+    // sides as an item left them.
+    private void HandleGuestItemUpdate(ulong _, Msg.ItemUpdate message)
+    {
+        if (Items == null) return;
+        Items.RestoreRemote(message.Revived);
+        foreach (var t in message.Pieces)
+        {
+            if (!pieceLookup.TryGetValue(t.PieceId, out var piece) || piece == null) continue;
+            piece.Body.position = t.Position;
+            piece.Body.rotation = t.Rotation;
+            piece.transform.SetPositionAndRotation(t.Position, t.Rotation);
+        }
+        ApplyTransforms(message.Pieces);
+        Controller.ApplyRemoteSides(message.Sides);
+        Items.ApplyRemote(message.State, message.Events);
     }
 
     // The physics pose, not transform: with interpolation on, transform is
@@ -527,7 +586,7 @@ public class NetworkMatchBridge : MonoBehaviour
         // Unity-null once it's gone: a lagging guest board can still name a
         // piece that's already out. Only the sender's own pieces.
         pieceLookup.TryGetValue(message.PieceId, out var piece);
-        if (piece != null && piece.Manager.playerIndex != roster.PlayerOf(sender)) piece = null;
+        if (piece != null && (piece.Manager.playerIndex != roster.PlayerOf(sender) || !piece.gameObject.activeSelf)) piece = null; // an item mode's piece kept off the board
         var controller = Controller;
         // Rejected while idle means the guest disagrees about the board or
         // whose turn it is - resend the current state so its view and input
@@ -575,6 +634,13 @@ public class NetworkMatchBridge : MonoBehaviour
     private void InitGuest()
     {
         Controller.BecomeMirror();
+        if (Items != null)
+        {
+            Items.BecomeMirror();
+            Items.OnRequestUse += (slot, target) => session.Send(hostId, new Msg.UseItem { Slot = slot, Target = target });
+            Items.OnRequestDiscard += index => session.Send(hostId, new Msg.DiscardItem { Index = index });
+            Items.OnPieceRestored += piece => pieceLookup[piece.Manager.pieceID] = piece;
+        }
         guestSelector = new PieceSelector(gameManager.gamePieceScripts) { LocalPlayerId = null };
         session.Send(hostId, new Msg.ClientReady());
     }
@@ -675,13 +741,16 @@ public class NetworkMatchBridge : MonoBehaviour
             pieceLookup.Remove(id);
             if (piece == null) continue;
             gameManager.gamePieceScripts.Remove(piece);
-            Destroy(piece.gameObject);
+            // The item mode keeps it, as the host does, to come back.
+            if (Items != null) Items.BenchRemote(piece);
+            else Destroy(piece.gameObject);
         }
         // The host's settled board is the truth; GuestFixedUpdate eases every
         // piece onto it whatever the snapshots did or didn't deliver.
         ApplyTransforms(message.Pieces);
 
         var controller = Controller;
+        if (Items != null && message.Items != null) Items.ApplyRemote(message.Items, null);
         controller.ApplyRemote(message.State, message.Kills);
         if (controller.State == GameManager.GameState.MatchOver)
         {

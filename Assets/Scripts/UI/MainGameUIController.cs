@@ -44,14 +44,8 @@ public class MainGameUIController : MonoBehaviour
     public Button fastForwardButton;
     public LocalizedText fastForwardLabel;
 
-    // Item-mode placeholder: reserves a slot for a future item bar without
-    // building any real item logic yet (Phase 1's ITurnAction is still a
-    // stub). Wire itemBarRoot to an empty layout container in the Inspector;
-    // ShowAvailableItems/OnItemButtonClicked are the seam an item ruleset
-    // will use once real items exist.
-    public Transform itemBarRoot;
-    public GameObject itemButtonTemplate; // simple Button+TMP_Text prefab, kept inactive as a template
-    public event Action<string> OnItemButtonClicked;
+    // The item mode's: the items on the panels, picking their targets (ItemControls).
+    public ItemControls itemControls;
 
     private TurnController turnController;
     private NetworkMatchBridge networkBridge;
@@ -127,6 +121,8 @@ public class MainGameUIController : MonoBehaviour
         MatchSeries.Begin(online ? $"lobby:{lobbyId}:{string.Join(",", MatchRoster.Current?.SteamIds ?? new ulong[0])}"
             : $"local:{string.Join(",", Enumerable.Range(0, PlayerCount).Select(i => LocalOpponent.Of(i)))}");
 
+        // The panels grow by their item trays before they're laid out.
+        if (ItemSystem.Instance != null && itemControls != null) itemControls.Init(this, ItemSystem.Instance);
         Arrange(PlayerCount);
         for (var i = 0; i < PlayerCount; i++) playerPanels[i].Build(CountPieces(i));
         // Every icon and side name: black/white, or Cho/Han with janggi pieces.
@@ -390,6 +386,13 @@ public class MainGameUIController : MonoBehaviour
         return networkBridge != null ? playerId == networkBridge.LocalPlayerId : !GameManager.manager.IsAI(playerId);
     }
 
+    // Whether this screen plays playerId's side (a hot-seat game's every side not the AI's).
+    public bool PlaysHere(int playerId) => networkBridge != null ? playerId == networkBridge.LocalPlayerId : !GameManager.manager.IsAI(playerId);
+
+    public string SideName(int playerId) => ColorName(playerId);
+
+    public void Notice(string text) => ShowNotice(text);
+
     private bool CanSkip(int playerId)
     {
         if (!turnController.MayPass) return false; // the edge is coming in
@@ -618,6 +621,7 @@ public class MainGameUIController : MonoBehaviour
             var side = gameManager.Sides[i];
             playerPanels[i].Render(ColorName(i), PlayerLabel(i), CountPieces(i), side.Score, isTurn, outStatus, side.Health, side.MaxHealth);
         }
+        if (ItemSystem.Instance != null && itemControls != null) itemControls.Render();
 
         result.Render();
     }
@@ -648,28 +652,5 @@ public class MainGameUIController : MonoBehaviour
         if (IsOnlineMatch()) SteamLobbyManager.Instance.LeaveLobby();
         GameManager.manager.EndMatch();
         SceneManager.LoadScene("MainMenuScene");
-    }
-
-    // ---- Item bar placeholder ----
-
-    public void ShowAvailableItems(IReadOnlyList<string> itemIds)
-    {
-        if (itemBarRoot == null || itemButtonTemplate == null) return;
-
-        for (var i = itemBarRoot.childCount - 1; i >= 0; i--)
-        {
-            var child = itemBarRoot.GetChild(i).gameObject;
-            if (child != itemButtonTemplate) Destroy(child);
-        }
-
-        foreach (var itemId in itemIds)
-        {
-            var button = Instantiate(itemButtonTemplate, itemBarRoot);
-            button.SetActive(true);
-            var label = button.GetComponentInChildren<TMP_Text>();
-            if (label != null) label.text = itemId;
-            var clickTarget = button.GetComponent<Button>();
-            if (clickTarget != null) clickTarget.onClick.AddListener(() => OnItemButtonClicked?.Invoke(itemId));
-        }
     }
 }

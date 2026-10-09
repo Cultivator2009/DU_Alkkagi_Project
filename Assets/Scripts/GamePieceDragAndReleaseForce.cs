@@ -36,6 +36,11 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // heavy piece goes a little slower but hits harder.
     public float referenceMass = 3f;
     [Range(0f, 1f)] public float massExponent = 0.25f;
+    // The mass a flick is reckoned by: the piece's own, as spawned. An item
+    // making it heavier for a while (ItemSystem) makes it hit harder, not
+    // leave slower.
+    [NonSerialized] public float baseMass;
+    public float LaunchMass => baseMass > 0 ? baseMass : Body.mass;
     // Upward speed limit (m/s). The flick itself is level, but a piece that
     // leans - on another piece, or over a board hinge - is pushed up by
     // whatever it rests on, and a hard shot launched it up to 2 units high.
@@ -98,6 +103,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     private void Start()
     {
         rb = GetComponent<Rigidbody>();
+        if (baseMass <= 0) baseMass = rb.mass;
         lr = GetComponent<LineRenderer>();
         mainCam = Camera.main;
         lr.enabled = false;
@@ -240,7 +246,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     public void ApplyFlick(Vector3 flickForce)
     {
         if (flickForce.magnitude > maxForce) flickForce = flickForce.normalized * maxForce;
-        var launch = flickForce / referenceMass * Mathf.Pow(referenceMass / Body.mass, massExponent);
+        var launch = flickForce / referenceMass * Mathf.Pow(referenceMass / LaunchMass, massExponent);
         Body.AddForce(launch, ForceMode.VelocityChange);
         if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Flick, launch.magnitude, Body.position, Manager.playerIndex);
 
@@ -248,6 +254,14 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         // step, so a resting piece would still read as settled for a frame
         // and TurnController could end the turn before anything moved. Count
         // it as moving until it has genuinely come to rest again.
+        lowVelocityFrameCount = 0;
+        isGamePieceMoving = true;
+    }
+
+    // Something besides a flick set it moving (an item's blast or quake):
+    // moving until it has come to rest again, as after a flick.
+    public void Nudge()
+    {
         lowVelocityFrameCount = 0;
         isGamePieceMoving = true;
     }

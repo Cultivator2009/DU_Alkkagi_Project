@@ -22,6 +22,12 @@ public static class RulesSummary
                 : Loc.Get("rules.healthSide", rules.SideHealth, HealthRuleset.MaxDamage, HealthRuleset.FallDamage);
             if (rules.Walled) yield return Loc.Get("rules.walls");
         }
+        if (rules.ItemsOn)
+        {
+            yield return Loc.Get("rules.items");
+            if (rules.ItemBoxRounds > 0) yield return Loc.Get("rules.itemBoxes", MatchSettings.Defs[(int)MatchSettingId.ItemBoxes].Format(rules.ItemBoxRounds));
+            if (rules.ItemCatchUp) yield return Loc.Get("rules.itemCatchUp");
+        }
         var board = MatchSettings.Defs[(int)MatchSettingId.BoardType].Format((int)rules.BoardType);
         var pieces = MatchSettings.Defs[(int)MatchSettingId.PieceType].Format((int)rules.PieceType);
         var counts = MatchSettings.StoneIds.Take(sides).Select(rules.Get).ToList();

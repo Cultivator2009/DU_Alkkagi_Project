@@ -146,6 +146,8 @@ public class GameManager : MonoBehaviour
         };
         TurnController.OnPlayerOut += RetirePieces;
         new GameObject("BoardZoneView").AddComponent<BoardZoneView>().Init(Board, TurnController);
+        // The item mode: with the scene, a guest's too (its bridge makes it the host's mirror).
+        if (settings.ItemsOn) new GameObject("Items").AddComponent<ItemSystem>().Init(this);
         gameState = GameState.WaitingForPlayers;
         var humans = Enumerable.Range(0, totalPlayerCnt).ToList();
         if (!IsOnlineMatch)
@@ -252,12 +254,15 @@ public class GameManager : MonoBehaviour
             piece.Manager.isDestroyed = true;
             if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Shatter, 0f, piece.transform.position, piece: piece.Manager.pieceID);
             RemovePiece(piece);
+            if (ItemSystem.Instance != null) ItemSystem.Instance.Forget(piece);
             Destroy(piece.gameObject);
         }
         Sides[playerId].Pieces = 0;
     }
 
-    // A piece is out (DeathTrigger, or broken by its knocks), on the authority.
+    // A piece is out (DeathTrigger, or broken by its knocks), on the
+    // authority. In the item mode it's kept off the board, to come back
+    // (ItemSystem.Bench).
     public void PieceOut(GamePieceDragAndReleaseForce piece)
     {
         var manager = piece.Manager;
@@ -265,7 +270,8 @@ public class GameManager : MonoBehaviour
         manager.isDestroyed = true;
         TurnController.PieceOut(manager);
         RemovePiece(piece);
-        Destroy(piece.gameObject);
+        if (ItemSystem.Instance != null) ItemSystem.Instance.Bench(piece);
+        else Destroy(piece.gameObject);
     }
 
     // ---- A battle of health ----

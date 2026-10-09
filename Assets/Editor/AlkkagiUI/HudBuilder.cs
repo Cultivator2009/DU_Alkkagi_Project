@@ -67,6 +67,7 @@ namespace AlkkagiUIEditor
             controller.fastForwardButton.gameObject.SetActive(false);
             BuildControlsHint(root, controller);
             BuildTutorialCard(root);
+            BuildItemControls(root, controller);
             BuildGameOverPanel(root, controller);
             BuildPauseMenu(root, controller);
             return canvas.gameObject;
@@ -171,7 +172,102 @@ namespace AlkkagiUIEditor
             panel.skipButton = UIKit.CapsuleButton(root, name + "Skip", "hud.skip", new Vector2(PanelSize.x, 72), false, 28);
             panel.skipButton.GetComponent<RectTransform>().Place(corner, offset + new Vector2(0, below ? -(PanelSize.y + 16) : PanelSize.y + 16), new Vector2(PanelSize.x, 72));
             panel.skipButton.gameObject.SetActive(false);
+
+            // The item mode's two items, under the rest (the panel grows to them: PlayerHudPanel.ShowItems).
+            var tray = UIKit.Node("ItemTray", t).Place(topLeft, new Vector2(Pad, -PanelSize.y + 4), new Vector2(PanelSize.x - Pad * 2, 64));
+            const float tileGap = 12;
+            var tileWidth = (PanelSize.x - Pad * 2 - tileGap) / 2;
+            panel.itemSlots = new[]
+            {
+                ItemTile(tray, "Slot0", new Vector2(0, 0), new Vector2(tileWidth, 64)),
+                ItemTile(tray, "Slot1", new Vector2(tileWidth + tileGap, 0), new Vector2(tileWidth, 64)),
+            };
+            panel.itemTray = tray.gameObject;
+            tray.gameObject.SetActive(false);
             return panel;
+        }
+
+        // An item: a tile in its kind's colour, its name on it (ItemSlotView).
+        private static ItemSlotView ItemTile(Transform parent, string name, Vector2 at, Vector2 size)
+        {
+            var bg = UIKit.Panel(parent, name, Theme.HanjiField, null, 1.4f, raycast: true);
+            bg.rectTransform.Place(new Vector2(0, 1), at, size);
+            var tile = bg.gameObject.AddComponent<ItemSlotView>();
+            tile.fill = bg;
+            tile.group = bg.gameObject.AddComponent<CanvasGroup>();
+            tile.button = bg.gameObject.AddComponent<Button>();
+            tile.button.targetGraphic = bg;
+            var colors = tile.button.colors;
+            colors.disabledColor = Color.white;
+            colors.highlightedColor = new Color(1f, 1f, 1f, 0.85f);
+            tile.button.colors = colors;
+            bg.gameObject.AddComponent<ClickSound>();
+            bg.gameObject.AddComponent<ButtonFeel>();
+            var ready = UIKit.Panel(bg.transform, "Ready", new Color(0, 0, 0, 0), Theme.Ink, 1.4f);
+            ready.rectTransform.Stretch(-3);
+            tile.readyMark = ready.gameObject;
+            ready.gameObject.SetActive(false);
+            // ASCII placeholder: the item's name is set at runtime.
+            tile.nameText = UIKit.Text(bg.transform, "Name", "Item", 24, true, Theme.SealText, TextAlignmentOptions.Center);
+            tile.nameText.rectTransform.Stretch(6);
+            tile.nameText.enableAutoSizing = true;
+            tile.nameText.fontSizeMin = 15;
+            tile.nameText.fontSizeMax = 24;
+            return tile;
+        }
+
+        // The item mode's prompt in the turn pill's place (what to pick, what
+        // a hovered item does, what the shot carries), the way buttons under
+        // it, and the card for letting one of three items go (ItemControls).
+        private static void BuildItemControls(Transform root, MainGameUIController controller)
+        {
+            var controls = root.gameObject.AddComponent<ItemControls>();
+            controller.itemControls = controls;
+            var top = new Vector2(0.5f, 1);
+
+            var prompt = UIKit.Capsule(root, "ItemPrompt", 56, Theme.Hanji, Theme.Ink);
+            prompt.rectTransform.Place(top, new Vector2(0, -10), new Vector2(780, 56));
+            controls.prompt = prompt.gameObject;
+            // ASCII placeholder: set at runtime.
+            controls.promptText = UIKit.Text(prompt.transform, "Text", "Item", 22, true, Theme.Ink, TextAlignmentOptions.Center);
+            controls.promptText.rectTransform.Stretch();
+            controls.promptText.rectTransform.offsetMin = new Vector2(24, 0);
+            controls.promptText.rectTransform.offsetMax = new Vector2(-24, 0);
+            controls.promptText.enableAutoSizing = true;
+            controls.promptText.fontSizeMin = 15;
+            controls.promptText.fontSizeMax = 22;
+            prompt.gameObject.SetActive(false);
+
+            Button WayButton(string name, string key, float x, bool primary)
+            {
+                var button = UIKit.CapsuleButton(root, name, key, new Vector2(150, 48), primary, 24);
+                button.GetComponent<RectTransform>().Place(top, new Vector2(x, -74), new Vector2(150, 48));
+                button.gameObject.SetActive(false);
+                return button;
+            }
+            controls.leftButton = WayButton("ItemLeft", "item.left", -170, true);
+            controls.rightButton = WayButton("ItemRight", "item.right", 0, true);
+            controls.cancelButton = WayButton("ItemCancel", "item.cancel", 170, false);
+
+            const float width = 820, height = 420, pad = 56;
+            var overlay = UIKit.Image(root, "ItemDiscard", null, Theme.Overlay, raycast: true);
+            overlay.rectTransform.Stretch();
+            controls.discardCard = overlay.gameObject;
+            var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            UIKit.Appear(overlay, card.rectTransform);
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, height));
+            UIKit.Label(card.transform, "Title", "item.discard.title", 44, true, Theme.Ink, TextAlignmentOptions.Center)
+                .rectTransform.Place(top, new Vector2(0, -48), new Vector2(width - pad * 2, 60));
+            UIKit.Label(card.transform, "Body", "item.discard.body", 26, false, Theme.InkSoft, TextAlignmentOptions.Center)
+                .rectTransform.Place(top, new Vector2(0, -120), new Vector2(width - pad * 2, 40));
+            const float tile = 220, gap = 24;
+            var left = (width - tile * 3 - gap * 2) / 2;
+            controls.discardTiles = new ItemSlotView[3];
+            for (var i = 0; i < 3; i++)
+                controls.discardTiles[i] = ItemTile(card.transform, "Discard" + i, new Vector2(left + i * (tile + gap), -230), new Vector2(tile, 84));
+            UIKit.Label(card.transform, "NewLabel", "item.discard.new", 22, true, Theme.Seal, TextAlignmentOptions.Center)
+                .rectTransform.Place(new Vector2(0, 1), new Vector2(left + 2 * (tile + gap), -190), new Vector2(tile, 32));
+            overlay.gameObject.SetActive(false);
         }
 
         // Top of the left column, clear of the board: whose go it is, what to

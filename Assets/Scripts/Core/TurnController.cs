@@ -10,7 +10,8 @@ public enum TurnEnd : byte
     Shot,
     Timeout,
     Skipped,
-    Collapse // not a side's turn: the board's edge gave way and what fell was counted (ZoneRule)
+    Collapse, // not a side's turn: the board's edge gave way and what fell was counted (ZoneRule)
+    Motion    // an item set the board moving before the side to move shot (ItemSystem): its turn goes on
 }
 
 // The turns of a match: whose go it is, the clock, the shot playing out,
@@ -30,6 +31,13 @@ public class TurnController
     public event Action<int, MatchEndReason> OnPlayerOut;
     public event Action OnSidesChanged;                         // score, pieces, health
     public event Action OnZoneChanged;                          // the edge announced, or giving way (Zone)
+    // The item mode's (ItemSystem), on the authority: the side to move is
+    // about to shoot (a piece picked, or a flick from elsewhere on its way),
+    // its shot has begun with this piece, and what an item set moving has
+    // stopped (the side to move still to shoot).
+    public event Action<int> OnShotTaking;
+    public event Action<GamePieceDragAndReleaseForce> OnShotBegun;
+    public event Action OnMotionEnded;
 
     public GameManager.GameState State { get; private set; } = GameManager.GameState.Mainmenu;
     public bool HasStarted => State != GameManager.GameState.Mainmenu;
@@ -48,6 +56,12 @@ public class TurnController
     public PieceSelector PieceSelector => pieceSelector;
     public TurnEnd LastTurnEnd { get; private set; }
     public int LastPlayerId { get; private set; } = -1; // whose turn last finished
+    // The side to move shoots again once this shot is over (an item's).
+    public bool ExtraTurn { get; set; }
+    // An item still moving the board (ItemSystem): the motion isn't over yet
+    // however still everything is.
+    public bool MotionHeld { get; set; }
+    public bool InMotion => motion;
     public KillLog Kills { get; }
     public IReadOnlyList<Side> Sides => sides;
     // The side whose shot is playing out, or -1 (none, or the edge giving way).
@@ -93,6 +107,7 @@ public class TurnController
     private float shotStartedAt; // real time
     private List<Side> standingAtShot = new List<Side>();
     private bool resolved; // the result is in (not just stopped: Abort)
+    private bool motion;   // an item's motion playing out, not a shot (TryBeginMotion)
     private int outsThisRound;
     private float collapseStartedAt; // game time: a crumble plays out a moment before anything can be settled
     private const float CollapseMinSeconds = 0.4f;
@@ -170,6 +185,7 @@ public class TurnController
 
         if (selGamePiece != null) selGamePiece.isCancelled = false;
         selGamePiece = piece;
+        OnShotTaking?.Invoke(CurrentPlayerID);
         BeginShot(pieceManager);
         piece.ApplyFlick(force);
         State = GameManager.GameState.ProcessingTurn;
@@ -255,6 +271,26 @@ public class TurnController
         };
     }
 
+    // Something an item set moving before the side to move shoots (a
+    // quake): it plays out as that side's shot would - what goes out counts
+    // for it - and then the side still has its turn. On the authority only.
+    public bool TryBeginMotion()
+    {
+        if (IsMirror || State != GameManager.GameState.WaitingForInput) return false;
+        OnShotTaking?.Invoke(CurrentPlayerID);
+        motion = true;
+        selGamePiece = null;
+        shotStartedAt = Time.unscaledTime;
+        Kills.BeginShot(CurrentPlayerID, '\0');
+        standingAtShot = sides.Where(s => s.Standing).ToList();
+        State = GameManager.GameState.ProcessingTurn;
+        return true;
+    }
+
+    // The sides changed outside a shot (an item healing, bringing a piece
+    // back, undoing a shot): the screen hears it as from a shot.
+    public void SidesChanged() => OnSidesChanged?.Invoke();
+
     // ---- Mirror (network guest) ----
 
     public void BecomeMirror() => IsMirror = true;
@@ -275,7 +311,7 @@ public class TurnController
             Kills.Record(kills);
             OnShotEnded?.Invoke(state.LastPlayer);
         }
-        else if (turnEnded && state.LastTurnEnd == TurnEnd.Collapse) Kills.Record(kills);
+        else if (turnEnded && (state.LastTurnEnd == TurnEnd.Collapse || state.LastTurnEnd == TurnEnd.Motion)) Kills.Record(kills);
         else if (turnEnded) OnTurnPassed?.Invoke(state.LastPlayer, state.LastTurnEnd);
 
         Round = state.Round;
@@ -314,10 +350,24 @@ public class TurnController
         }
         foreach (var side in newlyOut) OnPlayerOut?.Invoke(side.Id, side.Out.Value);
         if (Collapsing) State = GameManager.GameState.ProcessingTurn;
+        // An item's motion over: the same side's turn goes on.
+        if (!newTurn && turnEnded && state.LastTurnEnd == TurnEnd.Motion && !Collapsing) State = GameManager.GameState.WaitingForInput;
         if (!newTurn) return;
         TurnTimeRemaining = TurnSeconds;
         State = GameManager.GameState.WaitingForInput;
         OnTurnStarted?.Invoke(CurrentPlayerID);
+    }
+
+    // The host's word on the sides between turns (an item's doing).
+    public void ApplyRemoteSides(IReadOnlyList<Side> remote)
+    {
+        if (!IsMirror) return;
+        foreach (var other in remote)
+        {
+            var side = Find(other.Id);
+            if (side != null) side.CopyFrom(other);
+        }
+        OnSidesChanged?.Invoke();
     }
 
     // The host left: a guest's match ends where it is, the guest deciding
@@ -345,6 +395,7 @@ public class TurnController
         if (selGamePiece != null) selGamePiece.isCancelled = false;
         selGamePiece = picked;
         selGamePiece.isDragging = true;
+        OnShotTaking?.Invoke(CurrentPlayerID);
         State = GameManager.GameState.WaitingForEndTurn;
     }
 
@@ -367,15 +418,46 @@ public class TurnController
         ruleset.OnBeforeFlick(piece);
         Kills.BeginShot(CurrentPlayerID, piece.pieceID);
         standingAtShot = sides.Where(s => s.Standing).ToList();
+        OnShotBegun?.Invoke(selGamePiece);
     }
 
     private void TurnProcess()
     {
         if (Collapsing && Time.time - collapseStartedAt < CollapseMinSeconds) return;
+        if (motion && MotionHeld) return;
         foreach (var piece in gamePieceScripts)
             if (!piece.IsSettled) return;
         if (Collapsing) EndCollapse();
+        else if (motion) EndMotion();
         else if (!selGamePiece.isCancelled && !selGamePiece.isDragging) EndTurn();
+    }
+
+    // What an item set moving has stopped: what went out is counted as the
+    // side to move's, whose turn then goes on (the clock as it was).
+    private void EndMotion()
+    {
+        motion = false;
+        TurnsEnded++;
+        LastTurnEnd = TurnEnd.Motion;
+        LastPlayerId = CurrentPlayerID;
+        Kills.EndShot();
+        var knockedOut = standingAtShot.Where(s => s.Standing && ruleset.IsKnockedOut(s)).ToList();
+        foreach (var side in knockedOut) side.Out = MatchEndReason.Knockout;
+        OnSidesChanged?.Invoke();
+        var standing = sides.Where(s => s.Standing).ToList();
+        if (ruleset.TryGetMatchWinner(standingAtShot, standing, CurrentPlayerID, out var matchWinner, out var reason))
+        {
+            EndMatch(matchWinner != null ? matchWinner.Id : -1, reason);
+            return;
+        }
+        foreach (var side in knockedOut) OnPlayerOut?.Invoke(side.Id, MatchEndReason.Knockout);
+        if (!sides[CurrentPlayerID].Standing)
+        {
+            NextTurn();
+            return;
+        }
+        State = GameManager.GameState.WaitingForInput;
+        OnMotionEnded?.Invoke();
     }
 
     private void EndTurn()
@@ -401,7 +483,16 @@ public class TurnController
         }
         foreach (var side in knockedOut) OnPlayerOut?.Invoke(side.Id, MatchEndReason.Knockout);
 
-        if (!TryCrumble()) BeginTurn(NextPlayerIndex());
+        if (!TryCrumble()) NextTurn();
+    }
+
+    // The next side's turn, or the same side's again for its extra shot.
+    private void NextTurn()
+    {
+        var again = ExtraTurn && sides[CurrentPlayerID].Standing;
+        ExtraTurn = false;
+        if (again) BeginTurn(CurrentPlayerID, again: true);
+        else BeginTurn(NextPlayerIndex());
     }
 
     // The turn that the edge was announced for is over: it gives way now.
@@ -441,7 +532,7 @@ public class TurnController
             return;
         }
         foreach (var side in knockedOut) OnPlayerOut?.Invoke(side.Id, MatchEndReason.Knockout);
-        BeginTurn(NextPlayerIndex());
+        NextTurn();
     }
 
     private void EndMatch(int winnerId, MatchEndReason reason)
@@ -464,6 +555,7 @@ public class TurnController
             selGamePiece.isCancelled = false;
         }
         var passer = CurrentPlayerID;
+        ExtraTurn = false; // no shot, no shot after it
         TurnsEnded++;
         LastTurnEnd = why;
         LastPlayerId = passer;
@@ -482,10 +574,11 @@ public class TurnController
         return (CurrentPlayerID + 1) % sides.Count;
     }
 
-    private void BeginTurn(int playerIndex)
+    // again: the same side's extra shot, inside the round it's in.
+    private void BeginTurn(int playerIndex, bool again = false)
     {
         // Round again to the front: a round is over.
-        if (Turn > 0 && InRound(playerIndex) <= InRound(CurrentPlayerID) && EndRound()) return;
+        if (!again && Turn > 0 && InRound(playerIndex) <= InRound(CurrentPlayerID) && EndRound()) return;
         selGamePiece = null;
         CurrentPlayerID = sides[playerIndex].Id;
         Turn++;

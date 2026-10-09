@@ -14,6 +14,11 @@ public class PieceSelector
     public int? LocalPlayerId { get; set; }
     // Locally against the AI: the sides played at this screen (null: any).
     public HashSet<int> Players { get; set; }
+    // The item mode's (ItemSystem), for every selector on this screen: no
+    // piece is taken while an item's target is being picked, and none that
+    // an item holds (Freeze).
+    public static bool Held { get; set; }
+    public static System.Func<GamePieceDragAndReleaseForce, bool> MayMove { get; set; }
 
     public PieceSelector(List<GamePieceDragAndReleaseForce> pieces)
     {
@@ -31,7 +36,8 @@ public class PieceSelector
             if (!piece.isSelected || KeyBindings.Down(GameAction.CancelAim)) continue;
 
             var playerIndex = piece.Manager.playerIndex;
-            var mayTake = playerIndex == currentPlayerID && (!LocalPlayerId.HasValue || playerIndex == LocalPlayerId.Value) && (Players == null || Players.Contains(playerIndex));
+            var mayTake = !Held && playerIndex == currentPlayerID && (!LocalPlayerId.HasValue || playerIndex == LocalPlayerId.Value) && (Players == null || Players.Contains(playerIndex))
+                          && (MayMove == null || MayMove(piece));
             if (mayTake && (picked == null || piece.PickRank < picked.PickRank)) picked = piece;
         }
         foreach (var piece in pieces)

@@ -91,6 +91,7 @@ public static class Msg
         public List<KillEvent> Kills = new List<KillEvent>();
         public List<char> Removed = new List<char>();
         public List<PieceTransform> Pieces = new List<PieceTransform>();
+        public ItemState Items; // the item mode's, null without
 
         public void Write(NetWriter w)
         {
@@ -98,6 +99,8 @@ public static class Msg
             w.List(Kills, KillEvent.Write);
             w.List(Removed, (x, id) => x.Piece(id));
             w.List(Pieces, PieceTransform.Write);
+            w.Bool(Items != null);
+            if (Items != null) w.Record(Items.Write);
         }
 
         public void Read(NetReader r)
@@ -106,6 +109,7 @@ public static class Msg
             Kills = r.List(KillEvent.Read);
             Removed = r.List(x => x.Piece());
             Pieces = r.List(PieceTransform.Read);
+            if (r.Bool()) Items = r.Record(ItemState.Read);
         }
     }
 
@@ -231,6 +235,73 @@ public static class Msg
 
         public void Write(NetWriter w) => w.Bool(On);
         public void Read(NetReader r) => On = r.Bool();
+    }
+
+    // Guest -> host: use my item in this slot on this.
+    public sealed class UseItem : INetMessage
+    {
+        public int Slot;
+        public ItemTarget Target;
+
+        public void Write(NetWriter w)
+        {
+            w.Int(Slot);
+            ItemTarget.Write(w, Target);
+        }
+
+        public void Read(NetReader r)
+        {
+            Slot = r.Int();
+            Target = ItemTarget.Read(r);
+        }
+    }
+
+    // Guest -> host: of my three items, let this one go (0, 1 the slots, 2 the new one).
+    public sealed class DiscardItem : INetMessage
+    {
+        public int Index;
+
+        public void Write(NetWriter w) => w.Int(Index);
+        public void Read(NetReader r) => Index = r.Int();
+    }
+
+    // Host -> guests: the items as they are, what just happened with them,
+    // the pieces an item moved or brought back (and where they are now),
+    // and the sides, which an item may have changed (health, pieces).
+    public sealed class ItemUpdate : INetMessage
+    {
+        public ItemState State = new ItemState();
+        public List<ItemEvent> Events = new List<ItemEvent>();
+        public List<PieceTransform> Pieces = new List<PieceTransform>();
+        public List<char> Revived = new List<char>();
+        public List<Side> Sides = new List<Side>();
+
+        public void Write(NetWriter w)
+        {
+            w.Record(State.Write);
+            w.List(Events, ItemEvent.Write);
+            w.List(Pieces, PieceTransform.Write);
+            w.List(Revived, (x, id) => x.Piece(id));
+            w.List(Sides, (x, side) =>
+            {
+                x.Int(side.Id);
+                side.Write(x);
+            });
+        }
+
+        public void Read(NetReader r)
+        {
+            State = r.Record(ItemState.Read);
+            Events = r.List(ItemEvent.Read);
+            Pieces = r.List(PieceTransform.Read);
+            Revived = r.List(x => x.Piece());
+            Sides = r.List(x =>
+            {
+                var side = new Side(x.Int());
+                side.Read(x);
+                return side;
+            });
+        }
     }
 
     // The messages that are only their type.

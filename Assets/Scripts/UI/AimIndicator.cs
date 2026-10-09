@@ -71,6 +71,16 @@ public class AimIndicator : MonoBehaviour
         SetVisible(true);
         outline.Set(PieceOutline.Mark.Hover, null);
         outline.Set(PieceOutline.Mark.Aim, piece);
+        // An item's fog: the piece's outline, and nothing to tell the way or the power.
+        var items = ItemSystem.Instance;
+        var owner = piece.Manager.playerIndex;
+        if (items != null && items.IsFogged(owner))
+        {
+            for (var i = 0; i < transform.childCount; i++) transform.GetChild(i).gameObject.SetActive(false);
+            HideGuide();
+            outline.AimPower = 0.5f;
+            return;
+        }
 
         var origin = piece.AimOrigin;
         var stoneRadius = piece.Manager.radius;
@@ -100,7 +110,9 @@ public class AimIndicator : MonoBehaviour
         powerLabel.anchoredPosition = center + side * (Reach(piece, center, side) + labelGap);
         powerText.text = $"{Mathf.RoundToInt(power * 100)}%";
 
-        if (guideEnabled && hasDirection) DrawGuide(piece, gameManager, origin, stoneRadius, arrowBase);
+        var curve = items != null && items.ShotCarries(owner, ItemId.Curve) ? items.State.CurveSign : 0;
+        if (guideEnabled && hasDirection && curve != 0) DrawCurve(piece, gameManager, origin, stoneRadius, curve);
+        else if (guideEnabled && hasDirection) DrawGuide(piece, gameManager, origin, stoneRadius, arrowBase);
         else HideGuide();
     }
 
@@ -122,6 +134,7 @@ public class AimIndicator : MonoBehaviour
     private void ShowHover()
     {
         if (outline == null || (GameManager.manager != null && GameManager.manager.gameState == GameManager.GameState.Placement)) return;
+        if (PieceSelector.Held) return; // an item's target being picked marks its own (ItemControls)
         outline.Set(PieceOutline.Mark.Hover, game != null ? PieceUnderCursor() : null);
     }
 
@@ -174,6 +187,57 @@ public class AimIndicator : MonoBehaviour
             }
             dots[i].gameObject.SetActive(true);
             dots[i].anchoredPosition = from + step * (dotSpacing * (i + 0.5f));
+        }
+        for (var i = count; i < dots.Count; i++) dots[i].gameObject.SetActive(false);
+        outline.Set(PieceOutline.Mark.Target, target);
+    }
+
+    // A curving shot's guide (ItemId.Curve): along its arc, the same at any
+    // speed (ItemCurve), up to the first piece it would meet or the edge.
+    private void DrawCurve(GamePieceDragAndReleaseForce piece, GameManager gameManager, Vector3 origin, float radius, int sign)
+    {
+        var shape = gameManager.Board.Playable;
+        var at = new Vector2(origin.x, origin.z);
+        var heading = new Vector2(piece.AimDirection.x, piece.AimDirection.z).normalized;
+        const float step = 0.02f;
+        var points = new List<Vector2> { ToLocal(origin) };
+        GamePieceDragAndReleaseForce target = null;
+        for (var travelled = 0f; travelled < 5f && target == null; travelled += step)
+        {
+            var turn = sign * step / ItemSystem.CurveRadius;
+            heading = new Vector2(heading.x * Mathf.Cos(turn) - heading.y * Mathf.Sin(turn), heading.x * Mathf.Sin(turn) + heading.y * Mathf.Cos(turn));
+            at += heading * step;
+            if (!shape.Contains(at)) break;
+            foreach (var other in gameManager.gamePieceScripts)
+            {
+                if (other == null || other == piece || !other.gameObject.activeSelf) continue;
+                var o = other.AimOrigin;
+                if ((new Vector2(o.x, o.z) - at).magnitude < radius + other.Manager.radius) target = other;
+            }
+            points.Add(ToLocal(new Vector3(at.x, origin.y, at.y)));
+        }
+
+        // Dots evenly along it on the screen, from just past the piece.
+        var count = 0;
+        var carried = dotSpacing * 0.5f;
+        var skip = Reach(piece, points[0], points.Count > 1 ? (points[1] - points[0]).normalized : Vector2.up) + arrowGap;
+        for (var i = 1; i < points.Count; i++)
+        {
+            var a = points[i - 1];
+            var b = points[i];
+            var length = Vector2.Distance(a, b);
+            var along = carried;
+            while (along <= length)
+            {
+                var point = Vector2.Lerp(a, b, along / length);
+                along += dotSpacing;
+                if (Vector2.Distance(point, points[0]) < skip) continue;
+                if (count >= dots.Count) dots.Add(Instantiate(dotTemplate, guideRoot).GetComponent<RectTransform>());
+                dots[count].gameObject.SetActive(true);
+                dots[count].anchoredPosition = point;
+                count++;
+            }
+            carried = along - length;
         }
         for (var i = count; i < dots.Count; i++) dots[i].gameObject.SetActive(false);
         outline.Set(PieceOutline.Mark.Target, target);
