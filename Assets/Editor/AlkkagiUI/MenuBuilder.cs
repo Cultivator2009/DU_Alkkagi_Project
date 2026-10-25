@@ -34,16 +34,19 @@ namespace AlkkagiUIEditor
             var root = canvas.transform;
             var menu = canvas.gameObject.AddComponent<MainMenuUI>();
 
-            UIKit.Image(root, "Background", null, Theme.MenuBackground).rectTransform.Stretch();
-            BuildBoardIllustration(root);
+            // No background: behind the menu is MainMenuScene's living board
+            // on its table (MenuDemo, Tools > Alkkagi > Build menu demo), the
+            // logo and buttons on a hanji card over the table's left.
 
-            // The logo and buttons hang from the left edge's middle, as the board
-            // does from the right's: on a taller canvas (4:3, 5:4 - see
-            // UIKit.Canvas) the pair stays level instead of the buttons riding
-            // up to the top. The offsets read as from the top at 1080.
+            // The logo and buttons hang from the left edge's middle: on a
+            // taller canvas (4:3, 5:4 - see UIKit.Canvas) they stay level
+            // instead of riding up to the top. The offsets read as from the
+            // top at 1080.
             var topLeft = new Vector2(0, 1);
             var leftMiddle = new Vector2(0, 0.5f);
             const float fromTop = 540;
+            UIKit.Panel(root, "MenuCard", Theme.Hanji, Theme.Ink, 0.8f)
+                .rectTransform.Place(leftMiddle, new Vector2(64, -88 + fromTop), new Vector2(696, 740), topLeft);
             var seal = UIKit.Panel(root, "Seal", Theme.Seal, null, 1.4f);
             seal.rectTransform.Place(leftMiddle, new Vector2(112, -146 + fromTop), new Vector2(130, 130), topLeft);
             // The seal is the logo mark, so it stays 알 in both languages.
@@ -68,7 +71,9 @@ namespace AlkkagiUIEditor
             menu.recordsButton = Small("RecordsButton", "menu.records", 2);
             menu.quitButton = Small("QuitButton", "menu.quit", 3);
 
-            var steamRow = UIKit.Node("SteamUser", root).Place(new Vector2(0, 0), new Vector2(112, 56), new Vector2(760, 40));
+            // Under the card, on the table: a capsule of its own to stay readable.
+            UIKit.Capsule(root, "SteamUserBack", 56, Theme.Hanji, null).rectTransform.Place(new Vector2(0, 0), new Vector2(64, 48), new Vector2(696, 56));
+            var steamRow = UIKit.Node("SteamUser", root).Place(new Vector2(0, 0), new Vector2(112, 56), new Vector2(620, 40));
             UIKit.Image(steamRow, "Dot", UIKit.Circle, Theme.StatusOk).rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(16, 16), new Vector2(0, 0.5f));
             // ASCII placeholder: anything outside the baked charset would land in
             // the dynamic fallback atlas the moment the editor draws it.
@@ -108,26 +113,6 @@ namespace AlkkagiUIEditor
             menu.offerStartButton = UIKit.CapsuleButton(card.transform, "StartButton", "practice.start", new Vector2(320, 84), true, 32);
             menu.offerStartButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 48), new Vector2(320, 84), new Vector2(1, 0));
             overlay.gameObject.SetActive(false);
-        }
-
-        // The real board texture, drawn flat, with a few stones mid-game.
-        // Stones sit on grid intersections: in GO_Board.png the 19 lines run
-        // from x 0.035 to 0.959 and y 0.040 to 0.966 (measured, from bottom).
-        private static void BuildBoardIllustration(Transform root)
-        {
-            var board = UIKit.Image(root, "Board", UIKit.Board, Color.white);
-            board.rectTransform.Place(new Vector2(1, 0.5f), new Vector2(-86, -14), new Vector2(740, 740));
-            var stones = new (int col, int row, bool black)[]
-            {
-                (4, 15, false), (8, 13, false), (14, 15, false),
-                (5, 3, true), (10, 6, true), (15, 3, true),
-            };
-            foreach (var (col, row, black) in stones)
-            {
-                var point = new Vector2(0.035f + col * (0.924f / 18), 0.040f + row * (0.926f / 18));
-                UIKit.Stone(board.transform, black ? "Black" : "White", 34, black ? Theme.StoneBlack : Theme.StoneWhite, black ? Theme.Ink : Theme.InkMuted, false)
-                    .Place(point, Vector2.zero, new Vector2(34, 34), new Vector2(0.5f, 0.5f));
-            }
         }
 
         // 한 | EN capsule; the ink highlight slides under the active language.

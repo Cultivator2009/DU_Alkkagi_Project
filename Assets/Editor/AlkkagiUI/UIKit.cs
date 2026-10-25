@@ -31,7 +31,6 @@ namespace AlkkagiUIEditor
         public static readonly Color StoneWhite = Hex("F7F7F7");
         public static readonly Color LostRing = Hex("B9A88F");
         public static readonly Color Overlay = new Color(0.10f, 0.07f, 0.05f, 0.5f);
-        public static readonly Color MenuBackground = Hex("CC8686");
         public static readonly Color StatusOk = Hex("639922");
         public static readonly Color StatusBusy = Hex("BA7517");
         public static readonly Color StatusError = Hex("A32D2D");

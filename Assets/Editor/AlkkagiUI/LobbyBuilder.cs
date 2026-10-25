@@ -40,7 +40,13 @@ namespace AlkkagiUIEditor
             ui.busyColor = Theme.StatusBusy;
             ui.errorColor = Theme.StatusError;
 
-            UIKit.Image(root, "Background", null, Theme.MenuBackground).rectTransform.Stretch();
+            // The walnut table the boards sit on (TableBuilder), as behind the main menu.
+            var background = new GameObject("Background", typeof(RectTransform), typeof(RawImage));
+            background.transform.SetParent(root, false);
+            var table = background.GetComponent<RawImage>();
+            table.texture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Materials/Table/Table.png");
+            table.raycastTarget = false;
+            table.rectTransform.Stretch();
             var card = UIKit.Panel(root, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, CardSize);
             var c = card.transform;
