@@ -33,6 +33,7 @@ public class ItemControls : MonoBehaviour
         public ItemId Item;
         public ItemAim Aim;
         public char First; // OwnThenEnemy: the own piece, once picked
+        public Vector2? Spot; // PointWay: the spot, once picked
     }
 
     private Picking? picking;
@@ -217,6 +218,7 @@ public class ItemControls : MonoBehaviour
             case ItemAim.Point:
             case ItemAim.Direction:
             case ItemAim.OwnZone:
+            case ItemAim.PointWay:
                 if (!BoardPoint(out var point))
                 {
                     marker.gameObject.SetActive(false);
@@ -224,11 +226,24 @@ public class ItemControls : MonoBehaviour
                     break;
                 }
                 var target = new ItemTarget { Point = point };
+                if (p.Aim == ItemAim.PointWay && p.Spot.HasValue)
+                {
+                    var toward = point - p.Spot.Value;
+                    target = new ItemTarget { Point = p.Spot.Value, Way = toward.sqrMagnitude > 1e-4f ? toward.normalized : Vector2.zero };
+                }
+                else if (p.Aim == ItemAim.PointWay) target.Way = Vector2.up; // the spot alone, first
                 var fits = items.CanTarget(p.Side, p.Item, target);
                 ShowMarker(p, point, fits);
                 if (!click) break;
-                if (fits) Done(target);
-                else GameAudio.PlayInterface(GameAudio.Bank.cancel, 0.5f);
+                if (!fits) GameAudio.PlayInterface(GameAudio.Bank.cancel, 0.5f);
+                else if (p.Aim == ItemAim.PointWay && !p.Spot.HasValue)
+                {
+                    p.Spot = point;
+                    picking = p;
+                    GameAudio.PlayInterface(GameAudio.Bank.click, 0.6f);
+                    RenderPrompt();
+                }
+                else Done(target);
                 break;
         }
     }
@@ -271,21 +286,23 @@ public class ItemControls : MonoBehaviour
     {
         var board = GameManager.manager.Board;
         var top = board.Active.transform.position.y + 0.004f;
-        if (p.Aim == ItemAim.Direction)
+        if (p.Aim == ItemAim.Direction || p.Aim == ItemAim.PointWay && p.Spot.HasValue)
         {
-            marker.gameObject.SetActive(false);
+            // A way: from the board's middle (a quake), or from the pad's spot.
+            var from = p.Aim == ItemAim.Direction ? Vector2.zero : p.Spot.Value;
+            var toward = point - from;
+            var end = from + toward.normalized * Mathf.Min(toward.magnitude, p.Aim == ItemAim.Direction ? 1.2f : 0.5f);
+            marker.gameObject.SetActive(p.Aim == ItemAim.PointWay);
             way.gameObject.SetActive(true);
-            var end = point.normalized * Mathf.Min(point.magnitude, 1.2f);
-            way.SetPosition(0, new Vector3(0, top, 0));
+            way.SetPosition(0, new Vector3(from.x, top, from.y));
             way.SetPosition(1, new Vector3(end.x, top, end.y));
             way.startColor = way.endColor = fits ? Fits : Misfits;
-            return;
+            if (p.Aim == ItemAim.Direction) return;
+            point = from;
         }
-        way.gameObject.SetActive(false);
+        else way.gameObject.SetActive(false);
         marker.gameObject.SetActive(true);
-        var radius = p.Item == ItemId.Ice ? ItemSystem.IceRadius
-            : p.Item == ItemId.Revive ? (items.BenchedOf(p.Side) != null ? items.BenchedOf(p.Side).Manager.radius : 0.1f)
-            : ItemSystem.PillarRadius;
+        var radius = p.Item == ItemId.Revive ? (items.BenchedOf(p.Side) != null ? items.BenchedOf(p.Side).Manager.radius : 0.1f) : ItemSystem.RadiusOf(p.Item);
         marker.position = new Vector3(point.x, top, point.y);
         marker.localScale = Vector3.one * radius;
         markerMaterial.color = fits ? Fits : Misfits;
@@ -338,6 +355,7 @@ public class ItemControls : MonoBehaviour
                 ItemAim.Point => "item.pick.point",
                 ItemAim.Direction => "item.pick.direction",
                 ItemAim.OwnZone => "item.pick.zone",
+                ItemAim.PointWay => p.Spot.HasValue ? "item.pick.way" : "item.pick.point",
                 _ => p.First == '\0' ? "item.pick.swapOwn" : "item.pick.swapEnemy",
             };
             if (p.Aim == ItemAim.OwnThenEnemy && p.First != '\0') key = "item.pick.swapEnemy";

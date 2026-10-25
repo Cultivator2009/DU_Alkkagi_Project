@@ -4,8 +4,9 @@ using UnityEngine;
 
 // The AI's use of items (AIOpponent), by rule of thumb rather than by
 // trying them on the board: a piece of its own near the edge gets an
-// anchor, a shield or a post in front of it; a piece of the others' near
-// the edge gets greased, shrunk or iced; a quake goes the way more of
+// anchor, a shield, a post or a bumper in front of it, or tar under it; a
+// piece of the others' near the edge gets greased, shrunk, iced or a pad
+// under it sending it over; a quake goes the way more of
 // theirs than its own would go over; health and pieces lost come back when
 // they can. Its shot's items it takes as they come. An easy AI uses fewer.
 public static class ItemAI
@@ -17,6 +18,7 @@ public static class ItemAI
         { ItemId.Blast, 6 }, { ItemId.Weight, 5 }, { ItemId.Shield, 5 }, { ItemId.Swap, 5 }, { ItemId.Freeze, 4 },
         { ItemId.Grease, 4 }, { ItemId.Shrink, 4 }, { ItemId.Anchor, 4 }, { ItemId.Blind, 3 }, { ItemId.Pillar, 3 },
         { ItemId.Ice, 3 }, { ItemId.Grow, 3 }, { ItemId.Glue, 2 }, { ItemId.Ghost, 2 }, { ItemId.Foresight, 1 }, { ItemId.Curve, 0 },
+        { ItemId.Sinkhole, 6 }, { ItemId.Boost, 4 }, { ItemId.Bumper, 3 }, { ItemId.Tar, 3 }, { ItemId.Vortex, 2 }, { ItemId.Fog, 1 },
     };
 
     // Which of the four to let go: 0..2 a slot, 3 the new one.
@@ -92,13 +94,41 @@ public static class ItemAI
                 var next = NextEnemy(items, game, side);
                 return next >= 0 && Pick(theirs.FirstOrDefault(p => p.Manager.playerIndex == next), out target);
             case ItemId.Pillar:
+            case ItemId.Bumper:
                 var guarded = Nearest(mine, 0.4f);
                 if (guarded == null) return false;
                 var at = ItemSystem.Flat(guarded.Body.position);
                 var edge = shape.Closest(at);
                 var toward = (edge - at).sqrMagnitude > 1e-6f ? (edge - at).normalized : Vector2.up;
-                target = new ItemTarget { Point = at + toward * (guarded.Manager.radius + ItemSystem.PillarRadius + 0.04f) };
+                target = new ItemTarget { Point = at + toward * (guarded.Manager.radius + ItemSystem.RadiusOf(id) + 0.04f) };
                 return items.CanTarget(side, id, target);
+            case ItemId.Tar:
+            case ItemId.Vortex:
+            case ItemId.Fog:
+                // Over its own piece most at risk (a fog now and then only).
+                if (id == ItemId.Fog && Random.value > 0.3f) return false;
+                var kept = Nearest(mine, id == ItemId.Fog ? 0.8f : 0.45f);
+                if (kept == null) return false;
+                target = new ItemTarget { Point = ItemSystem.Flat(kept.Body.position) };
+                return items.CanTarget(side, id, target);
+            case ItemId.Boost:
+                // Under theirs nearest the edge, sending it over.
+                var sent = Nearest(theirs, 0.5f);
+                if (sent == null) return false;
+                var from = ItemSystem.Flat(sent.Body.position);
+                var over = shape.Closest(from) - from;
+                target = new ItemTarget { Point = from, Way = over.sqrMagnitude > 1e-6f ? over.normalized : Vector2.up };
+                return items.CanTarget(side, id, target);
+            case ItemId.Sinkhole:
+                // In the open between its pieces and theirs, where a knock ends.
+                if (mine.Count == 0 || theirs.Count == 0) return false;
+                var middle = Vector2.zero;
+                foreach (var p in theirs) middle += ItemSystem.Flat(p.Body.position);
+                middle /= theirs.Count;
+                var nearMine = ItemSystem.Flat(mine.OrderBy(p => (ItemSystem.Flat(p.Body.position) - middle).sqrMagnitude).First().Body.position);
+                var hole = Vector2.Lerp(nearMine, middle, 0.6f);
+                target = new ItemTarget { Point = hole };
+                return items.CanTarget(side, id, target) && !game.gamePieceScripts.Any(p => p != null && p.gameObject.activeSelf && (ItemSystem.Flat(p.Body.position) - hole).magnitude < ItemSystem.SinkholeRadius + p.Manager.radius);
             case ItemId.Ice:
                 var slid = Nearest(theirs, 0.6f);
                 if (slid == null) return false;

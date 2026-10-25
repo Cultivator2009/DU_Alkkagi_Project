@@ -52,7 +52,8 @@ public struct PieceEffect
     public static PieceEffect Read(NetReader r) => new PieceEffect { Piece = r.Piece(), Kind = (ItemId)r.Byte(), Owner = r.Int(), Expires = r.Int(), TargetTurn = r.Int(), Partner = r.Piece() };
 }
 
-// A pillar or a patch of ice on the board, until its user's turn in round Expires.
+// Something an item put on the board - a post, a patch, a hole - until its
+// user's turn in round Expires.
 public struct BoardObject
 {
     public int Id;
@@ -60,6 +61,7 @@ public struct BoardObject
     public Vector2 Position; // (x, z)
     public int Owner;
     public int Expires;
+    public Vector2 Way;      // Boost: where it sends a piece (unit)
 
     public static void Write(NetWriter w, BoardObject o)
     {
@@ -69,9 +71,11 @@ public struct BoardObject
         w.Float(o.Position.y);
         w.Int(o.Owner);
         w.Int(o.Expires);
+        w.Float(o.Way.x);
+        w.Float(o.Way.y);
     }
 
-    public static BoardObject Read(NetReader r) => new BoardObject { Id = r.Int(), Kind = (ItemId)r.Byte(), Position = new Vector2(r.Float(), r.Float()), Owner = r.Int(), Expires = r.Int() };
+    public static BoardObject Read(NetReader r) => new BoardObject { Id = r.Int(), Kind = (ItemId)r.Byte(), Position = new Vector2(r.Float(), r.Float()), Owner = r.Int(), Expires = r.Int(), Way = new Vector2(r.Float(), r.Float()) };
 }
 
 // An item box on the board: a piece that comes to it on a side's shot
@@ -167,7 +171,10 @@ public enum ItemEventKind : byte
     Shielded,    // a shield brought a piece back
     Stuck,       // glue took hold
     Expired,
-    RoundGift    // the round's item
+    RoundGift,   // the round's item
+    Sunk,        // a piece went down a sinkhole
+    Boosted,     // a pad sent a piece on
+    Bumped       // a bumper threw one back
 }
 
 // Something an item did, for the HUD and the board's effects on every screen.
@@ -204,6 +211,7 @@ public struct ItemTarget
     public char Other;     // Swap: the other side's piece
     public Vector2 Point;  // (x, z)
     public int Sign;       // Curve: 1 left, -1 right
+    public Vector2 Way;    // PointWay: the way from Point (unit)
 
     public static void Write(NetWriter w, ItemTarget t)
     {
@@ -212,7 +220,9 @@ public struct ItemTarget
         w.Float(t.Point.x);
         w.Float(t.Point.y);
         w.Int(t.Sign);
+        w.Float(t.Way.x);
+        w.Float(t.Way.y);
     }
 
-    public static ItemTarget Read(NetReader r) => new ItemTarget { Piece = r.Piece(), Other = r.Piece(), Point = new Vector2(r.Float(), r.Float()), Sign = r.Int() };
+    public static ItemTarget Read(NetReader r) => new ItemTarget { Piece = r.Piece(), Other = r.Piece(), Point = new Vector2(r.Float(), r.Float()), Sign = r.Int(), Way = new Vector2(r.Float(), r.Float()) };
 }

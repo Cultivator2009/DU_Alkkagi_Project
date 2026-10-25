@@ -25,7 +25,13 @@ public enum ItemId : byte
     Rewind,     // the last shot, another side's, undone
     Revive,     // one of its pieces back from off the board
     Swap,       // one of its pieces and another side's change places
-    Heal        // a battle of health: health back
+    Heal,       // a battle of health: health back
+    Fog,        // a cloud on the board that hides what's in it
+    Sinkhole,   // a hole: a piece that comes to rest in it is out
+    Tar,        // a patch of the board where everything slows hard
+    Boost,      // a pad that sends a piece crossing it its way
+    Vortex,     // a patch that draws moving pieces to its middle
+    Bumper      // a post that throws back whatever knocks into it
 }
 
 // What an item does its work on, picked by the player who uses it.
@@ -38,7 +44,8 @@ public enum ItemAim : byte
     Point,        // a spot on the board clear of the pieces
     Direction,    // a spot on the board, as a way from its middle
     OwnZone,      // a spot in its own placement zone (Revive)
-    OwnThenEnemy  // one of its own pieces, then another side's (Swap)
+    OwnThenEnemy, // one of its own pieces, then another side's (Swap)
+    PointWay      // a spot on the board, then a way from it (Boost)
 }
 
 public enum ItemCategory : byte
@@ -106,6 +113,12 @@ public static class ItemDefs
         new ItemDef(ItemId.Revive, ItemCategory.Special, ItemRarity.Rare, ItemAim.OwnZone),
         new ItemDef(ItemId.Swap, ItemCategory.Special, ItemRarity.Rare, ItemAim.OwnThenEnemy),
         new ItemDef(ItemId.Heal, ItemCategory.Special, ItemRarity.Rare, ItemAim.OwnPiece, healthOnly: true),
+        new ItemDef(ItemId.Fog, ItemCategory.Board, ItemRarity.Uncommon, ItemAim.Point, 2),
+        new ItemDef(ItemId.Sinkhole, ItemCategory.Board, ItemRarity.Rare, ItemAim.Point, 3),
+        new ItemDef(ItemId.Tar, ItemCategory.Board, ItemRarity.Common, ItemAim.Point, 3),
+        new ItemDef(ItemId.Boost, ItemCategory.Board, ItemRarity.Uncommon, ItemAim.PointWay, 3),
+        new ItemDef(ItemId.Vortex, ItemCategory.Board, ItemRarity.Uncommon, ItemAim.Point, 2),
+        new ItemDef(ItemId.Bumper, ItemCategory.Board, ItemRarity.Uncommon, ItemAim.Point, 3),
     };
 
     public static ItemDef Of(ItemId id) => All[(int)id];

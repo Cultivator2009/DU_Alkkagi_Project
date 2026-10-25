@@ -26,6 +26,16 @@ public class ItemSystem : MonoBehaviour
     public const float PillarRadius = 0.06f;
     public const float PillarHeight = 0.3f;
     public const float IceRadius = 0.45f;
+    public const float FogRadius = 0.55f;
+    public const float SinkholeRadius = 0.2f;
+    public const float TarRadius = 0.4f;
+    public const float BoostRadius = 0.18f;
+    public const float BoostSpeed = 4.5f;      // m/s a pad sends a piece on at, at least
+    public const float VortexRadius = 0.6f;
+    public const float VortexPull = 6f;        // m/s² toward its middle, on a moving piece
+    public const float BumperRadius = 0.07f;
+    public const float BumperSpeed = 3.5f;     // m/s a bumper throws a piece back at, at least
+    public const float SinkSpeed = 0.25f;      // slower than this over a hole, a piece goes down
     public const float BlastRadius = 0.75f;
     public const float BlastSpeed = 7f;        // m/s at the blast's heart, less out to its edge
     public const float CurveRadius = 2.5f;     // a curving shot's arc, whatever its speed
@@ -81,6 +91,9 @@ public class ItemSystem : MonoBehaviour
     private readonly Dictionary<GamePieceDragAndReleaseForce, PieceBase> bases = new Dictionary<GamePieceDragAndReleaseForce, PieceBase>();
     private readonly List<GamePieceDragAndReleaseForce> benched = new List<GamePieceDragAndReleaseForce>(); // out, kept to come back; latest last
     private readonly HashSet<GamePieceDragAndReleaseForce> onIce = new HashSet<GamePieceDragAndReleaseForce>();
+    private readonly HashSet<GamePieceDragAndReleaseForce> onTar = new HashSet<GamePieceDragAndReleaseForce>();
+    private readonly HashSet<(int pad, GamePieceDragAndReleaseForce piece)> boosted = new HashSet<(int, GamePieceDragAndReleaseForce)>(); // this shot's
+    private readonly Dictionary<int, HashSet<GamePieceDragAndReleaseForce>> overHole = new Dictionary<int, HashSet<GamePieceDragAndReleaseForce>>(); // there when it opened, and not gone off it since
     private readonly Dictionary<PhysicsMaterial, PhysicsMaterial> slippery = new Dictionary<PhysicsMaterial, PhysicsMaterial>();
     private readonly List<ItemEvent> news = new List<ItemEvent>();
     private readonly HashSet<char> moved = new HashSet<char>();
@@ -197,7 +210,9 @@ public class ItemSystem : MonoBehaviour
             case ItemAim.Direction:
                 return target.Point.sqrMagnitude > 0.01f;
             case ItemAim.Point:
-                return id == ItemId.Ice ? Board.Playable.Contains(target.Point) : PostFits(target.Point);
+                return IsPost(id) ? PostFits(target.Point, RadiusOf(id)) : Board.Playable.Contains(target.Point);
+            case ItemAim.PointWay:
+                return Board.Playable.Contains(target.Point) && Mathf.Abs(target.Way.sqrMagnitude - 1) < 0.01f;
             case ItemAim.OwnZone:
                 var back = BenchedOf(side);
                 return back != null && Board.InZone(side, Flat3(target.Point), back.Manager.radius) && Clear(target.Point, back.Manager.radius, null);
@@ -223,9 +238,30 @@ public class ItemSystem : MonoBehaviour
     public GamePieceDragAndReleaseForce BenchedOf(int side) => benched.LastOrDefault(p => p != null && p.Manager.playerIndex == side);
 
     // A post fits here: on the board, its foot clear of the edge, every piece and the other posts.
-    public bool PostFits(Vector2 point) =>
-        Board.Playable.Contains(point, PillarRadius + 0.02f) && Clear(point, PillarRadius + 0.01f, null)
-        && State.Objects.All(o => o.Kind != ItemId.Pillar || (o.Position - point).magnitude > PillarRadius * 2 + 0.02f);
+    public bool PostFits(Vector2 point, float radius) =>
+        Board.Playable.Contains(point, radius + 0.02f) && Clear(point, radius + 0.01f, null)
+        && State.Objects.All(o => !IsPost(o.Kind) || (o.Position - point).magnitude > RadiusOf(o.Kind) + radius + 0.02f);
+
+    // Posts stand up from the board (a collider of their own); the rest lie on it.
+    public static bool IsPost(ItemId kind) => kind == ItemId.Pillar || kind == ItemId.Bumper;
+
+    // How far what an item puts on the board reaches.
+    public static float RadiusOf(ItemId kind) => kind switch
+    {
+        ItemId.Pillar => PillarRadius,
+        ItemId.Bumper => BumperRadius,
+        ItemId.Ice => IceRadius,
+        ItemId.Fog => FogRadius,
+        ItemId.Sinkhole => SinkholeRadius,
+        ItemId.Tar => TarRadius,
+        ItemId.Boost => BoostRadius,
+        ItemId.Vortex => VortexRadius,
+        _ => 0f,
+    };
+
+    // A piece is in the item's fog: hidden, on every screen.
+    public bool InFog(GamePieceDragAndReleaseForce piece) =>
+        piece != null && State.Objects.Any(o => o.Kind == ItemId.Fog && (Flat(piece.Body.position) - o.Position).magnitude < FogRadius);
 
     // Nothing within radius of point, outline to outline (but skip).
     private bool Clear(Vector2 point, float radius, GamePieceDragAndReleaseForce skip) =>
@@ -336,7 +372,16 @@ public class ItemSystem : MonoBehaviour
                 break;
             case ItemId.Pillar:
             case ItemId.Ice:
-                State.Objects.Add(new BoardObject { Id = State.NextId++, Kind = id, Position = target.Point, Owner = side, Expires = expires });
+            case ItemId.Fog:
+            case ItemId.Sinkhole:
+            case ItemId.Tar:
+            case ItemId.Boost:
+            case ItemId.Vortex:
+            case ItemId.Bumper:
+                var made = new BoardObject { Id = State.NextId++, Kind = id, Position = target.Point, Owner = side, Expires = expires, Way = target.Way };
+                State.Objects.Add(made);
+                // What's over a hole as it opens stays up, until it's been off it.
+                if (id == ItemId.Sinkhole) overHole[made.Id] = new HashSet<GamePieceDragAndReleaseForce>(game.gamePieceScripts.Where(p => p != null && p.gameObject.activeSelf && Over(p, made)));
                 break;
             case ItemId.Quake:
                 Quake(target.Point.normalized);
@@ -466,6 +511,7 @@ public class ItemSystem : MonoBehaviour
         ghosted.Clear();
         var piece = shotPiece;
         shotPiece = null;
+        boosted.Clear();
         State.ShotItem = ItemState.NoShot;
         if (piece != null)
         {
@@ -502,7 +548,7 @@ public class ItemSystem : MonoBehaviour
             var point = new Vector2(Mathf.Lerp(bounds.xMin, bounds.xMax, (float)random.NextDouble()), Mathf.Lerp(bounds.yMin, bounds.yMax, (float)random.NextDouble()));
             if (!shape.Contains(point, 0.25f) || !Clear(point, BoxRadius + 0.15f, null)) continue;
             if (State.Boxes.Any(b => (b.Position - point).magnitude < 0.4f)) continue;
-            if (State.Objects.Any(o => (o.Position - point).magnitude < (o.Kind == ItemId.Ice ? 0.1f : PillarRadius + BoxRadius + 0.1f))) continue;
+            if (State.Objects.Any(o => (o.Position - point).magnitude < RadiusOf(o.Kind) + BoxRadius + 0.1f)) continue;
             var box = new ItemBox { Id = State.NextId++, Position = point };
             State.Boxes.Add(box);
             Emit(new ItemEvent { Kind = ItemEventKind.BoxAppeared, Side = -1, Position = point });
@@ -571,10 +617,94 @@ public class ItemSystem : MonoBehaviour
     private void FixedUpdate()
     {
         if (!Authority || game == null || Board == null) return;
-        Ice();
-        if (turns.State != GameManager.GameState.ProcessingTurn) return;
+        Patches();
+        if (turns.State != GameManager.GameState.ProcessingTurn && !turns.InMotion) return;
         Boxes();
         Shields();
+        Pads();
+        Vortices();
+        Holes();
+    }
+
+    private static bool Over(GamePieceDragAndReleaseForce piece, BoardObject o) => (Flat(piece.Body.position) - o.Position).magnitude < RadiusOf(o.Kind);
+
+    private IEnumerable<GamePieceDragAndReleaseForce> Moving() =>
+        game.gamePieceScripts.Where(p => p != null && p.gameObject.activeSelf && !p.Body.isKinematic);
+
+    // A piece crossing a pad, moving, is sent its way at BoostSpeed or more:
+    // once a shot for each pad.
+    private void Pads()
+    {
+        foreach (var pad in State.Objects.Where(o => o.Kind == ItemId.Boost))
+        foreach (var piece in Moving())
+        {
+            var flat = new Vector2(piece.Body.linearVelocity.x, piece.Body.linearVelocity.z);
+            if (flat.magnitude < 0.3f || !Over(piece, pad) || !boosted.Add((pad.Id, piece))) continue;
+            var speed = Mathf.Max(BoostSpeed, flat.magnitude);
+            piece.Body.linearVelocity = new Vector3(pad.Way.x * speed, piece.Body.linearVelocity.y, pad.Way.y * speed);
+            piece.Nudge();
+            Emit(new ItemEvent { Kind = ItemEventKind.Boosted, Side = pad.Owner, Item = ItemId.Boost, Piece = piece.Manager.pieceID, Position = Flat(piece.Body.position) });
+        }
+    }
+
+    // A vortex draws a moving piece in it toward its middle, and round:
+    // a piece at rest it leaves be, or a turn would never end.
+    private void Vortices()
+    {
+        foreach (var vortex in State.Objects.Where(o => o.Kind == ItemId.Vortex))
+        foreach (var piece in Moving())
+        {
+            var velocity = piece.Body.linearVelocity;
+            if (new Vector2(velocity.x, velocity.z).magnitude < 0.2f || !Over(piece, vortex)) continue;
+            var inward = vortex.Position - Flat(piece.Body.position);
+            if (inward.sqrMagnitude < 1e-6f) continue;
+            inward.Normalize();
+            var round = new Vector2(-inward.y, inward.x);
+            var pull = (inward + round * 0.5f) * (VortexPull * Time.fixedDeltaTime);
+            piece.Body.AddForce(new Vector3(pull.x, 0, pull.y), ForceMode.VelocityChange);
+        }
+    }
+
+    // A piece slowing to a stop over a hole goes down it (out, as off the
+    // edge), but not one that was over it when it opened, until that's left it.
+    private void Holes()
+    {
+        foreach (var hole in State.Objects.Where(o => o.Kind == ItemId.Sinkhole).ToList())
+        {
+            if (!overHole.TryGetValue(hole.Id, out var spared)) overHole[hole.Id] = spared = new HashSet<GamePieceDragAndReleaseForce>();
+            foreach (var piece in Moving().ToList())
+            {
+                var over = Over(piece, hole);
+                if (!over)
+                {
+                    spared.Remove(piece);
+                    continue;
+                }
+                if (spared.Contains(piece) || piece.Body.linearVelocity.magnitude > SinkSpeed) continue;
+                var at = Flat(piece.Body.position);
+                var id = piece.Manager.pieceID;
+                if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Fall, 0f, piece.Body.position, piece: id);
+                game.PieceOut(piece);
+                Emit(new ItemEvent { Kind = ItemEventKind.Sunk, Side = hole.Owner, Item = ItemId.Sinkhole, Piece = id, Position = at });
+                Changed();
+            }
+        }
+    }
+
+    // A bumper's knock (ItemBumper): the piece thrown back off it, at BumperSpeed or more.
+    public void Bump(GamePieceDragAndReleaseForce piece, Vector3 bumperAt)
+    {
+        if (!Authority || piece == null || piece.Body.isKinematic) return;
+        var away = Flat(piece.Body.position) - Flat(bumperAt);
+        if (away.sqrMagnitude < 1e-6f) return;
+        away.Normalize();
+        var flat = new Vector2(piece.Body.linearVelocity.x, piece.Body.linearVelocity.z);
+        var speed = Mathf.Max(BumperSpeed, flat.magnitude * 1.3f);
+        piece.Body.linearVelocity = new Vector3(away.x * speed, piece.Body.linearVelocity.y, away.y * speed);
+        piece.Nudge();
+        if (CameraRig.Instance != null) CameraRig.Shake(0.3f);
+        Emit(new ItemEvent { Kind = ItemEventKind.Bumped, Item = ItemId.Bumper, Piece = piece.Manager.pieceID, Position = Flat(bumperAt) });
+        Changed();
     }
 
     // A piece reaching a box on a side's shot: the box is that side's item.
@@ -623,22 +753,28 @@ public class ItemSystem : MonoBehaviour
         }
     }
 
-    // On the ice nothing slows: the pieces on it slide as greased ones do.
-    private void Ice()
+    // On the ice nothing slows: the pieces on it slide as greased ones
+    // do. On tar everything slows hard, as an anchored piece does.
+    private void Patches()
     {
-        var patches = State.Objects.Where(o => o.Kind == ItemId.Ice).Select(o => o.Position).ToList();
-        if (patches.Count == 0 && onIce.Count == 0) return;
+        Patch(ItemId.Ice, onIce);
+        Patch(ItemId.Tar, onTar);
+    }
+
+    private void Patch(ItemId kind, HashSet<GamePieceDragAndReleaseForce> on)
+    {
+        var patches = State.Objects.Where(o => o.Kind == kind).ToList();
+        if (patches.Count == 0 && on.Count == 0) return;
         foreach (var piece in game.gamePieceScripts)
         {
             if (piece == null || !piece.gameObject.activeSelf) continue;
-            var at = Flat(piece.Body.position);
-            var on = patches.Any(p => (p - at).magnitude < IceRadius);
-            if (on == onIce.Contains(piece)) continue;
-            if (on) onIce.Add(piece);
-            else onIce.Remove(piece);
+            var now = patches.Any(o => Over(piece, o));
+            if (now == on.Contains(piece)) continue;
+            if (now) on.Add(piece);
+            else on.Remove(piece);
             Refresh(piece);
         }
-        onIce.RemoveWhere(p => p == null || !p.gameObject.activeSelf);
+        on.RemoveWhere(p => p == null || !p.gameObject.activeSelf);
     }
 
     // The shot's first knock (ItemBlast): everything round it thrown
@@ -837,6 +973,7 @@ public class ItemSystem : MonoBehaviour
             }
         }
         onIce.Remove(piece);
+        onTar.Remove(piece);
         piece.gameObject.SetActive(false);
         benched.Add(piece);
         Changed();
@@ -855,6 +992,7 @@ public class ItemSystem : MonoBehaviour
         benched.Remove(piece);
         bases.Remove(piece);
         onIce.Remove(piece);
+        onTar.Remove(piece);
     }
 
     private void Unbench(GamePieceDragAndReleaseForce piece)
@@ -892,6 +1030,7 @@ public class ItemSystem : MonoBehaviour
         float scale = 1, mass = 1;
         var slip = onIce.Contains(piece);
         var extra = b.ExtraSlowing;
+        if (onTar.Contains(piece)) extra += GamePieceDragAndReleaseForce.BoardSlowing * 4f;
         foreach (var effect in State.Effects)
         {
             if (effect.Piece != piece.Manager.pieceID) continue;
@@ -1039,7 +1178,7 @@ public class ItemCurve : MonoBehaviour
 
     private void OnCollisionEnter(Collision collision)
     {
-        if (collision.rigidbody != null || collision.collider.name == BoardVariant.WallName || collision.collider.name == ItemView.PillarName) done = true;
+        if (collision.rigidbody != null || collision.collider.name == BoardVariant.WallName || collision.collider.name == ItemView.PillarName || collision.collider.name == ItemView.BumperName) done = true;
     }
 }
 
@@ -1054,5 +1193,17 @@ public class ItemGlue : MonoBehaviour
         if (items == null || other == null) return;
         items.Stick(GetComponent<GamePieceDragAndReleaseForce>(), other);
         Destroy(this);
+    }
+}
+
+// On a bumper (ItemView): a piece knocking into it is thrown back (on the authority).
+public class ItemBumper : MonoBehaviour
+{
+    public ItemSystem items;
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        var piece = collision.rigidbody != null ? collision.rigidbody.GetComponent<GamePieceDragAndReleaseForce>() : null;
+        if (items != null && piece != null) items.Bump(piece, transform.position);
     }
 }

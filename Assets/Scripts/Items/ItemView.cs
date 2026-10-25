@@ -3,14 +3,16 @@ using System.Linq;
 using UnityEngine;
 
 // How the items look on the board, drawn from ItemSystem.State on every
-// screen alike: the item boxes (gold, turning and bobbing), the posts (a
-// collider of their own, under the board so the AI's copy has them too),
-// the ice, and a ring under each piece an item is on, its colour the
-// item's. What an item does as it happens goes off as the board's other
-// effects do (HitEffects).
+// screen alike: the item boxes (gold, turning and bobbing), the posts and
+// bumpers (a collider of their own, under the board so the AI's copy has
+// them too), the patches - ice, tar, a pad's arrow, a vortex, a hole, a
+// fog that hides the pieces in it - and a ring under each piece an item is
+// on, its colour the item's. What an item does as it happens goes off as
+// the board's other effects do (HitEffects).
 public class ItemView : MonoBehaviour
 {
     public const string PillarName = "Pillar";
+    public const string BumperName = "Bumper";
 
     private ItemSystem items;
     private GameManager game;
@@ -18,7 +20,10 @@ public class ItemView : MonoBehaviour
     private readonly Dictionary<int, GameObject> objects = new Dictionary<int, GameObject>();
     private readonly Dictionary<(char piece, ItemId kind), Transform> rings = new Dictionary<(char, ItemId), Transform>();
     private readonly List<Object> made = new List<Object>();
-    private Material boxMaterial, pillarMaterial, iceMaterial;
+    private Material boxMaterial, pillarMaterial, bumperMaterial;
+    private readonly Dictionary<ItemId, Material> patchMaterials = new Dictionary<ItemId, Material>();
+    private readonly HashSet<Renderer> fogged = new HashSet<Renderer>();
+    private readonly List<(Transform spin, float speed)> spinning = new List<(Transform, float)>();
     private readonly Dictionary<ItemId, Material> ringMaterials = new Dictionary<ItemId, Material>();
     private Mesh ringMesh, discMesh;
 
@@ -42,7 +47,17 @@ public class ItemView : MonoBehaviour
         var lit = game.Board.blackTemplate.GetComponentInChildren<Renderer>().sharedMaterial;
         boxMaterial = Keep(new Material(lit) { color = new Color32(0xE3, 0xB3, 0x41, 0xFF) });
         pillarMaterial = Keep(new Material(lit) { color = new Color32(0x5A, 0x46, 0x32, 0xFF) });
-        iceMaterial = Keep(new Material(Shader.Find("Sprites/Default")) { color = new Color(0.62f, 0.86f, 1f, 0.42f) });
+        bumperMaterial = Keep(new Material(lit) { color = new Color32(0xB3, 0x31, 0x2A, 0xFF) });
+        foreach (var (kind, color) in new[]
+                 {
+                     (ItemId.Ice, new Color(0.62f, 0.86f, 1f, 0.42f)),
+                     (ItemId.Tar, new Color(0.16f, 0.12f, 0.08f, 0.72f)),
+                     (ItemId.Boost, new Color(0.93f, 0.72f, 0.26f, 0.6f)),
+                     (ItemId.Vortex, new Color(0.43f, 0.25f, 0.56f, 0.45f)),
+                     (ItemId.Sinkhole, new Color(0.04f, 0.03f, 0.02f, 0.95f)),
+                     (ItemId.Fog, new Color(0.9f, 0.9f, 0.88f, 0.93f)),
+                 })
+            patchMaterials[kind] = Keep(new Material(Shader.Find("Sprites/Default")) { color = color });
         foreach (var kv in RingColors) ringMaterials[kv.Key] = Keep(new Material(Shader.Find("Sprites/Default")) { color = kv.Value });
         ringMesh = Keep(Annulus(0.72f, 1f));
         discMesh = Keep(Annulus(0f, 1f));
@@ -88,7 +103,7 @@ public class ItemView : MonoBehaviour
             if (objects[id] != null) Destroy(objects[id]);
             objects.Remove(id);
         }
-        foreach (var o in state.Objects.Where(o => !objects.ContainsKey(o.Id))) objects[o.Id] = o.Kind == ItemId.Pillar ? MakePillar(o.Position) : MakeIce(o.Position);
+        foreach (var o in state.Objects.Where(o => !objects.ContainsKey(o.Id))) objects[o.Id] = ItemSystem.IsPost(o.Kind) ? MakePost(o) : MakePatch(o);
 
         var wanted = state.Effects.Where(e => RingColors.ContainsKey(e.Kind)).Select(e => (e.Piece, e.Kind)).ToHashSet();
         foreach (var key in rings.Keys.Where(k => !wanted.Contains(k)).ToList())
@@ -113,28 +128,74 @@ public class ItemView : MonoBehaviour
     }
 
     // Under the board's own object, so the AI's copy of the board has it.
-    private GameObject MakePillar(Vector2 at)
+    // A bumper is a red one, lower, that throws back what knocks into it
+    // (ItemBumper, on the authority).
+    private GameObject MakePost(BoardObject o)
     {
-        var pillar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        Destroy(pillar.GetComponent<Collider>());
-        pillar.name = PillarName;
-        pillar.transform.SetParent(game.Board.Active.transform, true);
-        pillar.transform.localScale = new Vector3(ItemSystem.PillarRadius * 2, ItemSystem.PillarHeight / 2, ItemSystem.PillarRadius * 2);
-        pillar.transform.position = new Vector3(at.x, BoardTop + ItemSystem.PillarHeight / 2, at.y);
-        var solid = pillar.AddComponent<MeshCollider>();
-        solid.sharedMesh = pillar.GetComponent<MeshFilter>().sharedMesh;
+        var bumper = o.Kind == ItemId.Bumper;
+        var radius = ItemSystem.RadiusOf(o.Kind);
+        var height = bumper ? ItemSystem.PillarHeight * 0.4f : ItemSystem.PillarHeight;
+        var post = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        Destroy(post.GetComponent<Collider>());
+        post.name = bumper ? BumperName : PillarName;
+        post.transform.SetParent(game.Board.Active.transform, true);
+        post.transform.localScale = new Vector3(radius * 2, height / 2, radius * 2);
+        post.transform.position = new Vector3(o.Position.x, BoardTop + height / 2, o.Position.y);
+        var solid = post.AddComponent<MeshCollider>();
+        solid.sharedMesh = post.GetComponent<MeshFilter>().sharedMesh;
         solid.convex = true;
         solid.sharedMaterial = game.Board.Active.physics;
-        pillar.GetComponent<Renderer>().sharedMaterial = pillarMaterial;
-        return pillar;
+        post.GetComponent<Renderer>().sharedMaterial = bumper ? bumperMaterial : pillarMaterial;
+        if (bumper)
+        {
+            post.AddComponent<ItemBumper>().items = items;
+            var ring = Flat("Bumper ring", ringMesh, patchMaterials[ItemId.Boost], transform);
+            ring.SetParent(post.transform, false);
+            ring.localPosition = new Vector3(0, -0.98f, 0);
+            ring.localScale = new Vector3(1.6f, 1, 1.6f);
+        }
+        return post;
     }
 
-    private GameObject MakeIce(Vector2 at)
+    // A patch flat on the board, its size the item's reach; a pad's arrow
+    // its way, a vortex turning, the fog a few soft layers over the pieces.
+    private GameObject MakePatch(BoardObject o)
     {
-        var ice = Flat("Ice", discMesh, iceMaterial, transform);
-        ice.position = new Vector3(at.x, BoardTop + 0.0015f, at.y);
-        ice.localScale = Vector3.one * ItemSystem.IceRadius;
-        return ice.gameObject;
+        var radius = ItemSystem.RadiusOf(o.Kind);
+        var patch = Flat(o.Kind.ToString(), o.Kind == ItemId.Vortex ? ringMesh : discMesh, patchMaterials[o.Kind], transform);
+        patch.position = new Vector3(o.Position.x, BoardTop + 0.0015f, o.Position.y);
+        patch.localScale = Vector3.one * radius;
+        switch (o.Kind)
+        {
+            case ItemId.Boost:
+                var arrow = Flat("Arrow", Keep(Arrow()), patchMaterials[ItemId.Boost], patch);
+                arrow.localPosition = new Vector3(0, 0.001f, 0);
+                arrow.localRotation = Quaternion.LookRotation(new Vector3(o.Way.x, 0, o.Way.y));
+                break;
+            case ItemId.Vortex:
+                for (var i = 0; i < 3; i++)
+                {
+                    var swirl = Flat("Swirl", Keep(Arc(0.25f + 0.25f * i, 0.06f, 200f)), patchMaterials[ItemId.Vortex], patch);
+                    swirl.localRotation = Quaternion.Euler(0, i * 120f, 0);
+                }
+                spinning.Add((patch, 80f));
+                break;
+            case ItemId.Sinkhole:
+                var rim = Flat("Rim", ringMesh, pillarMaterial, patch);
+                rim.localScale = new Vector3(1.12f, 1, 1.12f);
+                break;
+            case ItemId.Fog:
+                patch.position += Vector3.up * 0.002f;
+                for (var i = 1; i <= 4; i++)
+                {
+                    var layer = Flat("Fog layer", discMesh, patchMaterials[ItemId.Fog], patch);
+                    layer.localPosition = new Vector3(0.08f * Mathf.Sin(i * 2.1f), i * 0.06f / radius, 0.08f * Mathf.Cos(i * 2.1f));
+                    layer.localScale = Vector3.one * (1f - 0.12f * i);
+                }
+                spinning.Add((patch, 6f));
+                break;
+        }
+        return patch.gameObject;
     }
 
     private static Transform Flat(string name, Mesh mesh, Material material, Transform parent)
@@ -153,6 +214,9 @@ public class ItemView : MonoBehaviour
     {
         if (game == null || game.Board == null) return;
         var t = Time.time;
+        spinning.RemoveAll(s => s.spin == null);
+        foreach (var (spin, speed) in spinning) spin.Rotate(0, -speed * Time.deltaTime, 0, Space.World);
+        HideInFog();
         foreach (var kv in boxes)
         {
             if (kv.Value == null) continue;
@@ -173,6 +237,30 @@ public class ItemView : MonoBehaviour
             kv.Value.position = new Vector3(at.x, BoardTop + 0.003f, at.z);
             kv.Value.localScale = Vector3.one * size;
             if (kv.Key.kind == ItemId.Shield) kv.Value.localScale *= 1f + 0.06f * Mathf.Sin(t * 4f);
+        }
+    }
+
+    // A piece in the fog isn't drawn at all, on any screen (its outline
+    // neither: PieceOutline draws only what's drawn).
+    private void HideInFog()
+    {
+        foreach (var renderer in fogged)
+            if (renderer != null) renderer.forceRenderingOff = false;
+        fogged.Clear();
+        if (!items.State.Objects.Any(o => o.Kind == ItemId.Fog)) return;
+        foreach (var piece in game.gamePieceScripts)
+        {
+            if (piece == null || !piece.gameObject.activeSelf || !items.InFog(piece)) continue;
+            foreach (var renderer in piece.GetComponentsInChildren<Renderer>())
+            {
+                renderer.forceRenderingOff = true;
+                fogged.Add(renderer);
+            }
+        }
+        foreach (var kv in rings)
+        {
+            var piece = items.PieceOf(kv.Key.piece);
+            if (kv.Value != null && piece != null && items.InFog(piece)) kv.Value.gameObject.SetActive(false);
         }
     }
 
@@ -208,7 +296,56 @@ public class ItemView : MonoBehaviour
             case ItemEventKind.Stuck:
                 if (effects != null) effects.PlayTurn(at, 0.14f, 0);
                 break;
+            case ItemEventKind.Sunk:
+                if (effects != null) effects.PlayTurn(at, ItemSystem.SinkholeRadius, 0);
+                break;
+            case ItemEventKind.Boosted:
+                if (effects != null) effects.PlayTurn(at, 0.1f, 0);
+                GameAudio.PlayInterface(GameAudio.Bank.notch, 0.7f, 1.6f);
+                break;
+            case ItemEventKind.Bumped:
+                if (effects != null) effects.Play(at, 0.5f);
+                break;
         }
+    }
+
+    // An arrow along +z on the board's plane, inside the unit circle.
+    private static Mesh Arrow()
+    {
+        var mesh = new Mesh { name = "Item arrow" };
+        mesh.SetVertices(new List<Vector3>
+        {
+            new Vector3(-0.18f, 0, -0.7f), new Vector3(0.18f, 0, -0.7f), new Vector3(0.18f, 0, 0.1f), new Vector3(-0.18f, 0, 0.1f),
+            new Vector3(-0.5f, 0, 0.1f), new Vector3(0.5f, 0, 0.1f), new Vector3(0, 0, 0.75f),
+        });
+        mesh.SetTriangles(new[] { 0, 3, 2, 0, 2, 1, 4, 6, 5 }, 0);
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        return mesh;
+    }
+
+    // A band of a circle of radius r, width wide, degrees long: a vortex's swirl.
+    private static Mesh Arc(float r, float width, float degrees, int segments = 32)
+    {
+        var vertices = new List<Vector3>();
+        var triangles = new List<int>();
+        for (var i = 0; i <= segments; i++)
+        {
+            var a = i * degrees * Mathf.Deg2Rad / segments;
+            var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+            var grow = r + 0.3f * i / segments; // a spiral, out as it goes
+            vertices.Add(d * (grow - width / 2));
+            vertices.Add(d * (grow + width / 2));
+            if (i == segments) continue;
+            var k = i * 2;
+            triangles.AddRange(new[] { k, k + 2, k + 1, k + 1, k + 2, k + 3 });
+        }
+        var mesh = new Mesh { name = "Item swirl" };
+        mesh.SetVertices(vertices);
+        mesh.SetTriangles(triangles, 0);
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        return mesh;
     }
 
     // A flat ring (inner 0: a disc) of radius 1 on the board's plane.
