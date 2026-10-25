@@ -53,6 +53,7 @@ namespace AlkkagiUIEditor
                 BuildPlayerPanel(root, "RedPanel", 3, new Vector2(0, 0), new Vector2(Margin, Margin), SideStyle.StoneRed, Theme.Ink),
             };
             BuildPlacementPanel(root);
+            BuildBeatCard(root, controller);
             BuildKillFeed(root, controller);
             BuildHealthOverlay(root);
             BuildAim(root);
@@ -211,6 +212,7 @@ namespace AlkkagiUIEditor
             tile.nameText.enableAutoSizing = true;
             tile.nameText.fontSizeMin = 15;
             tile.nameText.fontSizeMax = 24;
+            tile.pulse = Pulse(bg.gameObject, 1.3f, 0.35f);
             return tile;
         }
 
@@ -247,6 +249,16 @@ namespace AlkkagiUIEditor
             controls.rightButton = WayButton("ItemRight", "item.right", 0, true);
             controls.cancelButton = WayButton("ItemCancel", "item.cancel", 170, false);
 
+            // By the cursor: what's on the piece or the patch under it (ItemControls sizes and places it).
+            var tip = UIKit.Panel(root, "ItemTooltip", Theme.Hanji, Theme.Ink, 0.6f);
+            tip.rectTransform.Place(new Vector2(0, 0), Vector2.zero, new Vector2(420, 60), new Vector2(0, 1));
+            controls.tooltip = tip.rectTransform;
+            // ASCII placeholder: set at runtime.
+            controls.tooltipText = UIKit.Text(tip.transform, "Text", "Item", 22, false, Theme.Ink, TextAlignmentOptions.TopLeft);
+            controls.tooltipText.rectTransform.Stretch(14);
+            controls.tooltipText.textWrappingMode = TextWrappingModes.Normal;
+            tip.gameObject.SetActive(false);
+
             const float width = 900, height = 420, pad = 56;
             var overlay = UIKit.Image(root, "ItemDiscard", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
@@ -271,6 +283,22 @@ namespace AlkkagiUIEditor
 
         // Top of the left column, clear of the board: whose go it is, what to
         // do, both clocks, and Ready.
+        // Over the board's upper middle, while a new turn takes its breath:
+        // whose turn, and at a new round its number and what each side has left.
+        private static void BuildBeatCard(Transform root, MainGameUIController controller)
+        {
+            var card = UIKit.Panel(root, "BeatCard", Theme.Hanji, Theme.Ink, 0.8f);
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0, 160), new Vector2(560, 170));
+            controller.beatCard = card.gameObject.AddComponent<CanvasGroup>();
+            controller.beatCard.blocksRaycasts = false;
+            // ASCII placeholders: set at runtime.
+            controller.beatTitle = UIKit.Text(card.transform, "Title", "Round", 50, true, Theme.Ink, TextAlignmentOptions.Center);
+            controller.beatTitle.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -22), new Vector2(520, 64));
+            controller.beatBody = UIKit.Text(card.transform, "Body", "Sides", 28, false, Theme.InkSoft, TextAlignmentOptions.Center);
+            controller.beatBody.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -96), new Vector2(520, 50));
+            card.gameObject.SetActive(false);
+        }
+
         private static void BuildPlacementPanel(Transform root)
         {
             var area = UIKit.Node("Placement", root).Stretch();

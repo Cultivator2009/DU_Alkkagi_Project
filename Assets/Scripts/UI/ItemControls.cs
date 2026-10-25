@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
@@ -18,6 +19,8 @@ public class ItemControls : MonoBehaviour
     public Button leftButton;   // Curve's
     public Button rightButton;
     public Button cancelButton;
+    public RectTransform tooltip;   // by the cursor: what's on the piece or patch under it
+    public TMP_Text tooltipText;
     public GameObject discardCard;
     public ItemSlotView[] discardTiles; // the three slots, then the new one
 
@@ -40,6 +43,7 @@ public class ItemControls : MonoBehaviour
     private (int side, int slot)? hovered;
     private int discardSide = -1;
     private int giftFrame = -1;
+    private readonly Dictionary<int, int> held = new Dictionary<int, int>(); // how many items each side had last time
     private Transform marker;        // where a spot would go, green or red
     private LineRenderer way;        // a quake's way, from the middle
     private Material markerMaterial;
@@ -106,6 +110,10 @@ public class ItemControls : MonoBehaviour
             var state = items.ItemsOf(side);
             var panel = hud.playerPanels[side];
             for (var slot = 0; slot < panel.itemSlots.Length; slot++) panel.itemSlots[slot].Show(state.Slots[slot], MayUse(side, state.Slots[slot]));
+            // One more than before: the newest (the last filled) punches.
+            var count = state.Slots.Count(ItemDefs.IsValid);
+            if (held.TryGetValue(side, out var before) && count > before && count <= panel.itemSlots.Length) panel.itemSlots[count - 1].Flash();
+            held[side] = count;
         }
 
         // A fourth item, for a side this screen plays: which goes?
@@ -134,8 +142,66 @@ public class ItemControls : MonoBehaviour
                 return;
             }
             Pick(p);
+            ShowTip(null);
         }
-        else if (hud.isActiveAndEnabled) RenderPrompt();
+        else if (hud.isActiveAndEnabled)
+        {
+            RenderPrompt();
+            ShowTip(TipUnderCursor());
+        }
+    }
+
+    // ---- The tooltip ----
+
+    // What the items have on the piece under the cursor, or else on the
+    // patch or post there, a line each: the item and how long it has left.
+    private string TipUnderCursor()
+    {
+        if (worldCamera == null || !Pointer.OnScreen || AimCursor.Held) return null;
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
+        var lines = new List<string>();
+        var piece = PiecePicker.UnderCursor(worldCamera).FirstOrDefault(p => !items.InFog(p));
+        if (piece != null)
+            foreach (var effect in items.State.Effects.Where(e => e.Piece == piece.Manager.pieceID))
+                lines.Add(TipLine(effect.Kind, effect.Kind == ItemId.Freeze ? Loc.Get("item.tip.freeze") : Left(effect.Expires)));
+        if (lines.Count == 0 && BoardPoint(out var point))
+            foreach (var o in items.State.Objects.Where(o => (o.Position - point).magnitude < Mathf.Max(ItemSystem.RadiusOf(o.Kind), 0.08f)))
+                lines.Add(TipLine(o.Kind, Left(o.Expires)));
+        return lines.Count > 0 ? string.Join("\n", lines) : null;
+    }
+
+    private static string TipLine(ItemId id, string left)
+    {
+        var def = ItemDefs.Of(id);
+        return $"<b>{def.Name}</b> · {left}\n<size=80%>{def.Description}</size>";
+    }
+
+    private static string Left(int expires)
+    {
+        var turns = GameManager.manager.TurnController;
+        if (expires < 0 || turns == null) return string.Empty;
+        var rounds = expires - turns.Round;
+        return rounds <= 0 ? Loc.Get("item.tip.thisRound") : Loc.Get("item.tip.rounds", rounds);
+    }
+
+    private void ShowTip(string text)
+    {
+        if (tooltip == null) return;
+        tooltip.gameObject.SetActive(text != null);
+        if (text == null) return;
+        if (tooltipText.text != text) tooltipText.text = text;
+        var size = new Vector2(tooltip.sizeDelta.x, tooltipText.GetPreferredValues(text, tooltip.sizeDelta.x - 28, 0).y + 28);
+        tooltip.sizeDelta = size;
+        var parent = (RectTransform)tooltip.parent;
+        var canvas = tooltip.GetComponentInParent<Canvas>();
+        var view = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, Input.mousePosition, view, out var local)) return;
+        // Below right of the cursor, kept on the screen.
+        var rect = parent.rect;
+        var at = local - rect.min + new Vector2(24, -24);
+        at.x = Mathf.Min(at.x, rect.width - size.x - 8);
+        at.y = Mathf.Max(at.y, size.y + 8);
+        tooltip.anchoredPosition = at;
     }
 
     // ---- Picking ----

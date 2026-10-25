@@ -30,6 +30,9 @@ public class CameraRig : MonoBehaviour
     // back so the board is framed the same: seen from straight above at the
     // scene's 60 degrees, a king by the edge leaned a whole square out over it.
     public float tallFieldOfView = 35f;
+    // The house's ceiling over the table (Environment_House): the view stays
+    // under it, zoomed all the way out too, a wider lens making up the rest.
+    public float ceiling = 8.6f;
 
     private Transform mainView;  // the main virtual camera
     private float mainFieldOfView;
@@ -91,6 +94,14 @@ public class CameraRig : MonoBehaviour
             main.m_Lens.FieldOfView = tallFieldOfView;
         }
         homeDistance = distance * fit;
+        var highest = (ceiling - boardHeight) / Mathf.Max(0.01f, -mainView.forward.y) / maxZoom;
+        if (homeDistance > highest)
+        {
+            var tan = Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) * homeDistance / highest;
+            mainFieldOfView = 2 * Mathf.Atan(tan) * Mathf.Rad2Deg;
+            main.m_Lens.FieldOfView = mainFieldOfView;
+            homeDistance = highest;
+        }
         mainHome -= mainView.forward * (homeDistance - distance);
         mainView.position = mainHome;
     }

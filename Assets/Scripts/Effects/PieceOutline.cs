@@ -83,7 +83,7 @@ public class PieceOutline : MonoBehaviour
             var piece = marked[mark];
             if (piece == null || !piece.gameObject.activeInHierarchy) continue;
             var body = piece.GetComponent<MeshRenderer>(); // not a janggi piece's letter
-            if (body == null || !body.enabled) continue;
+            if (body == null || !body.enabled || body.forceRenderingOff) continue; // hidden (an item's fog): no line to give it away
             for (var submesh = 0; submesh < body.sharedMaterials.Length; submesh++) buffer.DrawRenderer(body, maskMaterials[mark], submesh, 0);
         }
 

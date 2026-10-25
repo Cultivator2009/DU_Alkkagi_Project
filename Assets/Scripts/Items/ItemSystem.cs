@@ -477,6 +477,8 @@ public class ItemSystem : MonoBehaviour
         picked = null;
         if (State.ShotItem == ItemState.NoShot || piece == null || piece.Manager.playerIndex != turns.CurrentPlayerID) return;
         shotPiece = piece;
+        State.ShotPiece = piece.Manager.pieceID;
+        Changed();
         switch ((ItemId)State.ShotItem)
         {
             case ItemId.Weight:
@@ -513,6 +515,7 @@ public class ItemSystem : MonoBehaviour
         shotPiece = null;
         boosted.Clear();
         State.ShotItem = ItemState.NoShot;
+        State.ShotPiece = '\0';
         if (piece != null)
         {
             foreach (var blast in piece.GetComponents<ItemBlast>()) Destroy(blast);
@@ -1000,6 +1003,7 @@ public class ItemSystem : MonoBehaviour
         benched.Remove(piece);
         piece.Manager.isDestroyed = false;
         piece.gameObject.SetActive(true);
+        Unbreak(piece);
         if (!game.gamePieceScripts.Contains(piece)) game.gamePieceScripts.Add(piece);
         revived.Add(piece.Manager.pieceID);
         Refresh(piece);
@@ -1015,9 +1019,17 @@ public class ItemSystem : MonoBehaviour
             benched.Remove(piece);
             piece.Manager.isDestroyed = false;
             piece.gameObject.SetActive(true);
+            Unbreak(piece);
             if (!game.gamePieceScripts.Contains(piece)) game.gamePieceScripts.Add(piece);
             OnPieceRestored?.Invoke(piece);
         }
+    }
+
+    // A piece that broke going out was hidden (BoardSounds.Break): back, it shows again.
+    private static void Unbreak(GamePieceDragAndReleaseForce piece)
+    {
+        foreach (var renderer in piece.GetComponentsInChildren<Renderer>(true))
+            if (!(renderer is LineRenderer)) renderer.enabled = true; // the aim's line stays off till it's wanted
     }
 
     // ---- What's on a piece ----

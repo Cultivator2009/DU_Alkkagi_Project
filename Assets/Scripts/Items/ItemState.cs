@@ -109,6 +109,7 @@ public sealed class ItemState
     public int BlindTurn = -1; // that turn, once begun
     public int UsedTurn = -1;  // the turn an item not on the shot was last used in: one a turn
     public int UsedShotTurn = -1; // and one on the shot
+    public char ShotPiece;     // the piece this turn's shot item rides on, once flicked ('\0' none)
     public byte ShotItem = NoShot; // what this turn's shot carries (Weight, Ghost, Foresight, Blast, Curve)
     public int CurveSign;     // Curve: 1 left, -1 right
     public bool ExtraTurn;    // DoubleShot: the side to move shoots again after this shot
@@ -133,6 +134,7 @@ public sealed class ItemState
         w.Bool(RewindReady);
         w.Int(NextId);
         w.Int(UsedShotTurn);
+        w.Piece(ShotPiece);
     }
 
     public static ItemState Read(NetReader r) => new ItemState
@@ -150,6 +152,7 @@ public sealed class ItemState
         RewindReady = r.Bool(),
         NextId = r.Int(),
         UsedShotTurn = r.Int(),
+        ShotPiece = r.Piece(),
     };
 
     public ItemState Clone()

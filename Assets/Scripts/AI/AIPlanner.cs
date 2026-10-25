@@ -171,11 +171,18 @@ public class AIPlanner : IDisposable
     // Foresight (ItemId.Foresight): where this shot would send what it
     // moves, stepped on the copy as a candidate is: a line for each piece
     // that moved (the shot's own first), a point every other step.
+    // SureUntil: the point on every line from which it's a guess - once a
+    // third piece is set moving, a knock passed on from one already hit,
+    // where small differences grow.
+    public int SureUntil { get; private set; }
+
     public IEnumerator Trace(GamePieceDragAndReleaseForce piece, Vector3 direction, float power, List<(GamePieceDragAndReleaseForce piece, List<Vector3> path)> paths)
     {
         var shooter = stands.Find(s => s.Source == piece);
         if (shooter == null) yield break;
         var tracks = new Dictionary<Stand, List<Vector3>>();
+        var started = new HashSet<Stand>();
+        SureUntil = int.MaxValue;
         void Record(int step)
         {
             if (step % 2 != 0) return;
@@ -184,7 +191,9 @@ public class AIPlanner : IDisposable
                 if (stand.Source == null || !stand.Body.gameObject.activeSelf) continue;
                 if (!tracks.TryGetValue(stand, out var track)) tracks[stand] = track = new List<Vector3> { stand.Source.Body.position };
                 track.Add(stand.Body.position);
+                if ((stand.Body.position - track[0]).sqrMagnitude > 0.004f * 0.004f) started.Add(stand);
             }
+            if (started.Count >= 3 && SureUntil == int.MaxValue) SureUntil = step / 2;
         }
         var frame = Stopwatch.StartNew();
         var run = Run(piece.Manager.playerIndex, new Candidate { Shooter = shooter, Direction = direction, Power = power }, _ => { }, frame, Record);

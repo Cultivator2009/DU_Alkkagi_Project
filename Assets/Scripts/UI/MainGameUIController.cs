@@ -47,6 +47,12 @@ public class MainGameUIController : MonoBehaviour
     // The item mode's: the items on the panels, picking their targets (ItemControls).
     public ItemControls itemControls;
 
+    // A new turn's breath (TurnController.Ready): whose it is, and at a
+    // new round the round and what each side has left.
+    public CanvasGroup beatCard;
+    public TMP_Text beatTitle;
+    public TMP_Text beatBody;
+
     private TurnController turnController;
     private NetworkMatchBridge networkBridge;
     private int currentPlayerId;
@@ -177,6 +183,33 @@ public class MainGameUIController : MonoBehaviour
             matchSeconds += GamePace.ClockDelta;
             RenderTurn();
         }
+        RenderBeat();
+    }
+
+    // In, held, out over the breath.
+    private void RenderBeat()
+    {
+        if (beatCard == null) return;
+        var left = turnController.ReadyAt - Time.unscaledTime;
+        var on = left > 0 && !winnerPlayerId.HasValue && IsTurnState(GameManager.manager.gameState);
+        beatCard.gameObject.SetActive(on);
+        if (!on) return;
+        var length = turnController.RoundBegun ? TurnController.RoundBeat : TurnController.TurnBeat;
+        var u = 1 - left / length;
+        beatCard.alpha = Mathf.Clamp01(Mathf.Min(u / 0.2f, left / 0.25f));
+    }
+
+    private void FillBeat()
+    {
+        if (beatCard == null) return;
+        beatTitle.text = turnController.RoundBegun ? Loc.Get("hud.beat.round", turnController.Round) : Loc.Get("hud.turn", ColorName(currentPlayerId));
+        beatBody.gameObject.SetActive(turnController.RoundBegun);
+        // A turn's card holds its title alone; a round's, the line under it too.
+        var card = (RectTransform)beatCard.transform;
+        card.sizeDelta = new Vector2(card.sizeDelta.x, turnController.RoundBegun ? 170 : 104);
+        if (!turnController.RoundBegun) return;
+        var sides = GameManager.manager.Sides.Where(s => s.Standing).Select(s => $"{ColorName(s.Id)} {(s.HasHealth ? s.Health : s.Pieces)}");
+        beatBody.text = Loc.Get("hud.beat.next", ColorName(currentPlayerId)) + "   ·   " + string.Join("  ", sides);
     }
 
     public bool IsOnline => networkBridge != null;
@@ -380,7 +413,7 @@ public class MainGameUIController : MonoBehaviour
     // aim's hover ring asks.
     public bool MayPickUp(int playerId)
     {
-        if (turnController == null || winnerPlayerId.HasValue || playerId != currentPlayerId) return false;
+        if (turnController == null || winnerPlayerId.HasValue || playerId != currentPlayerId || !turnController.Ready) return false;
         if (networkBridge != null && !networkBridge.IsHost) return playerId == networkBridge.LocalPlayerId && networkBridge.GuestCanPass;
         if (turnController.State != GameManager.GameState.WaitingForInput) return false;
         return networkBridge != null ? playerId == networkBridge.LocalPlayerId : !GameManager.manager.IsAI(playerId);
@@ -447,6 +480,7 @@ public class MainGameUIController : MonoBehaviour
     {
         currentPlayerId = playerId;
         turnPulse.Play();
+        FillBeat();
         AnnounceTurn();
         Render();
     }
@@ -465,7 +499,8 @@ public class MainGameUIController : MonoBehaviour
         {
             if (piece == null) continue;
             var manager = piece.Manager;
-            if (manager.playerIndex == currentPlayerId) HitEffects.Instance.PlayTurn(piece.transform.position, manager.radius, index++);
+            var hidden = ItemSystem.Instance != null && ItemSystem.Instance.InFog(piece);
+            if (manager.playerIndex == currentPlayerId && !hidden) HitEffects.Instance.PlayTurn(piece.transform.position, manager.radius, index++);
         }
     }
 

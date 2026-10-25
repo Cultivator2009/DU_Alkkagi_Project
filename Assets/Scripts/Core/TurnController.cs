@@ -62,6 +62,18 @@ public class TurnController
     // however still everything is.
     public bool MotionHeld { get; set; }
     public bool InMotion => motion;
+
+    // A breath between turns: once everything has stopped the board is left
+    // a moment as it is (LingerSeconds), and a new turn waits a moment
+    // (TurnBeat; a new round, RoundBeat, its card up) before it may be
+    // played or its clock runs. Real seconds.
+    public const float LingerSeconds = 0.4f;
+    public const float TurnBeat = 0.7f;
+    public const float RoundBeat = 2.2f;
+    public float ReadyAt { get; private set; }  // real time
+    public bool Ready => Time.unscaledTime >= ReadyAt;
+    public bool RoundBegun { get; private set; } // this turn opened a round (not the first)
+    private float settledAt = -1;               // real time everything was first seen still
     public KillLog Kills { get; }
     public IReadOnlyList<Side> Sides => sides;
     // The side whose shot is playing out, or -1 (none, or the edge giving way).
@@ -147,7 +159,7 @@ public class TurnController
 
     public void Tick()
     {
-        if (TurnSeconds > 0 && IsAwaitingShot && !ShotReleased)
+        if (TurnSeconds > 0 && IsAwaitingShot && !ShotReleased && Ready)
         {
             TurnTimeRemaining = Mathf.Max(IsMirror ? 0 : float.MinValue, TurnTimeRemaining - GamePace.ClockDelta);
             var grace = HostPlayerId >= 0 && CurrentPlayerID != HostPlayerId ? RemoteGraceSeconds : 0;
@@ -314,6 +326,7 @@ public class TurnController
         else if (turnEnded && (state.LastTurnEnd == TurnEnd.Collapse || state.LastTurnEnd == TurnEnd.Motion)) Kills.Record(kills);
         else if (turnEnded) OnTurnPassed?.Invoke(state.LastPlayer, state.LastTurnEnd);
 
+        var roundBefore = Round;
         Round = state.Round;
         Zone.QuietRounds = state.QuietRounds;
         Collapsing = state.Collapsing;
@@ -354,8 +367,16 @@ public class TurnController
         if (!newTurn && turnEnded && state.LastTurnEnd == TurnEnd.Motion && !Collapsing) State = GameManager.GameState.WaitingForInput;
         if (!newTurn) return;
         TurnTimeRemaining = TurnSeconds;
+        Breathe(Round != roundBefore);
         State = GameManager.GameState.WaitingForInput;
         OnTurnStarted?.Invoke(CurrentPlayerID);
+    }
+
+    // The new turn's breath (the first turn has none: the match's start is its own).
+    private void Breathe(bool newRound)
+    {
+        RoundBegun = newRound && Turn > 1;
+        ReadyAt = Time.unscaledTime + (Turn <= 1 ? 0 : RoundBegun ? RoundBeat : TurnBeat);
     }
 
     // The host's word on the sides between turns (an item's doing).
@@ -389,6 +410,7 @@ public class TurnController
 
     private void InputReady()
     {
+        if (!Ready) return;
         var picked = pieceSelector.TrySelect(CurrentPlayerID);
         if (picked == null) return;
 
@@ -426,7 +448,14 @@ public class TurnController
         if (Collapsing && Time.time - collapseStartedAt < CollapseMinSeconds) return;
         if (motion && MotionHeld) return;
         foreach (var piece in gamePieceScripts)
-            if (!piece.IsSettled) return;
+        {
+            if (piece.IsSettled) continue;
+            settledAt = -1;
+            return;
+        }
+        if (settledAt < 0) settledAt = Time.unscaledTime;
+        if (Time.unscaledTime - settledAt < LingerSeconds) return;
+        settledAt = -1;
         if (Collapsing) EndCollapse();
         else if (motion) EndMotion();
         else if (!selGamePiece.isCancelled && !selGamePiece.isDragging) EndTurn();
@@ -578,11 +607,13 @@ public class TurnController
     private void BeginTurn(int playerIndex, bool again = false)
     {
         // Round again to the front: a round is over.
+        var round = Round;
         if (!again && Turn > 0 && InRound(playerIndex) <= InRound(CurrentPlayerID) && EndRound()) return;
         selGamePiece = null;
         CurrentPlayerID = sides[playerIndex].Id;
         Turn++;
         TurnTimeRemaining = TurnSeconds;
+        Breathe(Round != round);
         State = GameManager.GameState.WaitingForInput;
         OnTurnStarted?.Invoke(CurrentPlayerID);
     }

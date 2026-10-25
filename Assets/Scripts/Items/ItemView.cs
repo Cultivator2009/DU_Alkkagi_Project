@@ -24,8 +24,15 @@ public class ItemView : MonoBehaviour
     private readonly Dictionary<ItemId, Material> patchMaterials = new Dictionary<ItemId, Material>();
     private readonly HashSet<Renderer> fogged = new HashSet<Renderer>();
     private readonly List<(Transform spin, float speed)> spinning = new List<(Transform, float)>();
+    private Material beamMaterial, glowMaterial, ghostMaterial, arrowMaterial;
+    // A ring going out from where something happened and fading: (ring, its material, when, how long, how far).
+    private readonly List<(Transform ring, Material material, float at, float seconds, float radius)> pulses = new List<(Transform, Material, float, float, float)>();
+    private Transform shotRing;     // under the piece this turn's shot item rides on
+    private GameObject ghost;       // a ghost shot's pale double, the piece itself unseen
+    private char ghostOf;
+    private readonly Dictionary<char, Transform> shells = new Dictionary<char, Transform>(); // a frozen piece's ice
     private readonly Dictionary<ItemId, Material> ringMaterials = new Dictionary<ItemId, Material>();
-    private Mesh ringMesh, discMesh;
+    private Mesh ringMesh, discMesh, pulseMesh;
 
     private static readonly Dictionary<ItemId, Color> RingColors = new Dictionary<ItemId, Color>
     {
@@ -59,7 +66,12 @@ public class ItemView : MonoBehaviour
                  })
             patchMaterials[kind] = Keep(new Material(Shader.Find("Sprites/Default")) { color = color });
         foreach (var kv in RingColors) ringMaterials[kv.Key] = Keep(new Material(Shader.Find("Sprites/Default")) { color = kv.Value });
+        beamMaterial = Keep(new Material(Shader.Find("Sprites/Default")) { color = new Color(1f, 0.85f, 0.4f, 0.28f) });
+        glowMaterial = Keep(new Material(Shader.Find("Sprites/Default")) { color = new Color(1f, 0.82f, 0.35f, 0.75f) });
+        ghostMaterial = Keep(new Material(Shader.Find("Sprites/Default")) { color = new Color(0.92f, 0.95f, 1f, 0.38f) });
+        arrowMaterial = Keep(new Material(Shader.Find("Sprites/Default")) { color = new Color(0.35f, 0.22f, 0.06f, 0.9f) });
         ringMesh = Keep(Annulus(0.72f, 1f));
+        pulseMesh = Keep(Annulus(0.84f, 1f));
         discMesh = Keep(Annulus(0f, 1f));
         items.OnChanged += Sync;
         items.OnEvent += Play;
@@ -83,6 +95,9 @@ public class ItemView : MonoBehaviour
             if (thing != null) Destroy(thing);
         foreach (var o in objects.Values)
             if (o != null) Destroy(o);
+        foreach (var pulse in pulses)
+            if (pulse.material != null) Destroy(pulse.material);
+        RestoreGhosted();
     }
 
     // Everything there is now, nothing that isn't.
@@ -114,17 +129,42 @@ public class ItemView : MonoBehaviour
         foreach (var key in wanted.Where(k => !rings.ContainsKey(k))) rings[key] = Flat("Ring " + key.Item2, ringMesh, ringMaterials[key.Item2], transform);
     }
 
+    // A gold box turning over the board, a soft beam up from it to catch
+    // the eye and a ring round its foot as far as a piece must come.
     private Transform MakeBox(Vector2 at)
     {
+        var root = new GameObject("Item box").transform;
+        root.SetParent(transform, false);
+        root.position = new Vector3(at.x, BoardTop, at.y);
         var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
         Destroy(box.GetComponent<Collider>());
-        box.name = "Item box";
-        box.transform.SetParent(transform, false);
-        box.transform.localScale = Vector3.one * ItemSystem.BoxRadius * 1.3f;
-        box.transform.position = new Vector3(at.x, BoardTop + 0.08f, at.y);
+        box.transform.SetParent(root, false);
+        box.transform.localScale = Vector3.one * ItemSystem.BoxRadius * 1.9f;
         box.GetComponent<Renderer>().sharedMaterial = boxMaterial;
-        if (HitEffects.Instance != null) HitEffects.Instance.PlayTurn(new Vector3(at.x, 0, at.y), 0.12f, 0);
-        return box.transform;
+        var beam = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        Destroy(beam.GetComponent<Collider>());
+        beam.name = "Beam";
+        beam.transform.SetParent(root, false);
+        beam.transform.localScale = new Vector3(ItemSystem.BoxRadius * 1.4f, 0.35f, ItemSystem.BoxRadius * 1.4f);
+        beam.transform.localPosition = new Vector3(0, 0.35f, 0);
+        var beamRenderer = beam.GetComponent<Renderer>();
+        beamRenderer.sharedMaterial = beamMaterial;
+        beamRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        var foot = Flat("Foot", ringMesh, glowMaterial, root);
+        foot.localPosition = new Vector3(0, 0.002f, 0);
+        foot.localScale = Vector3.one * (ItemSystem.BoxRadius + 0.05f);
+        Pulse(at, new Color(1f, 0.82f, 0.35f, 0.9f), 0.35f, 0.6f);
+        return root;
+    }
+
+    // A ring going out from at to radius over seconds, fading as it goes.
+    private void Pulse(Vector2 at, Color color, float radius, float seconds)
+    {
+        var material = new Material(Shader.Find("Sprites/Default")) { color = color };
+        var ring = Flat("Pulse", pulseMesh, material, transform);
+        ring.position = new Vector3(at.x, BoardTop + 0.004f, at.y);
+        ring.localScale = Vector3.one * 0.01f;
+        pulses.Add((ring, material, Time.time, seconds, radius));
     }
 
     // Under the board's own object, so the AI's copy of the board has it.
@@ -168,7 +208,7 @@ public class ItemView : MonoBehaviour
         switch (o.Kind)
         {
             case ItemId.Boost:
-                var arrow = Flat("Arrow", Keep(Arrow()), patchMaterials[ItemId.Boost], patch);
+                var arrow = Flat("Arrow", Keep(Arrow()), arrowMaterial, patch);
                 arrow.localPosition = new Vector3(0, 0.001f, 0);
                 arrow.localRotation = Quaternion.LookRotation(new Vector3(o.Way.x, 0, o.Way.y));
                 break;
@@ -220,10 +260,28 @@ public class ItemView : MonoBehaviour
         foreach (var kv in boxes)
         {
             if (kv.Value == null) continue;
-            kv.Value.rotation = Quaternion.Euler(25f, t * 90f, 25f);
-            var p = kv.Value.position;
-            kv.Value.position = new Vector3(p.x, BoardTop + 0.08f + Mathf.Sin(t * 3f + kv.Key) * 0.02f, p.z);
+            var box = kv.Value.GetChild(0);
+            box.rotation = Quaternion.Euler(25f, t * 90f, 25f);
+            box.localPosition = new Vector3(0, 0.1f + Mathf.Sin(t * 3f + kv.Key) * 0.025f, 0);
+            kv.Value.GetChild(2).localScale = Vector3.one * (ItemSystem.BoxRadius + 0.05f) * (1f + 0.12f * Mathf.Sin(t * 4f));
         }
+        for (var i = pulses.Count - 1; i >= 0; i--)
+        {
+            var (ring, material, at, seconds, radius) = pulses[i];
+            var u = (t - at) / seconds;
+            if (u >= 1 || ring == null)
+            {
+                if (ring != null) Destroy(ring.gameObject);
+                Destroy(material);
+                pulses.RemoveAt(i);
+                continue;
+            }
+            ring.localScale = Vector3.one * Mathf.Max(0.01f, radius * (1 - (1 - u) * (1 - u)));
+            var c = material.color;
+            material.color = new Color(c.r, c.g, c.b, Mathf.Clamp01(1.4f * (1 - u)) * 0.9f);
+        }
+        ShotPiece(t);
+        Shells();
         foreach (var kv in rings)
         {
             if (kv.Value == null) continue;
@@ -240,6 +298,116 @@ public class ItemView : MonoBehaviour
         }
     }
 
+    // The piece this turn's shot item rides on - flicked, or being aimed
+    // here - has a ring in the shot's colour, beating; a ghost shot's is a
+    // pale see-through double of it instead.
+    private void ShotPiece(float t)
+    {
+        var state = items.State;
+        GamePieceDragAndReleaseForce piece = null;
+        if (state.ShotItem != ItemState.NoShot)
+        {
+            piece = items.PieceOf(state.ShotPiece);
+            var turns = game.TurnController;
+            if (piece == null && turns != null)
+                piece = game.gamePieceScripts.FirstOrDefault(p => p != null && p.isDragging && p.Manager.playerIndex == turns.CurrentPlayerID);
+        }
+        var ghostly = piece != null && state.Shot(ItemId.Ghost);
+        if (!ghostly || piece.Manager.pieceID != ghostOf) RestoreGhosted();
+        if (ghostly && ghost == null) MakeGhost(piece);
+        if (ghost != null)
+        {
+            ghost.transform.SetPositionAndRotation(piece.transform.position, piece.transform.rotation);
+            ghost.transform.localScale = piece.transform.lossyScale;
+            foreach (var renderer in piece.GetComponentsInChildren<MeshRenderer>()) renderer.forceRenderingOff = true;
+        }
+
+        if (piece == null || ghostly)
+        {
+            if (shotRing != null) shotRing.gameObject.SetActive(false);
+            return;
+        }
+        if (shotRing == null)
+        {
+            var material = Keep(new Material(Shader.Find("Sprites/Default")));
+            shotRing = Flat("Shot ring", ringMesh, material, transform);
+        }
+        shotRing.gameObject.SetActive(true);
+        var color = ItemDefs.ColorOf(ItemCategory.Shot);
+        shotRing.GetComponent<Renderer>().sharedMaterial.color = new Color(color.r, color.g, color.b, 0.55f + 0.35f * Mathf.Sin(t * 8f));
+        var at = piece.Body.position;
+        shotRing.position = new Vector3(at.x, BoardTop + 0.0035f, at.z);
+        shotRing.localScale = Vector3.one * piece.Manager.radius * (1.45f + 0.08f * Mathf.Sin(t * 8f));
+    }
+
+    private void MakeGhost(GamePieceDragAndReleaseForce piece)
+    {
+        ghostOf = piece.Manager.pieceID;
+        ghost = new GameObject("Ghost");
+        ghost.transform.SetParent(transform, true);
+        var scale = piece.transform.lossyScale;
+        foreach (var renderer in piece.GetComponentsInChildren<MeshRenderer>())
+        {
+            var filter = renderer.GetComponent<MeshFilter>();
+            if (filter == null || filter.sharedMesh == null) continue;
+            // Placed in the piece's own space, so the double follows it as the piece moves and grows.
+            var part = new GameObject("Part");
+            part.transform.SetParent(ghost.transform, false);
+            part.transform.localPosition = piece.transform.InverseTransformPoint(renderer.transform.position);
+            part.transform.localRotation = Quaternion.Inverse(piece.transform.rotation) * renderer.transform.rotation;
+            var own = renderer.transform.lossyScale;
+            part.transform.localScale = new Vector3(own.x / scale.x, own.y / scale.y, own.z / scale.z);
+            part.AddComponent<MeshFilter>().sharedMesh = filter.sharedMesh;
+            var drawn = part.AddComponent<MeshRenderer>();
+            drawn.sharedMaterial = ghostMaterial;
+            drawn.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+    }
+
+    private void RestoreGhosted()
+    {
+        if (ghost == null) return;
+        Destroy(ghost);
+        ghost = null;
+        var piece = game != null ? game.gamePieceScripts.Find(p => p != null && p.Manager.pieceID == ghostOf) : null;
+        ghostOf = '\0';
+        if (piece == null) return;
+        foreach (var renderer in piece.GetComponentsInChildren<MeshRenderer>()) renderer.forceRenderingOff = false;
+    }
+
+    // A frozen piece stands in a shell of ice till it may move again.
+    private void Shells()
+    {
+        var frozen = items.State.Effects.Where(e => e.Kind == ItemId.Freeze).Select(e => e.Piece).ToHashSet();
+        foreach (var id in shells.Keys.Where(id => !frozen.Contains(id)).ToList())
+        {
+            if (shells[id] != null) Destroy(shells[id].gameObject);
+            shells.Remove(id);
+        }
+        foreach (var id in frozen)
+        {
+            var piece = items.PieceOf(id);
+            if (!shells.TryGetValue(id, out var shell) || shell == null)
+            {
+                if (piece == null) continue;
+                var made = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                Destroy(made.GetComponent<Collider>());
+                made.name = "Ice shell";
+                made.transform.SetParent(transform, false);
+                var renderer = made.GetComponent<Renderer>();
+                renderer.sharedMaterial = ringMaterials[ItemId.Freeze];
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                shells[id] = shell = made.transform;
+            }
+            shell.gameObject.SetActive(piece != null && !items.InFog(piece));
+            if (piece == null) continue;
+            var bounds = piece.GetComponentInChildren<Renderer>().bounds;
+            var radius = piece.Manager.radius * 1.25f;
+            shell.position = new Vector3(piece.Body.position.x, BoardTop + bounds.size.y * 0.6f, piece.Body.position.z);
+            shell.localScale = new Vector3(radius * 2, bounds.size.y * 0.6f + 0.01f, radius * 2);
+        }
+    }
+
     // A piece in the fog isn't drawn at all, on any screen (its outline
     // neither: PieceOutline draws only what's drawn).
     private void HideInFog()
@@ -247,6 +415,7 @@ public class ItemView : MonoBehaviour
         foreach (var renderer in fogged)
             if (renderer != null) renderer.forceRenderingOff = false;
         fogged.Clear();
+        if (ghost != null) ghost.SetActive(true);
         if (!items.State.Objects.Any(o => o.Kind == ItemId.Fog)) return;
         foreach (var piece in game.gamePieceScripts)
         {
@@ -256,6 +425,8 @@ public class ItemView : MonoBehaviour
                 renderer.forceRenderingOff = true;
                 fogged.Add(renderer);
             }
+            if (ghost != null && piece.Manager.pieceID == ghostOf) ghost.SetActive(false);
+            if (shotRing != null && piece.Manager.pieceID == items.State.ShotPiece) shotRing.gameObject.SetActive(false);
         }
         foreach (var kv in rings)
         {
@@ -264,47 +435,67 @@ public class ItemView : MonoBehaviour
         }
     }
 
-    // What happened, where it happened.
+    // What happened, where it happened: the board's own effects, and a
+    // ring going out in the item's colour.
     private void Play(ItemEvent e)
     {
         var effects = HitEffects.Instance;
         var at = new Vector3(e.Position.x, 0, e.Position.y);
+        var placed = e.Position != Vector2.zero;
+        var gold = new Color(1f, 0.82f, 0.35f, 0.9f);
+        var colour = ItemDefs.IsValid((byte)e.Item) ? ItemDefs.ColorOf(ItemDefs.Of(e.Item).Category) : gold;
         switch (e.Kind)
         {
             case ItemEventKind.Used:
-                if (effects != null && e.Position != Vector2.zero) effects.PlayTurn(at, 0.2f, 0);
+                if (placed)
+                {
+                    if (effects != null) effects.PlayTurn(at, 0.2f, 0);
+                    Pulse(e.Position, colour, 0.4f, 0.55f);
+                }
                 GameAudio.PlayInterface(GameAudio.Bank.stamp, 0.6f, 1.15f);
                 break;
             case ItemEventKind.Gained:
             case ItemEventKind.CatchUp:
             case ItemEventKind.RoundGift:
-                if (effects != null && e.Position != Vector2.zero) effects.PlayTurn(at, 0.15f, 0);
+                if (placed)
+                {
+                    if (effects != null) effects.PlayTurn(at, 0.15f, 0);
+                    Pulse(e.Position, gold, 0.35f, 0.5f);
+                    Pulse(e.Position, gold, 0.6f, 0.8f);
+                }
                 GameAudio.PlayInterface(GameAudio.Bank.open, 0.8f, 1.2f);
                 break;
             case ItemEventKind.BoxAppeared:
                 GameAudio.PlayInterface(GameAudio.Bank.notch, 0.6f, 1.4f);
                 break;
             case ItemEventKind.Blast:
+                Pulse(e.Position, new Color(1f, 0.55f, 0.2f, 0.95f), ItemSystem.BlastRadius * 1.05f, 0.45f);
+                Pulse(e.Position, new Color(1f, 0.85f, 0.5f, 0.9f), ItemSystem.BlastRadius * 0.6f, 0.3f);
                 if (effects == null) break;
                 effects.Play(at, 1f);
                 for (var i = 0; i < 3; i++) effects.PlayTurn(at, ItemSystem.BlastRadius * (0.35f + 0.3f * i), i * 2);
                 break;
             case ItemEventKind.Shielded:
                 if (effects != null) effects.PlayTurn(at, 0.18f, 0);
+                Pulse(e.Position, gold, 0.3f, 0.45f);
                 GameAudio.PlayInterface(GameAudio.Bank.notch, 0.8f, 0.8f);
                 break;
             case ItemEventKind.Stuck:
                 if (effects != null) effects.PlayTurn(at, 0.14f, 0);
+                Pulse(e.Position, ItemDefs.ColorOf(ItemCategory.Piece), 0.2f, 0.4f);
                 break;
             case ItemEventKind.Sunk:
                 if (effects != null) effects.PlayTurn(at, ItemSystem.SinkholeRadius, 0);
+                Pulse(e.Position, new Color(0.1f, 0.07f, 0.05f, 0.9f), 0.3f, 0.5f);
                 break;
             case ItemEventKind.Boosted:
                 if (effects != null) effects.PlayTurn(at, 0.1f, 0);
+                Pulse(e.Position, gold, 0.18f, 0.3f);
                 GameAudio.PlayInterface(GameAudio.Bank.notch, 0.7f, 1.6f);
                 break;
             case ItemEventKind.Bumped:
                 if (effects != null) effects.Play(at, 0.5f);
+                Pulse(e.Position, ItemDefs.ColorOf(ItemCategory.Shot), 0.25f, 0.35f);
                 break;
         }
     }

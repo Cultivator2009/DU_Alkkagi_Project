@@ -5,8 +5,9 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 // One item on the HUD (built by Tools > Alkkagi UI > 2. Build HUD): a tile
-// in its kind's colour with the item's name, empty when there's none.
-// Pressable while this screen's side may use it; hovered, it says what it does.
+// in its kind's colour with the item's name, empty when there's none, with
+// a punch as a new one arrives. Pressable while this screen's side may use
+// it; hovered, it says what it does.
 public class ItemSlotView : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     public Button button;
@@ -14,6 +15,7 @@ public class ItemSlotView : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
     public TMP_Text nameText;
     public CanvasGroup group;
     public GameObject readyMark; // a line round it while it may be used
+    public UIPulse pulse;        // played as a new item comes into it
     public Color emptyColor = new Color(0.93f, 0.89f, 0.81f, 1f);
 
     public event Action<bool> OnHover;
@@ -30,6 +32,12 @@ public class ItemSlotView : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
         button.interactable = has && usable;
         group.alpha = has ? (usable ? 1f : 0.8f) : 0.55f;
         if (readyMark != null) readyMark.SetActive(has && usable);
+    }
+
+    // A new item has come into it.
+    public void Flash()
+    {
+        if (pulse != null && isActiveAndEnabled) pulse.Play();
     }
 
     public void OnPointerEnter(PointerEventData eventData) => OnHover?.Invoke(true);

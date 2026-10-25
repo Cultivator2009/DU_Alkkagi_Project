@@ -47,7 +47,7 @@ public class AIOpponent : MonoBehaviour
             return;
         }
         var turns = gameManager.TurnController;
-        if (turns != null && turns.State == GameManager.GameState.WaitingForInput && turns.CurrentPlayerID == playerId)
+        if (turns != null && turns.State == GameManager.GameState.WaitingForInput && turns.CurrentPlayerID == playerId && turns.Ready)
             StartCoroutine(TakeTurn(gameManager, turns));
     }
 

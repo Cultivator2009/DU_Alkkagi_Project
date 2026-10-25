@@ -692,7 +692,7 @@ public class NetworkMatchBridge : MonoBehaviour
         if (gameManager.gameState != GameManager.GameState.WaitingForInput) return;
         // One flick per turn: after sending it, wait for the host's verdict
         // (the TurnResult that ends the turn) before accepting another.
-        if (awaitingTurnResult) return;
+        if (awaitingTurnResult || !Controller.Ready) return;
         var picked = guestSelector.TrySelect(Controller.CurrentPlayerID);
         if (picked != null) picked.isDragging = true;
     }

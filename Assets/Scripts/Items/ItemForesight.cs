@@ -7,7 +7,8 @@ using UnityEngine;
 // it: while the pull is held, a line on the board for every piece the shot
 // would move - the shot's own pale, what it sends gold - from a copy of the
 // board stepped as the AI tries its shots (AIPlanner.Trace), again whenever
-// the aim moves.
+// the aim moves. Past where it's only a guess (AIPlanner.SureUntil) the
+// lines fade.
 public class ItemForesight : MonoBehaviour
 {
     private ItemSystem items;
@@ -17,6 +18,7 @@ public class ItemForesight : MonoBehaviour
     private Vector3 tracedDirection;
     private float tracedPower = -1;
     private bool tracing;
+    private int sureUntil = int.MaxValue;
     private List<(GamePieceDragAndReleaseForce piece, List<Vector3> path)> paths = new List<(GamePieceDragAndReleaseForce, List<Vector3>)>();
     private readonly List<LineRenderer> lines = new List<LineRenderer>();
     private Material material;
@@ -65,6 +67,7 @@ public class ItemForesight : MonoBehaviour
         var result = new List<(GamePieceDragAndReleaseForce, List<Vector3>)>();
         yield return planner.Trace(piece, direction, power, result);
         paths = result;
+        sureUntil = planner.SureUntil;
         tracing = false;
     }
 
@@ -79,7 +82,15 @@ public class ItemForesight : MonoBehaviour
             line.gameObject.SetActive(true);
             line.positionCount = path.Count;
             for (var j = 0; j < path.Count; j++) line.SetPosition(j, new Vector3(path[j].x, Mathf.Max(path[j].y, top), path[j].z));
-            line.startColor = line.endColor = i == 0 ? ShotColor : SentColor;
+            var color = i == 0 ? ShotColor : SentColor;
+            // Firm to the guess, then fading out over its next stretch.
+            var sure = path.Count > 1 ? Mathf.Clamp01((float)sureUntil / (path.Count - 1)) : 1f;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[] { new GradientColorKey(color, 0), new GradientColorKey(color, 1) },
+                sure >= 1 ? new[] { new GradientAlphaKey(color.a, 0), new GradientAlphaKey(color.a, 1) }
+                    : new[] { new GradientAlphaKey(color.a, 0), new GradientAlphaKey(color.a, sure), new GradientAlphaKey(color.a * 0.25f, Mathf.Min(1, sure + 0.15f)), new GradientAlphaKey(0.05f, 1) });
+            line.colorGradient = gradient;
         }
         for (var i = paths.Count; i < lines.Count; i++) lines[i].gameObject.SetActive(false);
     }
