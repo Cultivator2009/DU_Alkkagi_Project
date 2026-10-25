@@ -60,7 +60,7 @@ public class RecordsPanel : MonoBehaviour
             Loc.Get("records.count", r.knockedOff),
             Loc.Get("records.count", r.bestShot),
             Loc.Get("records.streakValue", r.bestStreak, r.streak),
-            Loc.Get("records.hours", minutes / 60, minutes % 60),
+            minutes < 60 ? Loc.Get("records.minutes", minutes) : Loc.Get("records.hours", minutes / 60, minutes % 60),
         };
         for (var i = 0; i < statValues.Length; i++) statValues[i].text = values[i];
         for (var i = 0; i < tiles.Length; i++) tiles[i].Show(Achievements.All[i], r);

@@ -24,7 +24,7 @@ public class ItemView : MonoBehaviour
     private readonly Dictionary<ItemId, Material> patchMaterials = new Dictionary<ItemId, Material>();
     private readonly HashSet<Renderer> fogged = new HashSet<Renderer>();
     private readonly List<(Transform spin, float speed)> spinning = new List<(Transform, float)>();
-    private Material beamMaterial, glowMaterial, ghostMaterial, arrowMaterial;
+    private Material glowMaterial, ghostMaterial, arrowMaterial;
     // A ring going out from where something happened and fading: (ring, its material, when, how long, how far).
     private readonly List<(Transform ring, Material material, float at, float seconds, float radius)> pulses = new List<(Transform, Material, float, float, float)>();
     private Transform shotRing;     // under the piece this turn's shot item rides on
@@ -66,7 +66,6 @@ public class ItemView : MonoBehaviour
                  })
             patchMaterials[kind] = Keep(new Material(Shader.Find("Sprites/Default")) { color = color });
         foreach (var kv in RingColors) ringMaterials[kv.Key] = Keep(new Material(Shader.Find("Sprites/Default")) { color = kv.Value });
-        beamMaterial = Keep(new Material(Shader.Find("Sprites/Default")) { color = new Color(1f, 0.85f, 0.4f, 0.28f) });
         glowMaterial = Keep(new Material(Shader.Find("Sprites/Default")) { color = new Color(1f, 0.82f, 0.35f, 0.75f) });
         ghostMaterial = Keep(new Material(Shader.Find("Sprites/Default")) { color = new Color(0.92f, 0.95f, 1f, 0.38f) });
         arrowMaterial = Keep(new Material(Shader.Find("Sprites/Default")) { color = new Color(0.35f, 0.22f, 0.06f, 0.9f) });
@@ -129,32 +128,39 @@ public class ItemView : MonoBehaviour
         foreach (var key in wanted.Where(k => !rings.ContainsKey(k))) rings[key] = Flat("Ring " + key.Item2, ringMesh, ringMaterials[key.Item2], transform);
     }
 
-    // A gold box turning over the board, a soft beam up from it to catch
-    // the eye and a ring round its foot as far as a piece must come.
+    // A gold box tied with a red ribbon, turning and bobbing over the board
+    // (seen from above as much as from the side), and a gold ring beating
+    // round its foot as far as a piece must come.
     private Transform MakeBox(Vector2 at)
     {
         var root = new GameObject("Item box").transform;
         root.SetParent(transform, false);
         root.position = new Vector3(at.x, BoardTop, at.y);
-        var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        Destroy(box.GetComponent<Collider>());
-        box.transform.SetParent(root, false);
-        box.transform.localScale = Vector3.one * ItemSystem.BoxRadius * 1.9f;
-        box.GetComponent<Renderer>().sharedMaterial = boxMaterial;
-        var beam = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-        Destroy(beam.GetComponent<Collider>());
-        beam.name = "Beam";
-        beam.transform.SetParent(root, false);
-        beam.transform.localScale = new Vector3(ItemSystem.BoxRadius * 1.4f, 0.35f, ItemSystem.BoxRadius * 1.4f);
-        beam.transform.localPosition = new Vector3(0, 0.35f, 0);
-        var beamRenderer = beam.GetComponent<Renderer>();
-        beamRenderer.sharedMaterial = beamMaterial;
-        beamRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        var box = new GameObject("Box").transform;
+        box.SetParent(root, false);
+        var size = ItemSystem.BoxRadius * 1.8f;
+        Part(box, Vector3.zero, Vector3.one * size, boxMaterial);
+        Part(box, Vector3.zero, new Vector3(size * 1.04f, size * 1.04f, size * 0.26f), bumperMaterial);
+        Part(box, Vector3.zero, new Vector3(size * 0.26f, size * 1.04f, size * 1.04f), bumperMaterial);
+        // The bow on top: two loops leaning apart.
+        Part(box, new Vector3(-size * 0.16f, size * 0.62f, 0), new Vector3(size * 0.3f, size * 0.22f, size * 0.18f), bumperMaterial, Quaternion.Euler(0, 0, 30));
+        Part(box, new Vector3(size * 0.16f, size * 0.62f, 0), new Vector3(size * 0.3f, size * 0.22f, size * 0.18f), bumperMaterial, Quaternion.Euler(0, 0, -30));
         var foot = Flat("Foot", ringMesh, glowMaterial, root);
         foot.localPosition = new Vector3(0, 0.002f, 0);
         foot.localScale = Vector3.one * (ItemSystem.BoxRadius + 0.05f);
         Pulse(at, new Color(1f, 0.82f, 0.35f, 0.9f), 0.35f, 0.6f);
         return root;
+    }
+
+    private static void Part(Transform parent, Vector3 at, Vector3 size, Material material, Quaternion? turn = null)
+    {
+        var part = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        Destroy(part.GetComponent<Collider>());
+        part.transform.SetParent(parent, false);
+        part.transform.localPosition = at;
+        part.transform.localRotation = turn ?? Quaternion.identity;
+        part.transform.localScale = size;
+        part.GetComponent<Renderer>().sharedMaterial = material;
     }
 
     // A ring going out from at to radius over seconds, fading as it goes.
@@ -261,9 +267,9 @@ public class ItemView : MonoBehaviour
         {
             if (kv.Value == null) continue;
             var box = kv.Value.GetChild(0);
-            box.rotation = Quaternion.Euler(25f, t * 90f, 25f);
-            box.localPosition = new Vector3(0, 0.1f + Mathf.Sin(t * 3f + kv.Key) * 0.025f, 0);
-            kv.Value.GetChild(2).localScale = Vector3.one * (ItemSystem.BoxRadius + 0.05f) * (1f + 0.12f * Mathf.Sin(t * 4f));
+            box.rotation = Quaternion.Euler(18f, t * 70f, 12f);
+            box.localPosition = new Vector3(0, 0.12f + Mathf.Sin(t * 3f + kv.Key) * 0.025f, 0);
+            kv.Value.GetChild(1).localScale = Vector3.one * (ItemSystem.BoxRadius + 0.05f) * (1f + 0.12f * Mathf.Sin(t * 4f));
         }
         for (var i = pulses.Count - 1; i >= 0; i--)
         {
