@@ -146,7 +146,10 @@ public class ItemControls : MonoBehaviour
         }
         else if (hud.isActiveAndEnabled)
         {
-            RenderPrompt();
+            // Every frame, not only as the items change: whether a tile may
+            // be pressed turns on the turn too (whose it is, its breath over,
+            // a piece picked up), which tells nothing here.
+            Render();
             ShowTip(TipUnderCursor());
         }
     }
