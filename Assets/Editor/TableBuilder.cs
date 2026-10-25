@@ -12,7 +12,7 @@ public static class TableBuilder
     private const string ScenePath = "Assets/Scenes/GameScene.unity";
     private const string Dir = "Assets/Materials/Table";
     public const string Name = "Table";
-    public const float Top = -0.49f;             // at the boards' feet (a go board's legs end at -0.5), clear of the house's own table
+    public const float Top = -0.495f;            // just over the house's table cloth (-0.5), where a broken piece's shards come to rest (PieceShatter.TableTop)
     public static readonly Vector2 Size = new Vector2(26f, 17f);
 
     [MenuItem("Tools/Alkkagi/Build table")]
