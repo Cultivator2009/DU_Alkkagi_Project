@@ -141,7 +141,11 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             }
             else if (Time.frameCount > AimCursor.HeldFrame + 1)
                 pullScreen += (Vector2)Input.mousePositionDelta * (KeyBindings.Held(GameAction.FineAim) ? fineAimFactor : 1f);
-            pullScreen = new Vector2(Mathf.Clamp(pullScreen.x, 0, Screen.width - 1), Mathf.Clamp(pullScreen.y, 0, Screen.height - 1));
+            // Past the screen's edge too (a piece by the edge still pulls in
+            // full), but no further from the piece than a full pull, so
+            // coming back answers at once.
+            var held = (Vector2)mainCam.WorldToScreenPoint(startPos);
+            pullScreen = held + Vector2.ClampMagnitude(pullScreen - held, fullPullScreen * Screen.height);
             ray = mainCam.ScreenPointToRay(pullScreen);
             // https://docs.unity3d.com/ScriptReference/Physics.Raycast.html
             if (plane.Raycast(ray, out float dist)) endPos = ray.GetPoint(dist);

@@ -26,6 +26,7 @@ public static class RulesSummary
         {
             yield return Loc.Get("rules.items");
             if (rules.ItemBoxRounds > 0) yield return Loc.Get("rules.itemBoxes", MatchSettings.Defs[(int)MatchSettingId.ItemBoxes].Format(rules.ItemBoxRounds));
+            if (rules.ItemGiftRounds > 0) yield return Loc.Get("rules.itemGift", MatchSettings.Defs[(int)MatchSettingId.ItemGift].Format(rules.ItemGiftRounds));
             if (rules.ItemCatchUp) yield return Loc.Get("rules.itemCatchUp");
         }
         var board = MatchSettings.Defs[(int)MatchSettingId.BoardType].Format((int)rules.BoardType);

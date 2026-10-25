@@ -9,7 +9,7 @@ using UnityEngine.UI;
 // side when it may use one (ItemSystem.MayUse); then, for an item with a
 // target, the player picks it on the board - a piece, a spot, a way - told
 // what to pick on the prompt under the turn pill, a right click or Cancel
-// backing out. A side with a third item lets one go on a card. The prompt
+// backing out. A side with a fourth item lets one go on a card. The prompt
 // also tells what a hovered item does and what this turn's shot carries.
 public class ItemControls : MonoBehaviour
 {
@@ -19,7 +19,7 @@ public class ItemControls : MonoBehaviour
     public Button rightButton;
     public Button cancelButton;
     public GameObject discardCard;
-    public ItemSlotView[] discardTiles; // the two slots, then the new one
+    public ItemSlotView[] discardTiles; // the three slots, then the new one
 
     private MainGameUIController hud;
     private ItemSystem items;
@@ -38,6 +38,7 @@ public class ItemControls : MonoBehaviour
     private Picking? picking;
     private (int side, int slot)? hovered;
     private int discardSide = -1;
+    private int giftFrame = -1;
     private Transform marker;        // where a spot would go, green or red
     private LineRenderer way;        // a quake's way, from the middle
     private Material markerMaterial;
@@ -93,7 +94,7 @@ public class ItemControls : MonoBehaviour
 
     // Usable on this screen, now: its side to move, and the item has something to do.
     private bool MayUse(int side, byte item) =>
-        ItemDefs.IsValid(item) && hud.MayPickUp(side) && items.MayUse(side) && items.Usable(side, (ItemId)item) && !picking.HasValue;
+        ItemDefs.IsValid(item) && hud.MayPickUp(side) && items.MayUse(side, (ItemId)item) && items.Usable(side, (ItemId)item) && !picking.HasValue;
 
     public void Render()
     {
@@ -106,7 +107,7 @@ public class ItemControls : MonoBehaviour
             for (var slot = 0; slot < panel.itemSlots.Length; slot++) panel.itemSlots[slot].Show(state.Slots[slot], MayUse(side, state.Slots[slot]));
         }
 
-        // A third item, for a side this screen plays: which goes?
+        // A fourth item, for a side this screen plays: which goes?
         discardSide = -1;
         for (var s = 0; s < sides && discardSide < 0; s++)
             if (items.ItemsOf(s).Pending != SideItems.None && hud.PlaysHere(s)) discardSide = s;
@@ -114,9 +115,7 @@ public class ItemControls : MonoBehaviour
         if (discardSide >= 0)
         {
             var state = items.ItemsOf(discardSide);
-            discardTiles[0].Show(state.Slots[0], true);
-            discardTiles[1].Show(state.Slots[1], true);
-            discardTiles[2].Show(state.Pending, true);
+            for (var i = 0; i < discardTiles.Length; i++) discardTiles[i].Show(i < state.Slots.Length ? state.Slots[i] : state.Pending, true);
         }
         RenderPrompt();
     }
@@ -355,7 +354,7 @@ public class ItemControls : MonoBehaviour
             var side = turns != null ? turns.CurrentPlayerID : -1;
             if (side >= 0 && hud.MayPickUp(side))
             {
-                if (items.IsFogged(side)) text = Loc.Get("item.status.fog");
+                if (items.IsBlind(side)) text = Loc.Get("item.status.blind");
                 else if (items.State.ShotItem != ItemState.NoShot)
                 {
                     var shot = (ItemId)items.State.ShotItem;
@@ -386,6 +385,12 @@ public class ItemControls : MonoBehaviour
                 break;
             case ItemEventKind.CatchUp:
                 hud.Notice(Loc.Get("hud.itemCatchUp", hud.SideName(e.Side), def.Name));
+                break;
+            case ItemEventKind.RoundGift:
+                // Every side's at once: one notice for them all.
+                if (giftFrame == Time.frameCount) break;
+                giftFrame = Time.frameCount;
+                hud.Notice(Loc.Get("hud.itemRoundGift"));
                 break;
             case ItemEventKind.Shielded:
                 hud.Notice(Loc.Get("hud.itemShielded", hud.SideName(e.Side)));

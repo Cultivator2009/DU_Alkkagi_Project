@@ -227,8 +227,8 @@ internal static class SelfCheck
         {
             var wrong = ItemDefs.All.Where((def, i) => (int)def.Id != i || !Loc.Has("item." + def.Id + ".name") || !Loc.Has("item." + def.Id + ".desc")).Select(def => def.Id.ToString()).ToList();
             var placed = wrong.Count == 0 && ItemDefs.All.Length == Enum.GetValues(typeof(ItemId)).Length;
-            var state = new ItemState { FogSide = 1, FogTurn = 7, UsedTurn = 6, ShotItem = (byte)ItemId.Curve, CurveSign = -1, ExtraTurn = true, RewindReady = true, NextId = 9 };
-            state.Sides.Add(new SideItems { Slots = new[] { (byte)ItemId.Blast, SideItems.None }, Pending = (byte)ItemId.Heal, CaughtUp = true, UsedRares = 1 << (int)ItemId.Rewind });
+            var state = new ItemState { BlindSide = 1, BlindTurn = 7, UsedTurn = 6, UsedShotTurn = 5, ShotItem = (byte)ItemId.Curve, CurveSign = -1, ExtraTurn = true, RewindReady = true, NextId = 9 };
+            state.Sides.Add(new SideItems { Slots = new[] { (byte)ItemId.Blast, SideItems.None, (byte)ItemId.Swap }, Pending = (byte)ItemId.Heal, CaughtUp = true, UsedRares = 1 << (int)ItemId.Rewind });
             state.Sides.Add(new SideItems());
             state.Boxes.Add(new ItemBox { Id = 3, Position = new Vector2(0.25f, -0.5f) });
             state.Effects.Add(new PieceEffect { Piece = 'A', Kind = ItemId.Glue, Owner = 0, Expires = 4, TargetTurn = -1, Partner = 'b' });

@@ -3,13 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// The item mode (MatchSettings.ItemsOn): each side holds two items, from
+// The item mode (MatchSettings.ItemsOn): each side holds three items, from
 // the item boxes that turn up on the board (a piece that comes to one on a
-// side's shot wins that side an item) and one more when it's down to its
-// last fifth (the catch-up item). On its turn, before it shoots, a side may
-// use one: on its shot, on a piece, on the board, or on another side
-// (ItemDefs). A third item with both slots full waits until the side lets
-// one of the three go (Discard).
+// side's shot wins that side an item), one for every side every so many
+// rounds (the round's item), and one more when it's down to its last fifth
+// (the catch-up item). On its turn, before it shoots, a side may use one
+// on its shot and one other: on a piece, on the board, or on another side
+// (ItemDefs). A fourth item with the slots full waits until the side lets
+// one of the four go (Discard).
 //
 // On the authority (a local game, the network host) this runs the items:
 // their rules, their physics and how long they last. Everything that
@@ -29,7 +30,7 @@ public class ItemSystem : MonoBehaviour
     public const float BlastSpeed = 7f;        // m/s at the blast's heart, less out to its edge
     public const float CurveRadius = 2.5f;     // a curving shot's arc, whatever its speed
     public const float QuakeSlide = 0.5f;      // how far a quake sends a lone piece
-    public const int MaxBoxes = 2;
+    public const int MaxBoxes = 3;
     public const float CatchUpShare = 0.2f;    // pieces (or health) left that bring the catch-up item
     public const float HealShare = 0.3f;
     public const float GrowScale = 1.5f;
@@ -150,10 +151,16 @@ public class ItemSystem : MonoBehaviour
     public SideItems ItemsOf(int side) => side >= 0 && side < State.Sides.Count ? State.Sides[side] : new SideItems();
 
     // The side to move may use an item now: its turn, nothing picked up
-    // yet, none used this turn, no third item waiting to be let go.
+    // yet, no fourth item waiting to be let go, and an item of some kind
+    // still to use this turn (one on the shot, one other).
     public bool MayUse(int side) =>
         turns != null && turns.CurrentPlayerID == side && turns.State == GameManager.GameState.WaitingForInput && !turns.InMotion
-        && State.UsedTurn != turns.Turn && ItemsOf(side).Pending == SideItems.None && !Requesting;
+        && (State.UsedShotTurn != turns.Turn || State.UsedTurn != turns.Turn) && ItemsOf(side).Pending == SideItems.None && !Requesting;
+
+    // And this one: none of its kind used this turn yet.
+    public bool MayUse(int side, ItemId id) => MayUse(side) && (IsShot(id) ? State.UsedShotTurn : State.UsedTurn) != turns.Turn;
+
+    private static bool IsShot(ItemId id) => ItemDefs.Of(id).Category == ItemCategory.Shot;
 
     // Whether there's anything for the item to do now.
     public bool Usable(int side, ItemId id)
@@ -200,8 +207,8 @@ public class ItemSystem : MonoBehaviour
 
     public bool IsFrozen(GamePieceDragAndReleaseForce piece) => piece != null && State.Has(piece.Manager.pieceID, ItemId.Freeze);
 
-    // This side aims blind this turn (Fog).
-    public bool IsFogged(int side) => State.FogSide == side && turns != null && State.FogTurn == turns.Turn && turns.CurrentPlayerID == side;
+    // This side aims blind this turn (Blind).
+    public bool IsBlind(int side) => State.BlindSide == side && turns != null && State.BlindTurn == turns.Turn && turns.CurrentPlayerID == side;
 
     // This turn's shot carries this item, for this side.
     public bool ShotCarries(int side, ItemId id) => State.Shot(id) && turns != null && turns.CurrentPlayerID == side;
@@ -257,15 +264,13 @@ public class ItemSystem : MonoBehaviour
         var items = State.Sides[side];
         if (!items.Has(slot)) return false;
         var id = (ItemId)items.Slots[slot];
-        if (!Usable(side, id) || !CanTarget(side, id, target)) return false;
-        items.Slots[slot] = SideItems.None;
-        if (slot == 0)
-        {
-            items.Slots[0] = items.Slots[1];
-            items.Slots[1] = SideItems.None;
-        }
+        if (!MayUse(side, id) || !Usable(side, id) || !CanTarget(side, id, target)) return false;
+        // The ones after it move up.
+        for (var i = slot; i < SideItems.SlotCount - 1; i++) items.Slots[i] = items.Slots[i + 1];
+        items.Slots[SideItems.SlotCount - 1] = SideItems.None;
         if (ItemDefs.Of(id).Rarity == ItemRarity.Rare) items.UsedRares |= 1 << (int)id;
-        State.UsedTurn = turns.Turn;
+        if (IsShot(id)) State.UsedShotTurn = turns.Turn;
+        else State.UsedTurn = turns.Turn;
         var at = target.Point;
         var targetPiece = PieceOf(target.Piece);
         if (targetPiece != null && target.Point == Vector2.zero) at = Flat(targetPiece.Body.position);
@@ -275,15 +280,15 @@ public class ItemSystem : MonoBehaviour
         return true;
     }
 
-    // side lets one of its three go: 0 or 1 its slots (the new one taking
-    // its place), 2 the new one.
+    // side lets one of its four go: 0..2 its slots (the new one taking
+    // its place), 3 (SlotCount) the new one.
     public bool Discard(int side, int index)
     {
         if (!Authority || side < 0 || side >= State.Sides.Count) return false;
         var items = State.Sides[side];
-        if (items.Pending == SideItems.None || index < 0 || index > 2) return false;
-        var dropped = index == 2 ? items.Pending : items.Slots[index];
-        if (index < 2) items.Slots[index] = items.Pending;
+        if (items.Pending == SideItems.None || index < 0 || index > SideItems.SlotCount) return false;
+        var dropped = index == SideItems.SlotCount ? items.Pending : items.Slots[index];
+        if (index < SideItems.SlotCount) items.Slots[index] = items.Pending;
         items.Pending = SideItems.None;
         Emit(new ItemEvent { Kind = ItemEventKind.Discarded, Side = side, Item = (ItemId)dropped });
         Changed();
@@ -325,9 +330,9 @@ public class ItemSystem : MonoBehaviour
             case ItemId.Freeze:
                 AddEffect(piece, id, side, -1);
                 break;
-            case ItemId.Fog:
-                State.FogSide = piece.Manager.playerIndex;
-                State.FogTurn = -1;
+            case ItemId.Blind:
+                State.BlindSide = piece.Manager.playerIndex;
+                State.BlindTurn = -1;
                 break;
             case ItemId.Pillar:
             case ItemId.Ice:
@@ -378,6 +383,7 @@ public class ItemSystem : MonoBehaviour
         {
             round = turns.Round;
             MaybeBox();
+            RoundGift();
         }
         for (var i = State.Effects.Count - 1; i >= 0; i--)
         {
@@ -397,10 +403,10 @@ public class ItemSystem : MonoBehaviour
             if (Due(effect.Owner, effect.Expires, player)) RemoveEffect(i);
         }
         State.Objects.RemoveAll(o => Due(o.Owner, o.Expires, player));
-        if (State.FogSide >= 0)
+        if (State.BlindSide >= 0)
         {
-            if (State.FogSide == player && State.FogTurn < 0) State.FogTurn = turns.Turn;
-            else if (State.FogTurn >= 0 && turns.Turn > State.FogTurn || !turns.IsStanding(State.FogSide)) State.FogSide = State.FogTurn = -1;
+            if (State.BlindSide == player && State.BlindTurn < 0) State.BlindTurn = turns.Turn;
+            else if (State.BlindTurn >= 0 && turns.Turn > State.BlindTurn || !turns.IsStanding(State.BlindSide)) State.BlindSide = State.BlindTurn = -1;
         }
         State.ShotItem = ItemState.NoShot;
         State.CurveSign = 0;
@@ -504,6 +510,15 @@ public class ItemSystem : MonoBehaviour
         }
     }
 
+    // Every so many rounds gone round, an item for every side still in.
+    private void RoundGift()
+    {
+        var every = rules.ItemGiftRounds;
+        if (every <= 0 || round <= 1 || (round - 1) % every != 0) return;
+        foreach (var side in turns.Sides)
+            if (side.Standing) Give(side.Id, Draw(side.Id), ItemEventKind.RoundGift, Vector2.zero);
+    }
+
     // A random item side may get: not a battle of health's out of one, nor
     // a rare one it has used. Rarity first (ItemDefs.RarityOdds), then any of it.
     public ItemId Draw(int side)
@@ -529,9 +544,10 @@ public class ItemSystem : MonoBehaviour
     private void Give(int side, ItemId id, ItemEventKind why, Vector2 at)
     {
         var items = State.Sides[side];
-        if (items.Slots[0] == SideItems.None) items.Slots[0] = (byte)id;
-        else if (items.Slots[1] == SideItems.None) items.Slots[1] = (byte)id;
-        else items.Pending = (byte)id;
+        var free = System.Array.IndexOf(items.Slots, SideItems.None);
+        if (free >= 0) items.Slots[free] = (byte)id;
+        else if (items.Pending == SideItems.None) items.Pending = (byte)id;
+        else return; // one waiting to be let go already: this one's lost
         Emit(new ItemEvent { Kind = why, Side = side, Item = id, Position = at });
         Changed();
     }

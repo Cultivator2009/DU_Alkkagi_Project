@@ -15,34 +15,41 @@ public static class ItemAI
     {
         { ItemId.Rewind, 9 }, { ItemId.DoubleShot, 8 }, { ItemId.Revive, 8 }, { ItemId.Quake, 6 }, { ItemId.Heal, 6 },
         { ItemId.Blast, 6 }, { ItemId.Weight, 5 }, { ItemId.Shield, 5 }, { ItemId.Swap, 5 }, { ItemId.Freeze, 4 },
-        { ItemId.Grease, 4 }, { ItemId.Shrink, 4 }, { ItemId.Anchor, 4 }, { ItemId.Fog, 3 }, { ItemId.Pillar, 3 },
+        { ItemId.Grease, 4 }, { ItemId.Shrink, 4 }, { ItemId.Anchor, 4 }, { ItemId.Blind, 3 }, { ItemId.Pillar, 3 },
         { ItemId.Ice, 3 }, { ItemId.Grow, 3 }, { ItemId.Glue, 2 }, { ItemId.Ghost, 2 }, { ItemId.Foresight, 1 }, { ItemId.Curve, 0 },
     };
 
-    // Which of the three to let go: 0, 1 a slot, 2 the new one.
+    // Which of the four to let go: 0..2 a slot, 3 the new one.
     public static int DiscardIndex(SideItems items)
     {
-        var three = new[] { items.Slots[0], items.Slots[1], items.Pending };
+        var four = items.Slots.Append(items.Pending).ToArray();
         var worst = 0;
-        for (var i = 1; i < 3; i++)
-            if (Value(three[i]) < Value(three[worst])) worst = i;
+        for (var i = 1; i < four.Length; i++)
+            if (Value(four[i]) < Value(four[worst])) worst = i;
         return worst;
     }
 
     private static int Value(byte item) => ItemDefs.IsValid(item) ? Worth[(ItemId)item] : -1;
 
-    // One item before the shot, if one is worth it now. True if it used one.
+    // An item before the shot, if one is worth it now: one on the shot and
+    // one other at most, as for anyone. True if it used one.
     public static bool TryUse(ItemSystem items, GameManager game, int side, AILevel level)
     {
-        if (!items.MayUse(side)) return false;
+        var used = false;
+        while (items.MayUse(side) && TryOne(items, game, side, level)) used = true;
+        return used;
+    }
+
+    private static bool TryOne(ItemSystem items, GameManager game, int side, AILevel level)
+    {
         var odds = level == AILevel.Easy ? 0.5f : level == AILevel.Normal ? 0.8f : 1f;
         if (Random.value > odds) return false;
         var slots = items.ItemsOf(side).Slots;
         // The one it values most first.
-        foreach (var slot in new[] { 0, 1 }.Where(s => ItemDefs.IsValid(slots[s])).OrderByDescending(s => Worth[(ItemId)slots[s]]))
+        foreach (var slot in Enumerable.Range(0, slots.Length).Where(s => ItemDefs.IsValid(slots[s])).OrderByDescending(s => Worth[(ItemId)slots[s]]))
         {
             var id = (ItemId)slots[slot];
-            if (!items.Usable(side, id) || !Plan(items, game, side, id, out var target)) continue;
+            if (!items.MayUse(side, id) || !items.Usable(side, id) || !Plan(items, game, side, id, out var target)) continue;
             if (items.TryUse(side, slot, target)) return true;
         }
         return false;
@@ -81,7 +88,7 @@ public static class ItemAI
                 return Pick(Nearest(theirs, 0.6f), out target);
             case ItemId.Freeze:
                 return Random.value < 0.7f && Pick(theirs.OrderBy(p => mine.Count == 0 ? 0 : mine.Min(m => (m.Body.position - p.Body.position).sqrMagnitude)).FirstOrDefault(), out target);
-            case ItemId.Fog:
+            case ItemId.Blind:
                 var next = NextEnemy(items, game, side);
                 return next >= 0 && Pick(theirs.FirstOrDefault(p => p.Manager.playerIndex == next), out target);
             case ItemId.Pillar:

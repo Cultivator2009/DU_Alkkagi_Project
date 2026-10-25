@@ -1,31 +1,31 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// A side's items: two slots, and a third it has just got with both full,
+// A side's items: three slots, and a fourth it has just got with all full,
 // until it lets one go (ItemSystem.Discard).
 public sealed class SideItems
 {
     public const byte None = 255;
+    public const int SlotCount = 3;
 
-    public byte[] Slots = { None, None };
+    public byte[] Slots = { None, None, None };
     public byte Pending = None;
     public bool CaughtUp;   // its catch-up item given
     public int UsedRares;   // a bit per rare item used: it gets that one no more
 
     public bool Has(int slot) => slot >= 0 && slot < Slots.Length && Slots[slot] != None;
-    public bool Full => Slots[0] != None && Slots[1] != None;
+    public bool Full => System.Array.TrueForAll(Slots, s => s != None);
     public bool Used(ItemId id) => (UsedRares & (1 << (int)id)) != 0;
 
     public void Write(NetWriter w)
     {
-        w.Byte(Slots[0]);
-        w.Byte(Slots[1]);
+        foreach (var slot in Slots) w.Byte(slot);
         w.Byte(Pending);
         w.Bool(CaughtUp);
         w.Int(UsedRares);
     }
 
-    public static SideItems Read(NetReader r) => new SideItems { Slots = new[] { r.Byte(), r.Byte() }, Pending = r.Byte(), CaughtUp = r.Bool(), UsedRares = r.Int() };
+    public static SideItems Read(NetReader r) => new SideItems { Slots = new[] { r.Byte(), r.Byte(), r.Byte() }, Pending = r.Byte(), CaughtUp = r.Bool(), UsedRares = r.Int() };
 }
 
 // An item at work on a piece, until its user's turn in round Expires (or,
@@ -101,9 +101,10 @@ public sealed class ItemState
     public List<ItemBox> Boxes = new List<ItemBox>();
     public List<PieceEffect> Effects = new List<PieceEffect>();
     public List<BoardObject> Objects = new List<BoardObject>();
-    public int FogSide = -1;  // aims its next turn blind
-    public int FogTurn = -1;  // that turn, once begun
-    public int UsedTurn = -1; // the turn an item was last used in: one a turn
+    public int BlindSide = -1; // aims its next turn blind (Blind)
+    public int BlindTurn = -1; // that turn, once begun
+    public int UsedTurn = -1;  // the turn an item not on the shot was last used in: one a turn
+    public int UsedShotTurn = -1; // and one on the shot
     public byte ShotItem = NoShot; // what this turn's shot carries (Weight, Ghost, Foresight, Blast, Curve)
     public int CurveSign;     // Curve: 1 left, -1 right
     public bool ExtraTurn;    // DoubleShot: the side to move shoots again after this shot
@@ -119,14 +120,15 @@ public sealed class ItemState
         w.List(Boxes, ItemBox.Write);
         w.List(Effects, PieceEffect.Write);
         w.List(Objects, BoardObject.Write);
-        w.Int(FogSide);
-        w.Int(FogTurn);
+        w.Int(BlindSide);
+        w.Int(BlindTurn);
         w.Int(UsedTurn);
         w.Byte(ShotItem);
         w.Int(CurveSign);
         w.Bool(ExtraTurn);
         w.Bool(RewindReady);
         w.Int(NextId);
+        w.Int(UsedShotTurn);
     }
 
     public static ItemState Read(NetReader r) => new ItemState
@@ -135,14 +137,15 @@ public sealed class ItemState
         Boxes = r.List(ItemBox.Read),
         Effects = r.List(PieceEffect.Read),
         Objects = r.List(BoardObject.Read),
-        FogSide = r.Int(),
-        FogTurn = r.Int(),
+        BlindSide = r.Int(),
+        BlindTurn = r.Int(),
         UsedTurn = r.Int(),
         ShotItem = r.Byte(),
         CurveSign = r.Int(),
         ExtraTurn = r.Bool(),
         RewindReady = r.Bool(),
         NextId = r.Int(),
+        UsedShotTurn = r.Int(),
     };
 
     public ItemState Clone()
@@ -163,7 +166,8 @@ public enum ItemEventKind : byte
     Blast,       // where the blast went off
     Shielded,    // a shield brought a piece back
     Stuck,       // glue took hold
-    Expired
+    Expired,
+    RoundGift    // the round's item
 }
 
 // Something an item did, for the HUD and the board's effects on every screen.

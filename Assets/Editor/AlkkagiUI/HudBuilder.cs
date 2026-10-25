@@ -173,15 +173,13 @@ namespace AlkkagiUIEditor
             panel.skipButton.GetComponent<RectTransform>().Place(corner, offset + new Vector2(0, below ? -(PanelSize.y + 16) : PanelSize.y + 16), new Vector2(PanelSize.x, 72));
             panel.skipButton.gameObject.SetActive(false);
 
-            // The item mode's two items, under the rest (the panel grows to them: PlayerHudPanel.ShowItems).
+            // The item mode's three items, under the rest (the panel grows to them: PlayerHudPanel.ShowItems).
             var tray = UIKit.Node("ItemTray", t).Place(topLeft, new Vector2(Pad, -PanelSize.y + 4), new Vector2(PanelSize.x - Pad * 2, 64));
-            const float tileGap = 12;
-            var tileWidth = (PanelSize.x - Pad * 2 - tileGap) / 2;
-            panel.itemSlots = new[]
-            {
-                ItemTile(tray, "Slot0", new Vector2(0, 0), new Vector2(tileWidth, 64)),
-                ItemTile(tray, "Slot1", new Vector2(tileWidth + tileGap, 0), new Vector2(tileWidth, 64)),
-            };
+            const float tileGap = 10;
+            var tileWidth = (PanelSize.x - Pad * 2 - tileGap * (SideItems.SlotCount - 1)) / SideItems.SlotCount;
+            panel.itemSlots = new ItemSlotView[SideItems.SlotCount];
+            for (var i = 0; i < SideItems.SlotCount; i++)
+                panel.itemSlots[i] = ItemTile(tray, "Slot" + i, new Vector2(i * (tileWidth + tileGap), 0), new Vector2(tileWidth, 64));
             panel.itemTray = tray.gameObject;
             tray.gameObject.SetActive(false);
             return panel;
@@ -218,7 +216,7 @@ namespace AlkkagiUIEditor
 
         // The item mode's prompt in the turn pill's place (what to pick, what
         // a hovered item does, what the shot carries), the way buttons under
-        // it, and the card for letting one of three items go (ItemControls).
+        // it, and the card for letting one of four items go (ItemControls).
         private static void BuildItemControls(Transform root, MainGameUIController controller)
         {
             var controls = root.gameObject.AddComponent<ItemControls>();
@@ -249,7 +247,7 @@ namespace AlkkagiUIEditor
             controls.rightButton = WayButton("ItemRight", "item.right", 0, true);
             controls.cancelButton = WayButton("ItemCancel", "item.cancel", 170, false);
 
-            const float width = 820, height = 420, pad = 56;
+            const float width = 900, height = 420, pad = 56;
             var overlay = UIKit.Image(root, "ItemDiscard", null, Theme.Overlay, raycast: true);
             overlay.rectTransform.Stretch();
             controls.discardCard = overlay.gameObject;
@@ -260,13 +258,14 @@ namespace AlkkagiUIEditor
                 .rectTransform.Place(top, new Vector2(0, -48), new Vector2(width - pad * 2, 60));
             UIKit.Label(card.transform, "Body", "item.discard.body", 26, false, Theme.InkSoft, TextAlignmentOptions.Center)
                 .rectTransform.Place(top, new Vector2(0, -120), new Vector2(width - pad * 2, 40));
-            const float tile = 220, gap = 24;
-            var left = (width - tile * 3 - gap * 2) / 2;
-            controls.discardTiles = new ItemSlotView[3];
-            for (var i = 0; i < 3; i++)
+            const float tile = 180, gap = 20;
+            const int tiles = SideItems.SlotCount + 1;
+            var left = (width - tile * tiles - gap * (tiles - 1)) / 2;
+            controls.discardTiles = new ItemSlotView[tiles];
+            for (var i = 0; i < tiles; i++)
                 controls.discardTiles[i] = ItemTile(card.transform, "Discard" + i, new Vector2(left + i * (tile + gap), -230), new Vector2(tile, 84));
             UIKit.Label(card.transform, "NewLabel", "item.discard.new", 22, true, Theme.Seal, TextAlignmentOptions.Center)
-                .rectTransform.Place(new Vector2(0, 1), new Vector2(left + 2 * (tile + gap), -190), new Vector2(tile, 32));
+                .rectTransform.Place(new Vector2(0, 1), new Vector2(left + (tiles - 1) * (tile + gap), -190), new Vector2(tile, 32));
             overlay.gameObject.SetActive(false);
         }
 

@@ -83,8 +83,8 @@ public class AIOpponent : MonoBehaviour
             if (shot.HasValue && shot.Value.Piece != null)
             {
                 var (aimError, powerError) = Error[level];
-                // Aiming blind in an item's fog.
-                if (items != null && items.IsFogged(playerId))
+                // Aiming blinded by an item.
+                if (items != null && items.IsBlind(playerId))
                 {
                     aimError *= 2.5f;
                     powerError *= 2.5f;

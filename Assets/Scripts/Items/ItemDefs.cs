@@ -18,7 +18,7 @@ public enum ItemId : byte
     Grease,     // another side's piece slides far
     Freeze,     // another side's piece can't be flicked on its next turn
     Shrink,     // another side's piece smaller and lighter
-    Fog,        // another side aims its next turn without the aim's lines and power
+    Blind,      // another side aims its next turn without the aim's lines and power
     Pillar,     // a post on the board
     Ice,        // a patch of the board where nothing slows
     Quake,      // the board tips one way a moment, everything sliding
@@ -98,7 +98,7 @@ public static class ItemDefs
         new ItemDef(ItemId.Grease, ItemCategory.Hinder, ItemRarity.Common, ItemAim.EnemyPiece, 2),
         new ItemDef(ItemId.Freeze, ItemCategory.Hinder, ItemRarity.Common, ItemAim.EnemyPiece),
         new ItemDef(ItemId.Shrink, ItemCategory.Hinder, ItemRarity.Uncommon, ItemAim.EnemyPiece, 3),
-        new ItemDef(ItemId.Fog, ItemCategory.Hinder, ItemRarity.Uncommon, ItemAim.EnemyPiece),
+        new ItemDef(ItemId.Blind, ItemCategory.Hinder, ItemRarity.Uncommon, ItemAim.EnemyPiece),
         new ItemDef(ItemId.Pillar, ItemCategory.Board, ItemRarity.Uncommon, ItemAim.Point, 3),
         new ItemDef(ItemId.Ice, ItemCategory.Board, ItemRarity.Uncommon, ItemAim.Point, 3),
         new ItemDef(ItemId.Quake, ItemCategory.Board, ItemRarity.Rare, ItemAim.Direction),

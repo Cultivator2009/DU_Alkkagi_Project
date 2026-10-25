@@ -103,7 +103,8 @@ public enum MatchSettingId : byte
     BothOutRule,
     Items,
     ItemBoxes,
-    ItemCatchUp
+    ItemCatchUp,
+    ItemGift
 }
 
 // One lobby-level match rule: the values it may take and how to show them.
@@ -250,10 +251,13 @@ public sealed class MatchSettings
         // last fifth. The Item mode turns them on, Normal and Ranked off.
         new MatchSettingDef(MatchSettingId.Items, "items", "match.items", new[] { 0, 1 }, 0,
             v => Loc.Get(v == 1 ? "option.on" : "option.off"), normal: new[] { 0 }, item: new[] { 1 }, ranked: new[] { 0 }),
-        new MatchSettingDef(MatchSettingId.ItemBoxes, "itemBoxes", "match.itemBoxes", new[] { 0, 1, 2, 3 }, 2,
+        new MatchSettingDef(MatchSettingId.ItemBoxes, "itemBoxes", "match.itemBoxes", new[] { 0, 1, 2, 3 }, 1,
             v => v == 0 ? Loc.Get("option.off") : v == 1 ? Loc.Get("option.everyRound") : Loc.Get("option.everyRounds", v), s => s.ItemsOn),
         new MatchSettingDef(MatchSettingId.ItemCatchUp, "itemCatchUp", "match.itemCatchUp", new[] { 1, 0 }, 1,
             v => Loc.Get(v == 1 ? "option.on" : "option.off"), s => s.ItemsOn),
+        // An item for every side each time this many rounds have gone round (0 none).
+        new MatchSettingDef(MatchSettingId.ItemGift, "itemGift", "match.itemGift", new[] { 0, 1, 2, 3 }, 2,
+            v => v == 0 ? Loc.Get("option.off") : v == 1 ? Loc.Get("option.everyRound") : Loc.Get("option.everyRounds", v), s => s.ItemsOn),
     };
 
     // How the rule lists show the rules: in groups under headings, the
@@ -262,7 +266,7 @@ public sealed class MatchSettings
     public static readonly (string titleKey, MatchSettingId[] ids)[] Groups =
     {
         ("rules.group.game", new[] { MatchSettingId.Mode, MatchSettingId.Variant, MatchSettingId.HealthRule, MatchSettingId.PieceHealth, MatchSettingId.SideHealth, MatchSettingId.Barrier }),
-        ("rules.group.items", new[] { MatchSettingId.Items, MatchSettingId.ItemBoxes, MatchSettingId.ItemCatchUp }),
+        ("rules.group.items", new[] { MatchSettingId.Items, MatchSettingId.ItemBoxes, MatchSettingId.ItemGift, MatchSettingId.ItemCatchUp }),
         ("rules.group.players", new[] { MatchSettingId.Seats, MatchSettingId.Teams }),
         ("rules.group.board", new[] { MatchSettingId.BoardType, MatchSettingId.PieceType, MatchSettingId.BlackStones, MatchSettingId.WhiteStones, MatchSettingId.BlueStones, MatchSettingId.RedStones }),
         ("rules.group.placement", new[] { MatchSettingId.SpawnMode, MatchSettingId.PlacementStyle, MatchSettingId.PlacementSeconds }),
@@ -331,6 +335,7 @@ public sealed class MatchSettings
     public bool ItemsOn => Get(MatchSettingId.Items) == 1;
     public int ItemBoxRounds => Get(MatchSettingId.ItemBoxes); // 0 = none
     public bool ItemCatchUp => Get(MatchSettingId.ItemCatchUp) == 1;
+    public int ItemGiftRounds => Get(MatchSettingId.ItemGift); // 0 = none
 
     // Whether a board is fair to this many sides: every side sits as the
     // others do. Three round a rectangle leave one with no one across from

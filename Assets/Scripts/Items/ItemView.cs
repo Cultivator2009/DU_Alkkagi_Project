@@ -189,6 +189,7 @@ public class ItemView : MonoBehaviour
                 break;
             case ItemEventKind.Gained:
             case ItemEventKind.CatchUp:
+            case ItemEventKind.RoundGift:
                 if (effects != null && e.Position != Vector2.zero) effects.PlayTurn(at, 0.15f, 0);
                 GameAudio.PlayInterface(GameAudio.Bank.open, 0.8f, 1.2f);
                 break;

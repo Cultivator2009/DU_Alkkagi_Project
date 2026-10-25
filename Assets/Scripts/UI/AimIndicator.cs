@@ -71,10 +71,10 @@ public class AimIndicator : MonoBehaviour
         SetVisible(true);
         outline.Set(PieceOutline.Mark.Hover, null);
         outline.Set(PieceOutline.Mark.Aim, piece);
-        // An item's fog: the piece's outline, and nothing to tell the way or the power.
+        // Blinded by an item: the piece's outline, and nothing to tell the way or the power.
         var items = ItemSystem.Instance;
         var owner = piece.Manager.playerIndex;
-        if (items != null && items.IsFogged(owner))
+        if (items != null && items.IsBlind(owner))
         {
             for (var i = 0; i < transform.childCount; i++) transform.GetChild(i).gameObject.SetActive(false);
             HideGuide();
