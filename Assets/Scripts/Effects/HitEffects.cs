@@ -99,7 +99,7 @@ public class HitEffects : MonoBehaviour
         if (board == null) return;
         var surface = board.SurfaceBounds;
         var onEdge = board.Playable.Closest(new Vector2(at.x, at.z));
-        var edge = new Vector3(onEdge.x, surface.max.y + Lift, onEdge.y);
+        var edge = new Vector3(onEdge.x, surface.max.y + Mathf.Max(0, board.RiseAt(onEdge)) + Lift, onEdge.y);
         var away = at - surface.center;
         away.y = 0;
         Add(new Burst { Kind = Kind.Fall, At = edge, Out = away.sqrMagnitude > 1e-6f ? away.normalized : Vector3.forward });
@@ -121,7 +121,7 @@ public class HitEffects : MonoBehaviour
     private static Vector3 OnBoard(Vector3 at)
     {
         var board = GameManager.manager != null ? GameManager.manager.Board : null;
-        at.y = (board != null ? board.SurfaceBounds.max.y : 0f) + Lift;
+        at.y = (board != null ? board.SurfaceBounds.max.y + Mathf.Max(0, board.RiseAt(new Vector2(at.x, at.z))) : 0f) + Lift;
         return at;
     }
 

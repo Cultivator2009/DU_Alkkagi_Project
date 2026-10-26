@@ -130,6 +130,7 @@ public static class RoomBuilder
     {
         var props = new GameObject("Props").transform;
         props.SetParent(parent, false);
+        props.gameObject.AddComponent<RoomProps>();
 
         // The stones' bowls, lids beside them.
         Bowl(props, new Vector3(-3.8f, 0, -1.9f), m.bowl, m.stoneBlack, 20);

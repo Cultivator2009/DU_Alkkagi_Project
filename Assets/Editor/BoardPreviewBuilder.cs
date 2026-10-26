@@ -25,6 +25,9 @@ public static class BoardPreviewBuilder
         // house, the table, the templates). The scene isn't saved after.
         foreach (var renderer in scene.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<Renderer>(true)))
             if (setup.boards.All(board => !renderer.transform.IsChildOf(board.transform))) renderer.enabled = false;
+        // Lit by the match's light alone, not the room's lamp.
+        foreach (var lamp in scene.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<Light>(true)))
+            if (lamp.type != LightType.Directional) lamp.enabled = false;
 
         var camera = new GameObject("Preview camera").AddComponent<Camera>();
         camera.orthographic = true;
@@ -36,6 +39,7 @@ public static class BoardPreviewBuilder
         foreach (var board in setup.boards)
         {
             foreach (var other in setup.boards) other.gameObject.SetActive(other == board);
+            if (board.GetComponent<BoardTerrain>() != null) board.Build(); // its ground isn't saved with the scene
             var bounds = board.GetComponentsInChildren<Renderer>().Select(r => r.bounds).Aggregate((a, b) => { a.Encapsulate(b); return a; });
             camera.transform.position = new Vector3(bounds.center.x, bounds.max.y + 5, bounds.center.z);
             camera.orthographicSize = Mathf.Max(bounds.extents.x, bounds.extents.z) * 1.04f;

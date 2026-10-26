@@ -25,6 +25,8 @@ using UnityEngine;
 //   go board. Each arm reaches 1.4 past the middle square, so a side's
 //   pieces deep in its arm are out of its neighbours' line of fire until
 //   they come out to the middle.
+// - landscape (two to four sides): 12 units a side, a relief carved in one
+//   block (BoardTerrain), a base in each corner.
 // A board is its shape and materials (BoardVariant); the variant builds the
 // solid board itself, here and again at run time. Pieces get their mesh,
 // letter and mass per kind at spawn (BoardSetup), so the templates only
@@ -63,7 +65,8 @@ internal static class BoardBuilder
         var chess = BuildChessBoard(setup.transform, go);
         var hexagon = BuildHexagonBoard(setup.transform, go);
         var cross = BuildCrossBoard(setup.transform, go);
-        setup.boards = new[] { go, janggi, chess, hexagon, cross };
+        var landscape = BuildLandscapeBoard(setup.transform, go);
+        setup.boards = new[] { go, janggi, chess, hexagon, cross, landscape };
         setup.janggiTemplate = BuildPieceTemplate(setup);
         setup.chessTemplate = BuildChessTemplate(setup);
         setup.gonggiTemplate = BuildGonggiTemplate(setup);
@@ -71,7 +74,23 @@ internal static class BoardBuilder
         EditorUtility.SetDirty(setup);
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
-        Debug.Log("[Alkkagi] Go, janggi, chess, hexagon and cross boards and the janggi, chess and gonggi piece templates built into GameScene.");
+        Debug.Log("[Alkkagi] Go, janggi, chess, hexagon, cross and landscape boards and the janggi, chess and gonggi piece templates built into GameScene.");
+    }
+
+    // The landscape alone, the other boards as they are.
+    [MenuItem("Tools/Alkkagi/Build landscape board")]
+    private static void BuildLandscapeOnly()
+    {
+        var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+        var setup = Object.FindAnyObjectByType<BoardSetup>();
+        Directory.CreateDirectory(BoardsDir);
+        var go = setup.boards.First(b => b.type == BoardType.Go);
+        var landscape = BuildLandscapeBoard(setup.transform, go);
+        setup.boards = setup.boards.Where(b => b != null && b.type != BoardType.Landscape).Append(landscape).ToArray();
+        EditorUtility.SetDirty(setup);
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
+        Debug.Log("[Alkkagi] Landscape board built into GameScene.");
     }
 
     // The original board meshes move under a GoBoard variant, positions kept.
@@ -327,6 +346,87 @@ internal static class BoardBuilder
         variant.Build();
         root.gameObject.SetActive(false);
         return variant;
+    }
+
+    // Two to four sides, each in a corner; the ground is BoardTerrain's,
+    // built when the board's turned on. Its sides end grain, its ponds
+    // dark water, its rocks dark stone.
+    private static BoardVariant BuildLandscapeBoard(Transform boardRoot, BoardVariant go)
+    {
+        var root = NewBoardRoot(boardRoot, "LandscapeBoard");
+        var variant = root.gameObject.AddComponent<BoardVariant>();
+        variant.type = BoardType.Landscape;
+        var half = BoardTerrain.Half;
+        variant.parts = new[] { BoardPart.Rect(Rect.MinMaxRect(-half, -half, half, half)) };
+        variant.uvRect = Rect.MinMaxRect(-half, -half, half, half);
+        variant.physics = go.physics;
+        variant.multiSpacing = 0.34f;
+        variant.multiFront = 2.1f;
+        variant.multiBack = 1.6f;
+        variant.sceneLayouts = false;
+        // The corners: south-west, north-west, north-east, south-east.
+        variant.seats2 = new[] { 315f, 135f };
+        variant.seats3 = new[] { 315f, 225f, 135f };
+        variant.seats4 = new[] { 315f, 225f, 135f, 45f };
+        variant.zoneDepth = 0.42f;
+
+        var ground = AssetDatabase.LoadAssetAtPath<Material>($"{BoardsDir}/Landscape.mat");
+        if (ground == null)
+        {
+            ground = new Material(Shader.Find("Alkkagi/Landscape"));
+            AssetDatabase.CreateAsset(ground, $"{BoardsDir}/Landscape.mat");
+        }
+        ground.shader = Shader.Find("Alkkagi/Landscape");
+        ground.mainTexture = LandscapeGrain();
+        ground.SetVector("_Tile", new Vector4(3, 3, 0, 0));
+        ground.SetColor("_Color", new Color(0.93f, 0.8f, 0.56f));
+        ground.SetColor("_CliffColor", new Color(0.5f, 0.34f, 0.2f));
+        ground.SetColor("_LineColor", new Color(0.32f, 0.22f, 0.13f));
+        ground.SetFloat("_LineEvery", 0.6f);
+        ground.SetFloat("_LineWidth", 0.006f);
+        ground.SetFloat("_Glossiness", 0.28f);
+        EditorUtility.SetDirty(ground);
+        variant.topMaterial = ground;
+        variant.sideMaterial = Material(BoardsDir, "LandscapeSide", new Color(0.55f, 0.37f, 0.21f), 0.25f, 0);
+
+        // Dark and still: what goes in is gone from sight.
+        var water = Material(BoardsDir, "LandscapeWater", new Color(0.05f, 0.14f, 0.17f), 0.93f, 0);
+
+        var terrain = root.gameObject.AddComponent<BoardTerrain>();
+        terrain.groundMaterial = ground;
+        terrain.waterMaterial = water;
+        terrain.rockMaterial = Material(BoardsDir, "LandscapeRock", new Color(0.3f, 0.31f, 0.29f), 0.35f, 0);
+        AssetDatabase.SaveAssets();
+        variant.Build();
+        root.gameObject.SetActive(false);
+        return variant;
+    }
+
+    // Plain wood grain that tiles both ways (noise on a torus), for the
+    // landscape's ground (tinted by its material).
+    private static Texture2D LandscapeGrain()
+    {
+        const int size = 512;
+        var pixels = new Color[size * size];
+        for (var y = 0; y < size; y++)
+        for (var x = 0; x < size; x++)
+        {
+            var a = x / (float)size * Mathf.PI * 2;
+            var b = y / (float)size * Mathf.PI * 2;
+            // Round a torus: long grain along y, tight across x.
+            float Noise(float across, float along, float seed) =>
+                Mathf.PerlinNoise(Mathf.Cos(a) * across + seed, Mathf.Sin(a) * across + Mathf.Cos(b) * along) * 0.5f
+                + Mathf.PerlinNoise(Mathf.Sin(b) * along + seed * 2, Mathf.Cos(a) * across * 0.5f + 3) * 0.5f;
+            var grain = Noise(9f, 0.8f, 1.7f) * 0.7f + Noise(30f, 2.5f, 4.1f) * 0.3f;
+            var shade = Mathf.Lerp(0.84f, 1f, Mathf.SmoothStep(0.25f, 0.75f, grain));
+            pixels[y * size + x] = new Color(shade, shade, shade);
+        }
+        var path = $"{BoardsDir}/LandscapeGrain.png";
+        var texture = SaveTexture(pixels, size, size, path);
+        var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+        importer.wrapMode = TextureWrapMode.Repeat;
+        importer.SaveAndReimport();
+        return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
     }
 
     private static Transform NewBoardRoot(Transform boardRoot, string name)

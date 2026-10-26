@@ -301,6 +301,7 @@ public static class Loc
         { "board.Chess", ("체스판", "Chess board") },
         { "board.Hexagon", ("육각판", "Hexagon board") },
         { "board.Cross", ("십자판", "Cross board") },
+        { "board.Landscape", ("산수판", "Landscape") },
         { "pieces.GoStones", ("바둑알", "Go stones") },
         { "pieces.JanggiPieces", ("장기말", "Janggi pieces") },
         { "pieces.ChessPieces", ("체스말", "Chess pieces") },

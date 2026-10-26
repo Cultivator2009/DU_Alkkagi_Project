@@ -71,6 +71,8 @@ public class MatchSettingsPanel : MonoBehaviour
         Render();
     }
 
+    private const int LandscapeStones = 10;
+
     private void Step(MatchSettingRow row, int direction)
     {
         if (!editable) return;
@@ -81,6 +83,9 @@ public class MatchSettingsPanel : MonoBehaviour
         if (row.allSides)
             foreach (var id in MatchSettings.StoneIds) settings.Set(id, values[index]);
         else settings.Set(row.settingId, values[index]);
+        // Onto the landscape, a side's few pieces are lost on it: ten each.
+        if (row.settingId == MatchSettingId.BoardType && values[index] == (int)BoardType.Landscape && MatchSettings.StoneIds.All(id => settings.Get(id) < LandscapeStones))
+            foreach (var id in MatchSettings.StoneIds) settings.Set(id, LandscapeStones);
         Settle();
     }
 

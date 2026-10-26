@@ -36,6 +36,9 @@ public class BoardVariant : MonoBehaviour
     public float[] seats2 = { 0, 180 };
     public float[] seats3 = { 0, 270, 90 };
     public float[] seats4 = { 0, 270, 180, 90 };
+    // Placing by hand, a side's zone reaches no further in than this share
+    // of the way from its edge to the middle (BoardSetup.Zone).
+    public float zoneDepth = 0.8f;
 
     private BoardShape shape;
     private BoardShape playable;
@@ -44,6 +47,27 @@ public class BoardVariant : MonoBehaviour
     // What's left to play on: the shape, crumbled in by Build's inset.
     public BoardShape Playable => playable ?? Shape;
     public float Inset { get; private set; }
+
+    private BoardTerrain terrain;
+    private bool terrainLooked;
+    private BoardTerrain Terrain
+    {
+        get
+        {
+            if (!terrainLooked) terrain = GetComponent<BoardTerrain>();
+            terrainLooked = true;
+            return terrain;
+        }
+    }
+
+    // The landscape's ground: a mesh of many small faces, not a flat top.
+    public bool IsRelief => Terrain != null;
+
+    // How far over the board's top the ground stands at a point (world x,
+    // z): nothing on a flat board; on the landscape its rises, and far
+    // under in a pond.
+    public float RiseAt(Vector2 point) =>
+        Terrain == null ? 0f : BoardTerrain.Rise(point - new Vector2(transform.position.x, transform.position.z));
 
     public float[] Seats(int players) => players <= 2 ? seats2 : players == 3 ? seats3 : seats4;
 
@@ -67,8 +91,8 @@ public class BoardVariant : MonoBehaviour
         if (old != null)
         {
             // Its meshes are its own (made below), not assets: they go with it.
-            var meshes = old.GetComponents<MeshCollider>().Select(c => c.sharedMesh).Append(old.GetComponent<MeshFilter>()?.sharedMesh);
-            foreach (var mesh in meshes.Where(m => m != null).ToList()) Discard(mesh);
+            var meshes = old.GetComponentsInChildren<MeshCollider>().Select(c => c.sharedMesh).Concat(old.GetComponentsInChildren<MeshFilter>().Select(f => f.sharedMesh));
+            foreach (var mesh in meshes.Where(m => m != null).Distinct().ToList()) Discard(mesh);
             Discard(old.gameObject);
         }
         var oldWalls = transform.Find(WallsName);
@@ -76,6 +100,15 @@ public class BoardVariant : MonoBehaviour
         var slab = new GameObject(SlabName).transform;
         slab.SetParent(transform, false);
         slab.gameObject.layer = gameObject.layer;
+
+        if (Terrain != null)
+        {
+            Terrain.Build(slab, playable, thickness, physics, sideMaterial);
+            // Made again on every run (it's large): not saved with the scene.
+            if (!Application.isPlaying)
+                foreach (var part in slab.GetComponentsInChildren<Transform>(true)) part.gameObject.hideFlags = HideFlags.DontSave;
+            return;
+        }
 
         var filter = slab.gameObject.AddComponent<MeshFilter>();
         filter.sharedMesh = Mesh(playable);
@@ -110,7 +143,7 @@ public class BoardVariant : MonoBehaviour
         }
     }
 
-    private const string SlabName = "Slab";
+    public const string SlabName = "Slab";
     private const string WallsName = "Walls";
     public const string WallName = "Wall"; // a knock against one costs health (ImpactDamage) and is heard (PieceSounds)
     private static PhysicsMaterial wallPhysics;

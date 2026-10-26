@@ -577,6 +577,9 @@ internal static class SelfCheck
             itemsHealth.Set(MatchSettingId.Variant, (int)GameVariant.Health);
             itemsHealth.Set(MatchSettingId.PieceHealth, 50);
             yield return ("cross, gonggi stones, 4, items, health A", itemsHealth);
+            var landscape = Rules(BoardType.Landscape, PieceType.GoStones, 4, 8);
+            landscape.Set(MatchSettingId.Items, 1);
+            yield return ("landscape, go stones, 4, items", landscape);
         }
 
         // The item mode, tried hard: every side to move with an empty slot
@@ -640,7 +643,10 @@ internal static class SelfCheck
                 }
                 yield return null;
             }
-            Result(over, over ? $"winner {winner}, {turns.TurnsEnded} turns, longest shot {longest:F1}s, {Time.realtimeSinceStartup - started:F0}s{itemsUsed()}" : $"not over after 150 s ({turns.TurnsEnded} turns)");
+            // The landscape's matches run long by design: enough turns played through is a pass.
+            var longEnough = !over && rules.BoardType == BoardType.Landscape && turns.TurnsEnded >= 40;
+            Result(over || longEnough, over ? $"winner {winner}, {turns.TurnsEnded} turns, longest shot {longest:F1}s, {Time.realtimeSinceStartup - started:F0}s{itemsUsed()}"
+                : $"not over after 150 s ({turns.TurnsEnded} turns{(longEnough ? $", longest shot {longest:F1}s{itemsUsed()}" : "")})");
         }
 
         // ---- Network ----

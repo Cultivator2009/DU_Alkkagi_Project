@@ -15,6 +15,9 @@ using UnityEngine.EventSystems;
 // mouse turns it, WASD moves it, Q and E down and up, Shift faster - and
 // back to the main view as it's pressed again (or the game is paused).
 // Reset view (its key, or the HUD button) glides the main view back.
+// A board too big to frame whole (the landscape) is framed in part, and
+// panned to its edges; the view glides to each side's pieces as its turn
+// comes, and follows a shot while it runs (unless the player moved it).
 // While the camera moves - a pan, or the free camera - the board takes no
 // clicks, and a pull in progress is dropped.
 public class CameraRig : MonoBehaviour
@@ -57,7 +60,13 @@ public class CameraRig : MonoBehaviour
     private bool panning;
     private bool flying;
     private float yaw, pitch;    // the free camera's
-    private bool resetting;
+    private bool gliding;        // toward glideTo: Reset view, or (on a big board) a turn's pieces or a shot
+    private Vector3 glideTo;
+    private float glideSharpness;
+    private Vector3 home;        // where Reset view goes: the middle, or on a big board this turn's pieces
+    private bool big;            // too big to frame whole (BigView)
+    private int focusedTurn = -1;
+    private bool movedThisTurn;  // by the player: a big board's view stops following
 
     // A hard knock's shake (Shake): the most, in board units, and how long it
     // takes to settle, in real seconds.
@@ -67,7 +76,9 @@ public class CameraRig : MonoBehaviour
     private float shake;         // 1 at the knock, down to 0
     private Vector3 shaken;      // the view's offset by it, this frame
 
-    public bool IsMoved => offset.sqrMagnitude > 1e-6f || !Mathf.Approximately(zoomTarget, 1f);
+    public bool IsMoved => (offset - home).sqrMagnitude > 1e-6f || !Mathf.Approximately(zoomTarget, 1f);
+    // What the home view frames: the board, or the middle of a big one.
+    public Bounds Framed { get; private set; }
 
     // strength 0..1 (the hardest knock). Not while the player has it off
     // (GameSettings.ScreenShake). Real time: a slowed match shakes as fast.
@@ -96,13 +107,18 @@ public class CameraRig : MonoBehaviour
         mainHome = mainView.position;
         pivotHome = pivot.position;
         var center = surface.center;
-        var half = surface.extents * reach;
+        big = Mathf.Max(surface.size.x, surface.size.z) > BigView * 1.2f;
+        var framed = surface;
+        if (big) framed.size = new Vector3(Mathf.Min(surface.size.x, BigView), surface.size.y, Mathf.Min(surface.size.z, BigView));
+        Framed = framed;
+        // A big board's view goes far enough that its edges come into sight.
+        var half = big ? Vector3.Max(Vector3.zero, surface.extents - framed.extents * 0.55f) : surface.extents * reach;
         limits = Rect.MinMaxRect(center.x - half.x, center.z - half.z, center.x + half.x, center.z + half.z);
         boardHeight = surface.max.y;
         // The scene frames a board FramedDepth deep; another is framed the
         // same, from further back or closer in, so it fills the same height.
         var distance = (boardHeight - mainHome.y) / Mathf.Min(-0.01f, mainView.forward.y);
-        var fit = surface.size.z / FramedDepth;
+        var fit = framed.size.z / FramedDepth;
         if (tallPieces)
         {
             fit *= Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Tan(tallFieldOfView * 0.5f * Mathf.Deg2Rad);
@@ -114,7 +130,7 @@ public class CameraRig : MonoBehaviour
         // the HUD its columns either side (HudRoom, in screen heights).
         var aspect = Camera.main != null ? Camera.main.aspect : 16f / 9f;
         var across = aspect / 2 - HudRoom;
-        if (across > 0.1f) homeDistance = Mathf.Max(homeDistance, surface.extents.x / (2 * Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) * across));
+        if (across > 0.1f) homeDistance = Mathf.Max(homeDistance, framed.extents.x / (2 * Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) * across));
         var highest = (ceiling - boardHeight) / Mathf.Max(0.01f, -mainView.forward.y) / maxZoom;
         if (homeDistance > highest)
         {
@@ -128,6 +144,7 @@ public class CameraRig : MonoBehaviour
     }
 
     private const float FramedDepth = 3f;
+    private const float BigView = 4.6f;  // how deep a part of a big board the home view frames: zoomed right out, still not the whole
     private const float HudRoom = 0.25f; // a side panel's column, three or four sides (MainGameUIController.Arrange)
 
     private void OnDestroy()
@@ -139,8 +156,15 @@ public class CameraRig : MonoBehaviour
     public void ResetView()
     {
         panning = false;
-        resetting = offset.sqrMagnitude > 1e-6f;
+        Glide(home, resetSharpness);
         zoomTarget = 1f;
+    }
+
+    private void Glide(Vector3 to, float sharpness)
+    {
+        glideTo = Clamped(to);
+        glideSharpness = sharpness;
+        gliding = (offset - glideTo).sqrMagnitude > 1e-6f;
     }
 
     // How far the board reaches either side of the screen's middle in the
@@ -174,7 +198,8 @@ public class CameraRig : MonoBehaviour
         if (!panning && Time.timeScale > 0 && KeyBindings.Down(GameAction.PanView) && !PointerOverUI() && BoardPoint(out grabbed))
         {
             panning = true;
-            resetting = false;
+            gliding = false;
+            movedThisTurn = true;
             DropPulls();
         }
         else if (panning && !KeyBindings.Held(GameAction.PanView))
@@ -190,7 +215,8 @@ public class CameraRig : MonoBehaviour
         var keys = new Vector3(Axis(KeyCode.D, KeyCode.RightArrow, KeyCode.A, KeyCode.LeftArrow), 0, Axis(KeyCode.W, KeyCode.UpArrow, KeyCode.S, KeyCode.DownArrow));
         if (keys != Vector3.zero && !panning && !AimCursor.Held && Time.timeScale > 0)
         {
-            resetting = false;
+            gliding = false;
+            movedThisTurn = true;
             var depth = homeDistance * zoom * Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) * 2;
             MoveTo(offset + keys.normalized * (keyPan * depth * Time.unscaledDeltaTime));
         }
@@ -207,15 +233,58 @@ public class CameraRig : MonoBehaviour
         }
 
         if (KeyBindings.Down(GameAction.ResetView)) ResetView();
-        if (resetting)
+        if (big) Follow();
+        if (gliding)
         {
-            MoveTo(Vector3.Lerp(offset, Vector3.zero, 1 - Mathf.Exp(-resetSharpness * Time.unscaledDeltaTime)));
-            if (offset.sqrMagnitude < 1e-6f)
+            MoveTo(Vector3.Lerp(offset, glideTo, 1 - Mathf.Exp(-glideSharpness * Time.unscaledDeltaTime)));
+            if ((offset - glideTo).sqrMagnitude < 1e-6f)
             {
-                MoveTo(Vector3.zero);
-                resetting = false;
+                MoveTo(glideTo);
+                gliding = false;
             }
         }
+    }
+
+    // A big board: to the pieces of the side whose turn has come, the
+    // middle of them; through a shot, after the fastest piece.
+    private void Follow()
+    {
+        var game = GameManager.manager;
+        var turns = game != null ? game.TurnController : null;
+        if (turns == null || !turns.HasStarted) return;
+        if (turns.Turn != focusedTurn)
+        {
+            focusedTurn = turns.Turn;
+            movedThisTurn = false;
+            var side = turns.CurrentPlayerID;
+            var mine = game.gamePieceScripts.Where(p => p != null && p.gameObject.activeInHierarchy && p.Manager.playerIndex == side && p.Body.position.y > -0.05f).ToList();
+            if (mine.Count == 0) return;
+            var middle = mine.Aggregate(Vector3.zero, (sum, p) => sum + p.Body.position) / mine.Count;
+            home = Clamped(middle - pivotHome);
+            Glide(home, 3f);
+            return;
+        }
+        if (movedThisTurn || !turns.InMotion) return;
+        GamePieceDragAndReleaseForce fastest = null;
+        var top = 0.8f; // m/s: slower than this, nothing worth following
+        foreach (var piece in game.gamePieceScripts)
+        {
+            if (piece == null || !piece.gameObject.activeInHierarchy) continue;
+            var speed = piece.Body.linearVelocity.magnitude;
+            if (speed <= top) continue;
+            top = speed;
+            fastest = piece;
+        }
+        if (fastest != null) Glide(fastest.Body.position - pivotHome, 2.5f);
+    }
+
+    // An offset from home as far as the view may go.
+    private Vector3 Clamped(Vector3 to)
+    {
+        var at = pivotHome + new Vector3(to.x, 0, to.z);
+        at.x = Mathf.Clamp(at.x, limits.xMin, limits.xMax);
+        at.z = Mathf.Clamp(at.z, limits.yMin, limits.yMax);
+        return at - pivotHome;
     }
 
     private static float Axis(KeyCode plus, KeyCode plus2, KeyCode minus, KeyCode minus2) =>
@@ -275,10 +344,8 @@ public class CameraRig : MonoBehaviour
 
     private void MoveTo(Vector3 to)
     {
-        var at = pivotHome + new Vector3(to.x, 0, to.z);
-        at.x = Mathf.Clamp(at.x, limits.xMin, limits.xMax);
-        at.z = Mathf.Clamp(at.z, limits.yMin, limits.yMax);
-        offset = at - pivotHome;
+        offset = Clamped(to);
+        var at = pivotHome + offset;
         mainView.position = mainHome + offset - mainView.forward * (homeDistance * (zoom - 1)) + shaken;
         pivot.position = at;
     }

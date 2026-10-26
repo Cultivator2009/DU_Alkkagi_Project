@@ -98,6 +98,8 @@ public class BoardSetup : MonoBehaviour
     public Bounds SurfaceBounds => ActiveOrFirst.Bounds;
     // What's left of the board to play on (BoardZone crumbles it).
     public BoardShape Playable => ActiveOrFirst.Playable;
+    // How far over the board's top the ground stands at a point (BoardVariant.RiseAt).
+    public float RiseAt(Vector2 point) => ActiveOrFirst.RiseAt(point);
     // Where pieces rest while placed by hand (they drop onto the board when
     // the match starts).
     public float PieceHeight { get; private set; }
@@ -201,6 +203,8 @@ public class BoardSetup : MonoBehaviour
         Active = Array.Find(boards, b => b.type == type) ?? boards[0];
         Active.Build(); // whole again, whatever the last match left of it
         foreach (var board in boards) board.gameObject.SetActive(board == Active);
+        var props = FindAnyObjectByType<RoomProps>();
+        if (props != null) props.Clear(Active.Bounds);
     }
 
     // The third and fourth sides are white stones dyed.
@@ -433,13 +437,12 @@ public class BoardSetup : MonoBehaviour
         return points.ToArray();
     }
 
-    private Vector3 OnBoard(Vector2 point) => new Vector3(point.x, PieceHeight, point.y);
+    private Vector3 OnBoard(Vector2 point) => new Vector3(point.x, PieceHeight + ActiveOrFirst.RiseAt(point), point.y);
 
     // ---- Zones ----
 
     // Placing by hand (SpawnMode.Placement), a piece's body has to lie in
     // its side's zone and clear of every other piece's (Footprint).
-    private const float ZoneDepth = 0.8f;   // no further in than this share of the way from the side's edge to the middle
     private const float ZoneGap = 0.04f;    // a zone keeps this clear of the line it shares with a neighbour's
     private const float EdgeMargin = 0.01f; // in from the board's edge
     private const float Gap = 0.005f;       // between two pieces side by side, outline to outline (was 0.02 between circles)
@@ -447,7 +450,7 @@ public class BoardSetup : MonoBehaviour
     // A side's zone: its share of the board - where it's nearer the side's
     // own edge than any other side's, as a share of the way in from each
     // edge to the middle (on a square board, the triangle between the
-    // diagonals) - no further in than ZoneDepth. The board decides its
+    // diagonals) - no further in than the board's zoneDepth. The board decides its
     // shape; the parts may overlap (the cross's bars), so for drawing it
     // goes from the board's TopPieces instead.
     public BoardShape Zone(int player) => Zone(player, ActiveOrFirst.Shape.Inset(EdgeMargin));
@@ -457,7 +460,7 @@ public class BoardSetup : MonoBehaviour
         var own = SeatDirection(player) / EdgeDistance(player);
         for (var other = 0; other < Players; other++)
             if (other != player) board = board.Clip((own - SeatDirection(other) / EdgeDistance(other)).normalized, ZoneGap);
-        return board.Clip(SeatDirection(player), EdgeDistance(player) * (1 - ZoneDepth));
+        return board.Clip(SeatDirection(player), EdgeDistance(player) * (1 - ActiveOrFirst.zoneDepth));
     }
 
     // Edges count as inside: ClampToZone lands exactly on them, and would

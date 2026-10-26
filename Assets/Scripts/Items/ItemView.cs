@@ -45,7 +45,8 @@ public class ItemView : MonoBehaviour
         { ItemId.Shrink, new Color32(0x2F, 0x5D, 0xA8, 0x90) },
     };
 
-    private float BoardTop => game.Board.Active.transform.position.y;
+    // The ground's height under a point: the board's top, or the landscape's rise there.
+    private float Top(float x, float z) => game.Board.Active.transform.position.y + Mathf.Max(0, game.Board.Active.RiseAt(new Vector2(x, z)));
 
     public void Init(ItemSystem itemSystem, GameManager gameManager)
     {
@@ -135,7 +136,7 @@ public class ItemView : MonoBehaviour
     {
         var root = new GameObject("Item box").transform;
         root.SetParent(transform, false);
-        root.position = new Vector3(at.x, BoardTop, at.y);
+        root.position = new Vector3(at.x, Top(at.x, at.y), at.y);
         var box = new GameObject("Box").transform;
         box.SetParent(root, false);
         var size = ItemSystem.BoxRadius * 1.8f;
@@ -168,7 +169,7 @@ public class ItemView : MonoBehaviour
     {
         var material = new Material(Shader.Find("Sprites/Default")) { color = color };
         var ring = Flat("Pulse", pulseMesh, material, transform);
-        ring.position = new Vector3(at.x, BoardTop + 0.004f, at.y);
+        ring.position = new Vector3(at.x, Top(at.x, at.y) + 0.004f, at.y);
         ring.localScale = Vector3.one * 0.01f;
         pulses.Add((ring, material, Time.time, seconds, radius));
     }
@@ -186,7 +187,7 @@ public class ItemView : MonoBehaviour
         post.name = bumper ? BumperName : PillarName;
         post.transform.SetParent(game.Board.Active.transform, true);
         post.transform.localScale = new Vector3(radius * 2, height / 2, radius * 2);
-        post.transform.position = new Vector3(o.Position.x, BoardTop + height / 2, o.Position.y);
+        post.transform.position = new Vector3(o.Position.x, Top(o.Position.x, o.Position.y) + height / 2, o.Position.y);
         var solid = post.AddComponent<MeshCollider>();
         solid.sharedMesh = post.GetComponent<MeshFilter>().sharedMesh;
         solid.convex = true;
@@ -209,7 +210,7 @@ public class ItemView : MonoBehaviour
     {
         var radius = ItemSystem.RadiusOf(o.Kind);
         var patch = Flat(o.Kind.ToString(), o.Kind == ItemId.Vortex ? ringMesh : discMesh, patchMaterials[o.Kind], transform);
-        patch.position = new Vector3(o.Position.x, BoardTop + 0.0015f, o.Position.y);
+        patch.position = new Vector3(o.Position.x, Top(o.Position.x, o.Position.y) + 0.0015f, o.Position.y);
         patch.localScale = Vector3.one * radius;
         switch (o.Kind)
         {
@@ -298,7 +299,7 @@ public class ItemView : MonoBehaviour
             // Rings of two items on one piece sit one outside the other, in the items' order.
             var inside = rings.Keys.Count(k => k.piece == kv.Key.piece && k.kind < kv.Key.kind);
             var size = piece.Manager.radius * (1.3f + 0.3f * inside);
-            kv.Value.position = new Vector3(at.x, BoardTop + 0.003f, at.z);
+            kv.Value.position = new Vector3(at.x, Top(at.x, at.z) + 0.003f, at.z);
             kv.Value.localScale = Vector3.one * size;
             if (kv.Key.kind == ItemId.Shield) kv.Value.localScale *= 1f + 0.06f * Mathf.Sin(t * 4f);
         }
@@ -342,7 +343,7 @@ public class ItemView : MonoBehaviour
         var color = ItemDefs.ColorOf(ItemCategory.Shot);
         shotRing.GetComponent<Renderer>().sharedMaterial.color = new Color(color.r, color.g, color.b, 0.55f + 0.35f * Mathf.Sin(t * 8f));
         var at = piece.Body.position;
-        shotRing.position = new Vector3(at.x, BoardTop + 0.0035f, at.z);
+        shotRing.position = new Vector3(at.x, Top(at.x, at.z) + 0.0035f, at.z);
         shotRing.localScale = Vector3.one * piece.Manager.radius * (1.45f + 0.08f * Mathf.Sin(t * 8f));
     }
 
@@ -409,7 +410,7 @@ public class ItemView : MonoBehaviour
             if (piece == null) continue;
             var bounds = piece.GetComponentInChildren<Renderer>().bounds;
             var radius = piece.Manager.radius * 1.25f;
-            shell.position = new Vector3(piece.Body.position.x, BoardTop + bounds.size.y * 0.6f, piece.Body.position.z);
+            shell.position = new Vector3(piece.Body.position.x, Top(piece.Body.position.x, piece.Body.position.z) + bounds.size.y * 0.6f, piece.Body.position.z);
             shell.localScale = new Vector3(radius * 2, bounds.size.y * 0.6f + 0.01f, radius * 2);
         }
     }

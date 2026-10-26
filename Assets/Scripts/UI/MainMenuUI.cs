@@ -108,7 +108,8 @@ public class MainMenuUI : MonoBehaviour
     }
 
     // Two sides face each other, three sit round a hexagon's flat edges,
-    // four at the cross's arms' ends, the first at the bottom as in a match.
+    // four at the cross's arms' ends, the first at the bottom as in a match;
+    // on the landscape, in its corners, the first bottom left.
     private void RenderPreview(MatchSettings rules)
     {
         if (previewBoard == null) return;
@@ -122,9 +123,11 @@ public class MainMenuUI : MonoBehaviour
         {
             previewStones[i].gameObject.SetActive(i < rules.Seats);
             if (i >= rules.Seats) continue;
-            var degrees = rules.Seats == 3 ? 270 - i * 120 : rules.Seats == 4 ? 270 - i * 90 : i == 0 ? 270 : 90;
+            var corners = rules.BoardType == BoardType.Landscape;
+            var degrees = corners ? (rules.Seats == 2 ? (i == 0 ? 225 : 45) : 225 - i * 90)
+                : rules.Seats == 3 ? 270 - i * 120 : rules.Seats == 4 ? 270 - i * 90 : i == 0 ? 270 : 90;
             var way = new Vector2(Mathf.Cos(degrees * Mathf.Deg2Rad), Mathf.Sin(degrees * Mathf.Deg2Rad));
-            ((RectTransform)previewStones[i].transform).anchoredPosition = way * (size * 0.38f);
+            ((RectTransform)previewStones[i].transform).anchoredPosition = way * (size * (corners ? 0.5f : 0.38f));
             previewStones[i].Show(pieces);
         }
         string Format(MatchSettingId id) => MatchSettings.Defs[(int)id].Format(rules.Get(id));

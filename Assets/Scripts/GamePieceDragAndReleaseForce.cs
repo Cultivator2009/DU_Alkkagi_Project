@@ -14,6 +14,8 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // A piece sliding on the board slows at about this from PhysX's friction
     // alone (0.875 g); AIPlanner counts on it too.
     public const float BoardSlowing = 8.8f;
+    private const float SettleBelow = 0.08f; // m/s: on the landscape, slow enough to be stopped (Slow)
+    private const float SettleSpin = 2.5f;   // rad/s: and turning no faster (a toppling chess piece goes on)
     // Slowing on top of that (m/s², PieceSet.Grip) while the piece is down
     // on the board. Set at spawn.
     [NonSerialized] public float extraSlowing;
@@ -216,25 +218,40 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         {
             if (solid == null) solid = Array.Find(GetComponentsInChildren<Collider>(), c => !c.isTrigger);
             var board = GameManager.manager.Board;
-            Slow(rb, solid, extraSlowing, board.Active.transform.position.y, board.Playable);
+            Slow(rb, solid, extraSlowing, board.Active, board.Playable);
         }
         UpdateSettleState();
     }
 
-    // The extra slowing on a piece down on the board (its foot at the
-    // board's top, not up on another piece or a hinge), through its centre
-    // of mass: friction at its foot would tip it. The AI's copies are slowed
-    // the same way (AIPlanner).
-    public static void Slow(Rigidbody body, Collider solid, float slowing, float boardTop, BoardShape board)
+    // The extra slowing on a piece down on the board (its foot on the
+    // ground under it - the board's top, or the landscape's rise there - not
+    // up on another piece or a hinge, nor in the air off a step), through its
+    // centre of mass: friction at its foot would tip it. The AI's copies are
+    // slowed the same way (AIPlanner).
+    public static void Slow(Rigidbody body, Collider solid, float slowing, BoardVariant ground, BoardShape board)
     {
-        if (slowing <= 0 || solid == null || solid.bounds.min.y > boardTop + 0.003f) return;
+        if (slowing <= 0 || solid == null) return;
         var at = body.position;
-        if (!board.Contains(new Vector2(at.x, at.z))) return;
+        var flatAt = new Vector2(at.x, at.z);
+        if (solid.bounds.min.y > ground.transform.position.y + ground.RiseAt(flatAt) + 0.003f) return;
+        if (!board.Contains(flatAt)) return;
         var velocity = body.linearVelocity;
         var flat = new Vector3(velocity.x, 0, velocity.z);
         // Not at a crawl: friction ends that by itself, and pushing it every
         // step would keep the piece awake, never asleep - never settled.
         var speed = flat.magnitude;
+        // On the landscape's ground (a mesh of small faces) a piece all but
+        // stopped never quite comes to rest: its contacts jitter it on (a
+        // board's flat top lets it fall asleep). There it's stopped, as it
+        // would stop on a board; the ground's grip holds it on a ramp
+        // anyway. Stopped, not put to sleep: that would drop a flick or a
+        // knock given it this step.
+        if (ground.IsRelief && speed < SettleBelow && body.angularVelocity.sqrMagnitude < SettleSpin * SettleSpin)
+        {
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+            return;
+        }
         if (speed < 0.05f) return;
         body.AddForce(-flat * (Mathf.Min(speed, slowing * Time.fixedDeltaTime) / speed), ForceMode.VelocityChange);
     }

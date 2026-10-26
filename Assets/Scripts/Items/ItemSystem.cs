@@ -237,9 +237,9 @@ public class ItemSystem : MonoBehaviour
 
     public GamePieceDragAndReleaseForce BenchedOf(int side) => benched.LastOrDefault(p => p != null && p.Manager.playerIndex == side);
 
-    // A post fits here: on the board, its foot clear of the edge, every piece and the other posts.
+    // A post fits here: on the board, its foot clear of the edge, every piece and the other posts (and out of the landscape's ponds).
     public bool PostFits(Vector2 point, float radius) =>
-        Board.Playable.Contains(point, radius + 0.02f) && Clear(point, radius + 0.01f, null)
+        Board.Playable.Contains(point, radius + 0.02f) && Board.RiseAt(point) >= -0.01f && Clear(point, radius + 0.01f, null)
         && State.Objects.All(o => !IsPost(o.Kind) || (o.Position - point).magnitude > RadiusOf(o.Kind) + radius + 0.02f);
 
     // Posts stand up from the board (a collider of their own); the rest lie on it.
@@ -550,6 +550,7 @@ public class ItemSystem : MonoBehaviour
         {
             var point = new Vector2(Mathf.Lerp(bounds.xMin, bounds.xMax, (float)random.NextDouble()), Mathf.Lerp(bounds.yMin, bounds.yMax, (float)random.NextDouble()));
             if (!shape.Contains(point, 0.25f) || !Clear(point, BoxRadius + 0.15f, null)) continue;
+            if (Board.RiseAt(point) < -0.01f) continue; // not in a pond or on the slope into it (the landscape)
             if (State.Boxes.Any(b => (b.Position - point).magnitude < 0.4f)) continue;
             if (State.Objects.Any(o => (o.Position - point).magnitude < RadiusOf(o.Kind) + BoxRadius + 0.1f)) continue;
             var box = new ItemBox { Id = State.NextId++, Position = point };

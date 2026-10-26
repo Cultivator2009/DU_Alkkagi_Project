@@ -339,7 +339,7 @@ public class MainGameUIController : MonoBehaviour
         var canvas = CanvasRect.rect;
         var board = GameManager.manager.Board;
         if (CameraRig.Instance == null || board == null) return canvas.width;
-        return canvas.width / 2 - CameraRig.Instance.HomeHalfWidth(board.SurfaceBounds) * canvas.height;
+        return canvas.width / 2 - CameraRig.Instance.HomeHalfWidth(CameraRig.Instance.Framed) * canvas.height;
     }
 
     private static bool IsTurnState(GameManager.GameState state)

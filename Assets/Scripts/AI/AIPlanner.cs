@@ -73,7 +73,7 @@ public class AIPlanner : IDisposable
     private readonly PhysicsScene physics;
     private readonly List<Stand> stands = new List<Stand>();
     private readonly BoardShape shape;    // what's left of the board
-    private readonly float boardTop;      // the height of its top
+    private readonly BoardVariant ground; // the board: where its top is, under each point
     private readonly BoardShape afterShot; // and what will be once this turn is over (the edge may be coming in)
     private readonly BothOutRule bothOutRule;
     private readonly IRuleset ruleset;
@@ -94,7 +94,7 @@ public class AIPlanner : IDisposable
         bothOutRule = rule;
 
         Copy(board.Active.gameObject);
-        boardTop = board.Active.transform.position.y;
+        ground = board.Active;
         foreach (var piece in pieces)
         {
             if (piece == null) continue;
@@ -140,6 +140,7 @@ public class AIPlanner : IDisposable
     public IEnumerator Plan(int player, AILevel level, float secondsBudget, Action<PlannedShot?> done)
     {
         var tries = level == AILevel.Easy ? 12 : level == AILevel.Normal ? 30 : 60;
+        if (ground.IsRelief) tries *= 2; // the knocks and the approaches both
         var candidates = Candidates(player).OrderByDescending(c => c.Priority).Take(tries).ToList();
         var results = new List<(Candidate candidate, float score)>();
         var total = Stopwatch.StartNew();
@@ -241,7 +242,7 @@ public class AIPlanner : IDisposable
                 if (stand.Out) continue;
                 var velocity = stand.Body.linearVelocity;
                 if (velocity.y > stand.MaxRise) stand.Body.linearVelocity = new Vector3(velocity.x, stand.MaxRise, velocity.z);
-                GamePieceDragAndReleaseForce.Slow(stand.Body, stand.Solid, stand.Source.extraSlowing, boardTop, shape);
+                GamePieceDragAndReleaseForce.Slow(stand.Body, stand.Solid, stand.Source.extraSlowing, ground, shape);
                 if (velocity.sqrMagnitude > 0.0025f || stand.Body.angularVelocity.sqrMagnitude > 0.0025f) moving = true;
             }
             physics.Simulate(Time.fixedDeltaTime);
@@ -264,10 +265,15 @@ public class AIPlanner : IDisposable
             still = step > 5 && !moving ? still + 1 : 0;
             if (frame.Elapsed.TotalMilliseconds > FrameBudgetMs) yield return null;
         }
-        score(Score(player));
+        score(Score(player, shooter));
     }
 
-    private float Score(int player)
+    // On the landscape, a shot that brings its piece nearer the nearest
+    // piece it can knock counts for a little: out of reach of everything,
+    // the next shot can't score.
+    private const float Approach = 1.5f;
+
+    private float Score(int player, Stand shooter)
     {
         var lost = new (int pieces, int value)[sides.Count];
         float mineOut = 0, theirsOut = 0;
@@ -309,6 +315,19 @@ public class AIPlanner : IDisposable
             }
             var nearEdge = 1f - Mathf.Clamp01(afterShot.Margin(flat) / 0.5f);
             position += mine ? -0.8f * nearEdge : 0.8f * nearEdge;
+            // A pond's rim is as near as an edge, and the slope into it reaches further:
+            // its own piece left by one is as good as in it at the next miss.
+            if (ground.IsRelief)
+            {
+                var nearPond = 1f - Mathf.Clamp01(BoardTerrain.PondMargin(flat - new Vector2(ground.transform.position.x, ground.transform.position.z)) / 1f);
+                position += mine ? -2.5f * nearPond : 0.8f * nearPond;
+            }
+        }
+        if (ground.IsRelief && !shooter.Out)
+        {
+            var before = NearestTarget(player, shooter, shooter.Source.Body.position);
+            var after = NearestTarget(player, shooter, shooter.Body.position);
+            if (before < float.MaxValue && after < float.MaxValue) position += Approach * Mathf.Clamp((before - after) / 4f, -1f, 1f);
         }
 
         var score = 10f * theirsOut - 12f * mineOut + position;
@@ -325,6 +344,19 @@ public class AIPlanner : IDisposable
         return score;
     }
 
+    // How far from a point the nearest piece the player could knock is, as
+    // the copy has it now.
+    private float NearestTarget(int player, Stand shooter, Vector3 from)
+    {
+        var nearest = float.MaxValue;
+        foreach (var stand in stands)
+        {
+            if (stand == shooter || stand.Out || stand.Source == null || teamOf(stand.Owner) == teamOf(player) || !sides[stand.Owner].Standing) continue;
+            nearest = Mathf.Min(nearest, (Flat(stand.Body.position) - Flat(from)).magnitude);
+        }
+        return nearest;
+    }
+
     private IEnumerable<Candidate> Candidates(int player)
     {
         var mine = stands.Where(s => s.Owner == player && s.Source != null && (PieceSelector.MayMove == null || PieceSelector.MayMove(s.Source))).ToList();
@@ -337,6 +369,7 @@ public class AIPlanner : IDisposable
             var toTarget = to - from;
             var distance = toTarget.magnitude;
             if (distance < 1e-3f) continue;
+            if (ground.IsRelief && distance > Reach(shooter) + shooter.Radius + target.Radius) continue; // out of reach: an approach (below) instead
             var side = new Vector3(-toTarget.z, 0, toTarget.x) / distance;
             var blocked = Blocked(shooter, target, from, to);
             foreach (var cut in new[] { 0f, -0.45f, 0.45f })
@@ -351,6 +384,53 @@ public class AIPlanner : IDisposable
                 if (power < 1f) yield return new Candidate { Shooter = shooter, Direction = aim, Power = 1f, Priority = priority - 0.4f };
             }
         }
+        if (!ground.IsRelief) yield break;
+        // The landscape: most of the other sides are out of reach. Every
+        // way round (a long slide and a shorter one), not past a pond (a
+        // little off, and it's in) nor off the board; first those that end
+        // nearest the nearest piece it could knock, a striking distance short.
+        var offset = new Vector2(ground.transform.position.x, ground.transform.position.z);
+        foreach (var shooter in mine)
+        {
+            var from = Flat(shooter.Source.transform.position);
+            if (theirs.Count == 0) yield break;
+            var nearest = theirs.Select(t => Flat(t.Source.transform.position)).OrderBy(p => (p - from).sqrMagnitude).First();
+            var away = (nearest - from).magnitude;
+            if (away < Reach(shooter) * 0.6f) continue; // in reach: the shots above
+            var fullSpeed = FullSpeed(shooter);
+            for (var k = 0; k < 16; k++)
+            {
+                var a = k * Mathf.PI / 8;
+                var way = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                foreach (var share in new[] { 1f, 0.6f })
+                {
+                    var travel = Mathf.Min(Reach(shooter) * share, Mathf.Max(0.3f, away - StrikingDistance));
+                    var stop = from + way * travel;
+                    if (EdgeDistance(from, way) < travel + 0.4f) continue;
+                    if (BoardTerrain.PassesPond(new Vector2(from.x, from.z) - offset, new Vector2(stop.x, stop.z) - offset, 0.45f)) continue;
+                    if (PathBlocked(shooter, from, stop)) continue; // its own front row, say
+                    var gain = away - (nearest - stop).magnitude;
+                    if (gain < 0.3f) continue;
+                    var power = Mathf.Clamp(Mathf.Sqrt(2 * Deceleration * travel) / fullSpeed, 0.12f, 1f);
+                    yield return new Candidate { Shooter = shooter, Direction = way, Power = power, Priority = gain - 6f };
+                }
+            }
+        }
+    }
+
+    private const float StrikingDistance = 1.2f; // short of a far target, to strike it from next turn
+
+    private static float FullSpeed(Stand shooter)
+    {
+        var source = shooter.Source;
+        return source.maxForce / source.referenceMass * Mathf.Pow(source.referenceMass / source.LaunchMass, source.massExponent);
+    }
+
+    // How far a full shot slides on level ground.
+    private static float Reach(Stand shooter)
+    {
+        var speed = FullSpeed(shooter);
+        return speed * speed / (2 * Deceleration);
     }
 
     // The pull that should send target just over the edge when shooter hits
@@ -367,6 +447,20 @@ public class AIPlanner : IDisposable
         var source = shooter.Source;
         var fullSpeed = source.maxForce / source.referenceMass * Mathf.Pow(source.referenceMass / source.LaunchMass, source.massExponent);
         return Mathf.Clamp(launch / fullSpeed, 0.12f, 1f);
+    }
+
+    // Something stands in the way from one point to another (any piece but the shooter).
+    private bool PathBlocked(Stand shooter, Vector3 from, Vector3 to)
+    {
+        var line = to - from;
+        foreach (var other in stands)
+        {
+            if (other == shooter || other.Source == null) continue;
+            var point = Flat(other.Source.transform.position);
+            var t = Mathf.Clamp01(Vector3.Dot(point - from, line) / line.sqrMagnitude);
+            if ((from + line * t - point).magnitude < shooter.Radius + other.Radius) return true;
+        }
+        return false;
     }
 
     private bool Blocked(Stand shooter, Stand target, Vector3 from, Vector3 to)

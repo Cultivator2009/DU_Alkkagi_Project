@@ -28,7 +28,8 @@ public enum BoardType : byte
     Random,
     Chess,
     Hexagon, // three sides, a flat edge each (two across from each other); not for four
-    Cross    // four sides, one at the end of each arm
+    Cross,   // four sides, one at the end of each arm
+    Landscape // the big one: a relief of steps, ramps, hills, rocks and ponds, a base in every corner (BoardTerrain); never rolled by Random
 }
 
 public enum PieceType : byte
@@ -201,7 +202,7 @@ public sealed class MatchSettings
         new MatchSettingDef(MatchSettingId.Barrier, "barrier", "match.barrier", new[] { 0, 1 }, 0,
             v => Loc.Get(v == 1 ? "option.on" : "option.off"), s => s.Variant == GameVariant.Health),
         new MatchSettingDef(MatchSettingId.BoardType, "board", "match.board",
-            new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Hexagon, (int)global::BoardType.Cross, (int)global::BoardType.Random }, (int)global::BoardType.Go,
+            new[] { (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Hexagon, (int)global::BoardType.Cross, (int)global::BoardType.Landscape, (int)global::BoardType.Random }, (int)global::BoardType.Go,
             v => Loc.Get("board." + (global::BoardType)v), isAvailable: (s, v) => BoardFits((global::BoardType)v, s.Seats),
             ranked: new[] { (int)global::BoardType.Random, (int)global::BoardType.Go, (int)global::BoardType.Janggi, (int)global::BoardType.Chess, (int)global::BoardType.Hexagon, (int)global::BoardType.Cross }),
         new MatchSettingDef(MatchSettingId.PieceType, "pieces", "match.pieces", new[] { (int)global::PieceType.GoStones, (int)global::PieceType.JanggiPieces, (int)global::PieceType.ChessPieces, (int)global::PieceType.GonggiStones, (int)global::PieceType.Random }, (int)global::PieceType.GoStones,
@@ -240,7 +241,7 @@ public sealed class MatchSettings
         // Normal: always, and a round limit behind it. Ranked: the round
         // limit alone.
         new MatchSettingDef(MatchSettingId.Zone, "zone", "match.zone", new[] { 1, 0 }, 1,
-            v => Loc.Get(v == 1 ? "option.on" : "option.off"), s => !s.Walled, normal: new[] { 1 }, ranked: new[] { 0 }),
+            v => Loc.Get(v == 1 ? "option.on" : "option.off"), s => !s.Walled && s.BoardType != global::BoardType.Landscape, normal: new[] { 1 }, ranked: new[] { 0 }),
         new MatchSettingDef(MatchSettingId.RoundLimit, "roundLimit", "match.roundLimit", new[] { 0, 15, 20, 30, 40 }, 0,
             v => v == 0 ? Loc.Get("option.noLimit") : Loc.Get("option.rounds", v), normal: new[] { 20 }, ranked: new[] { 20 }),
         new MatchSettingDef(MatchSettingId.BothOutRule, "bothOut", "match.bothOut",
@@ -329,7 +330,8 @@ public sealed class MatchSettings
     public PlacementStyle PlacementStyle => (PlacementStyle)Get(MatchSettingId.PlacementStyle);
     public int PlacementSeconds => Get(MatchSettingId.PlacementSeconds);
     public int TurnSeconds => Get(MatchSettingId.TurnSeconds); // 0 = no limit
-    public bool Zone => Get(MatchSettingId.Zone) == 1 && !Walled;
+    // Not on the landscape: its bases are in its corners, the first ground to go.
+    public bool Zone => Get(MatchSettingId.Zone) == 1 && !Walled && BoardType != BoardType.Landscape;
     public int RoundLimit => Get(MatchSettingId.RoundLimit); // 0 = none
     public BothOutRule BothOutRule => (BothOutRule)Get(MatchSettingId.BothOutRule);
     public bool ItemsOn => Get(MatchSettingId.Items) == 1;
@@ -413,10 +415,11 @@ public sealed class MatchSettings
     }
 
     // Any of the rule's values the mode and the others allow but Random
-    // itself (Ranked: go stones or janggi pieces).
+    // itself (Ranked: go stones or janggi pieces), and but the landscape: a
+    // match of another kind, picked for itself.
     private int Roll(MatchSettingId id, int random)
     {
-        var choices = Allowed(Defs[(int)id]).Where(v => v != random).ToArray();
+        var choices = Allowed(Defs[(int)id]).Where(v => v != random && !(id == MatchSettingId.BoardType && v == (int)BoardType.Landscape)).ToArray();
         return choices[UnityEngine.Random.Range(0, choices.Length)];
     }
 
