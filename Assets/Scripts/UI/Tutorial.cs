@@ -145,6 +145,8 @@ public class Tutorial : MonoBehaviour
         turns.OnMatchEnded += MatchEnded;
         white = FindObjectsByType<AIOpponent>(FindObjectsSortMode.None).FirstOrDefault(ai => ai.playerId == 1);
         if (white != null) white.paused = true;
+        // Each lesson shot goes straight back to black (white passes): no breath, no round card between.
+        turns.Breathless = true;
         card = FindAnyObjectByType<TutorialCard>(FindObjectsInactive.Include);
         if (card != null) card.OnSkip += Advance;
         Show();
@@ -172,6 +174,7 @@ public class Tutorial : MonoBehaviour
         if (step == Step.Play) return;
         step++;
         if (step == Step.Play && white != null) white.paused = false;
+        if (step == Step.Play) turns.Breathless = false;
         Show();
     }
 

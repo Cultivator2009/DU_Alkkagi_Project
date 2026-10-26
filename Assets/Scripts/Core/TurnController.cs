@@ -73,6 +73,7 @@ public class TurnController
     public float ReadyAt { get; private set; }  // real time
     public bool Ready => Time.unscaledTime >= ReadyAt;
     public bool RoundBegun { get; private set; } // this turn opened a round (not the first)
+    public bool Breathless { get; set; }        // no breath between turns (the practice match's lessons, white sitting out)
     private float settledAt = -1;               // real time everything was first seen still
     public KillLog Kills { get; }
     public IReadOnlyList<Side> Sides => sides;
@@ -375,8 +376,8 @@ public class TurnController
     // The new turn's breath (the first turn has none: the match's start is its own).
     private void Breathe(bool newRound)
     {
-        RoundBegun = newRound && Turn > 1;
-        ReadyAt = Time.unscaledTime + (Turn <= 1 ? 0 : RoundBegun ? RoundBeat : TurnBeat);
+        RoundBegun = newRound && Turn > 1 && !Breathless;
+        ReadyAt = Time.unscaledTime + (Turn <= 1 || Breathless ? 0 : RoundBegun ? RoundBeat : TurnBeat);
     }
 
     // The host's word on the sides between turns (an item's doing).
