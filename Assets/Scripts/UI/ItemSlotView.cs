@@ -13,6 +13,7 @@ public class ItemSlotView : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
     public Button button;
     public Image fill;
     public TMP_Text nameText;
+    public Image icon;           // the item's sign (ItemIcons), over its name
     public CanvasGroup group;
     public GameObject readyMark; // a line round it while it may be used
     public UIPulse pulse;        // played as a new item comes into it
@@ -29,6 +30,11 @@ public class ItemSlotView : MonoBehaviour, IPointerEnterHandler, IPointerExitHan
         var def = has ? ItemDefs.Of((ItemId)item) : default;
         fill.color = has ? ItemDefs.ColorOf(def.Category) : emptyColor;
         nameText.text = has ? def.Name : string.Empty;
+        if (icon != null)
+        {
+            icon.sprite = has ? ItemIcons.Of((ItemId)item) : null;
+            icon.enabled = icon.sprite != null;
+        }
         button.interactable = has && usable;
         group.alpha = has ? (usable ? 1f : 0.8f) : 0.55f;
         if (readyMark != null) readyMark.SetActive(has && usable);

@@ -206,12 +206,18 @@ namespace AlkkagiUIEditor
             ready.rectTransform.Stretch(-3);
             tile.readyMark = ready.gameObject;
             ready.gameObject.SetActive(false);
+            // Its sign above, its name below (both set at runtime).
+            var sign = size.y * 0.5f;
+            tile.icon = UIKit.Image(bg.transform, "Icon", null, Theme.SealText);
+            tile.icon.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -size.y * 0.08f), new Vector2(sign, sign));
+            tile.icon.preserveAspect = true;
             // ASCII placeholder: the item's name is set at runtime.
-            tile.nameText = UIKit.Text(bg.transform, "Name", "Item", 24, true, Theme.SealText, TextAlignmentOptions.Center);
-            tile.nameText.rectTransform.Stretch(6);
+            tile.nameText = UIKit.Text(bg.transform, "Name", "Item", 20, true, Theme.SealText, TextAlignmentOptions.Center);
+            tile.nameText.rectTransform.Stretch(4);
+            tile.nameText.rectTransform.offsetMax = new Vector2(-4, -(size.y * 0.08f + sign));
             tile.nameText.enableAutoSizing = true;
-            tile.nameText.fontSizeMin = 15;
-            tile.nameText.fontSizeMax = 24;
+            tile.nameText.fontSizeMin = 12;
+            tile.nameText.fontSizeMax = 20;
             tile.pulse = Pulse(bg.gameObject, 1.3f, 0.35f);
             return tile;
         }
