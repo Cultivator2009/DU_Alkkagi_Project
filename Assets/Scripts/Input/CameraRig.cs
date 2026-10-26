@@ -94,6 +94,11 @@ public class CameraRig : MonoBehaviour
             main.m_Lens.FieldOfView = tallFieldOfView;
         }
         homeDistance = distance * fit;
+        // A narrow screen (5:4, 4:3): back far enough that the board leaves
+        // the HUD its columns either side (HudRoom, in screen heights).
+        var aspect = Camera.main != null ? Camera.main.aspect : 16f / 9f;
+        var across = aspect / 2 - HudRoom;
+        if (across > 0.1f) homeDistance = Mathf.Max(homeDistance, surface.extents.x / (2 * Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) * across));
         var highest = (ceiling - boardHeight) / Mathf.Max(0.01f, -mainView.forward.y) / maxZoom;
         if (homeDistance > highest)
         {
@@ -107,6 +112,7 @@ public class CameraRig : MonoBehaviour
     }
 
     private const float FramedDepth = 3f;
+    private const float HudRoom = 0.25f; // a side panel's column, three or four sides (MainGameUIController.Arrange)
 
     private void OnDestroy()
     {

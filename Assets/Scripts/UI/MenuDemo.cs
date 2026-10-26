@@ -98,7 +98,9 @@ public class MenuDemo : MonoBehaviour
         }
         // Back far enough for the board, the board right of the screen's middle.
         var size = s.view;
-        viewTo = new Vector3(-size * 0.4f, 0, -size * 0.06f);
+        // Wider screens (21:9) set it further right, as the menu stays at the left edge.
+        var wide = view != null ? view.aspect / (16f / 9f) : 1f;
+        viewTo = new Vector3(-size * 0.4f * wide, 0, -size * 0.06f);
         viewFrom = viewTo + Quaternion.Euler(58, 0, 0) * Vector3.back * size * 2.05f;
     }
 
