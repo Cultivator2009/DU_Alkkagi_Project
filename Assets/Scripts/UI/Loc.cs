@@ -472,6 +472,7 @@ public static class Loc
         { "records.streakValue", ("최다 {0} · 지금 {1}", "Best {0} · now {1}") },
         { "records.time", ("플레이 시간", "Time played") },
         { "records.hours", ("{0}시간 {1}분", "{0}h {1}m") },
+        { "setup.preview", ("판 미리보기", "The board") },
         { "records.minutes", ("{0}분", "{0}m") },
         { "ach.Practice.title", ("연습 완료", "Practice done") },
         { "ach.Practice.desc", ("연습 판을 끝까지 하기", "Play the practice match to the end") },

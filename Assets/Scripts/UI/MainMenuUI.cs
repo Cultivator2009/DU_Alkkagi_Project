@@ -29,6 +29,11 @@ public class MainMenuUI : MonoBehaviour
     public TMP_Text[] seatLabels;
     public SegmentedToggle[] seatToggles;
     public float seatRowPitch = 72f;
+    // Beside the card: the board chosen, from above, a stone at each side's place.
+    public Image previewBoard;
+    public Sprite[] boardPreviews; // by BoardType (none for Random)
+    public SideMark[] previewStones;
+    public TMP_Text previewCaption;
     public Button setupStartButton;
     public Button setupCancelButton;
     public GameObject steamUserRow;
@@ -99,6 +104,31 @@ public class MainMenuUI : MonoBehaviour
         var hidden = seatRows.Length - rules.Seats;
         setupCard.sizeDelta = new Vector2(setupCard.sizeDelta.x, cardHeight - hidden * seatRowPitch);
         ((RectTransform)setupRules.transform).anchoredPosition = rulesTop + Vector2.up * (hidden * seatRowPitch);
+        RenderPreview(rules);
+    }
+
+    // Two sides face each other, three sit round a hexagon's flat edges,
+    // four at the cross's arms' ends, the first at the bottom as in a match.
+    private void RenderPreview(MatchSettings rules)
+    {
+        if (previewBoard == null) return;
+        var board = (int)rules.BoardType;
+        var sprite = board < boardPreviews.Length ? boardPreviews[board] : null;
+        previewBoard.sprite = sprite != null ? sprite : boardPreviews[(int)BoardType.Go];
+        previewBoard.color = sprite != null ? Color.white : new Color(1, 1, 1, 0.25f); // random: any of them
+        var pieces = rules.PieceType == PieceType.Random ? PieceType.GoStones : rules.PieceType;
+        var size = previewBoard.rectTransform.rect.width;
+        for (var i = 0; i < previewStones.Length; i++)
+        {
+            previewStones[i].gameObject.SetActive(i < rules.Seats);
+            if (i >= rules.Seats) continue;
+            var degrees = rules.Seats == 3 ? 270 - i * 120 : rules.Seats == 4 ? 270 - i * 90 : i == 0 ? 270 : 90;
+            var way = new Vector2(Mathf.Cos(degrees * Mathf.Deg2Rad), Mathf.Sin(degrees * Mathf.Deg2Rad));
+            ((RectTransform)previewStones[i].transform).anchoredPosition = way * (size * 0.38f);
+            previewStones[i].Show(pieces);
+        }
+        string Format(MatchSettingId id) => MatchSettings.Defs[(int)id].Format(rules.Get(id));
+        previewCaption.text = $"{Format(MatchSettingId.BoardType)} · {Format(MatchSettingId.PieceType)}\n{Format(MatchSettingId.Seats)}";
     }
 
     private void StartLocalMatch()

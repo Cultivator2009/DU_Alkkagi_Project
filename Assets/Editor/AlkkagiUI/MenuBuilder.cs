@@ -331,8 +331,12 @@ namespace AlkkagiUIEditor
 
             var card = UIKit.Panel(overlay.transform, "Card", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
             UIKit.Appear(overlay, card.rectTransform);
-            card.rectTransform.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(width, 148 + seats * seatPitch + rulesHeight + 40 + 84 + 48));
+            // Left of the middle, the board picture's card beside it.
+            const float previewWidth = 440, cardsGap = 24;
+            var shift = (width + cardsGap + previewWidth) / 2;
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(width / 2 - shift, 0), new Vector2(width, 148 + seats * seatPitch + rulesHeight + 40 + 84 + 48));
             menu.setupCard = card.rectTransform;
+            BuildSetupPreview(overlay.transform, menu, new Vector2(shift - previewWidth / 2, 0), previewWidth);
             menu.seatRowPitch = seatPitch;
             var top = new Vector2(0.5f, 1);
 
@@ -361,6 +365,34 @@ namespace AlkkagiUIEditor
             menu.setupStartButton = UIKit.CapsuleButton(card.transform, "StartButton", "setup.start", new Vector2(280, 84), true, 32);
             menu.setupStartButton.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(-pad, 48), new Vector2(280, 84));
             overlay.gameObject.SetActive(false);
+        }
+
+        // The chosen board from above (Tools > Alkkagi > Build board
+        // previews), a stone at each side's place, and what it is in words.
+        private static void BuildSetupPreview(Transform overlay, MainMenuUI menu, Vector2 at, float width)
+        {
+            const float board = 360;
+            var card = UIKit.Panel(overlay, "Preview", Theme.Hanji, Theme.Ink, 0.8f, raycast: true);
+            card.rectTransform.Place(new Vector2(0.5f, 0.5f), at, new Vector2(width, board + 200));
+            var top = new Vector2(0.5f, 1);
+            UIKit.Label(card.transform, "Title", "setup.preview", 30, true, Theme.InkSoft, TextAlignmentOptions.Center)
+                .rectTransform.Place(top, new Vector2(0, -28), new Vector2(width - 40, 40));
+            menu.previewBoard = UIKit.Image(card.transform, "Board", null, Color.white);
+            menu.previewBoard.preserveAspect = true;
+            menu.previewBoard.rectTransform.Place(top, new Vector2(0, -80), new Vector2(board, board));
+            menu.boardPreviews = System.Enum.GetValues(typeof(BoardType)).Cast<BoardType>()
+                .Select(type => AssetDatabase.LoadAssetAtPath<Sprite>($"{BoardPreviewBuilder.Dir}/Board_{type}.png")).ToArray();
+            menu.previewStones = new SideMark[4];
+            for (var i = 0; i < 4; i++)
+            {
+                var stone = UIKit.Stone(menu.previewBoard.transform, "Side" + i, 36, Theme.StoneBlack, Theme.Ink, false);
+                stone.Place(new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(36, 36), new Vector2(0.5f, 0.5f));
+                menu.previewStones[i] = UIKit.Mark(stone, i);
+            }
+            // ASCII placeholder: set at runtime.
+            menu.previewCaption = UIKit.Text(card.transform, "Caption", "Board", 26, true, Theme.Ink, TextAlignmentOptions.Center);
+            menu.previewCaption.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0, 36), new Vector2(width - 48, 72), new Vector2(0.5f, 0));
+            menu.previewCaption.textWrappingMode = TextWrappingModes.Normal;
         }
 
         // The rankings: Top / Around me / Friends, this player's own line, ten
