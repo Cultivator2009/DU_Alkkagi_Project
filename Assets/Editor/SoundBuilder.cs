@@ -160,6 +160,53 @@ internal static class SoundBuilder
         Debug.Log("[Alkkagi] Sounds built into " + AudioDir + ".");
     }
 
+    // The item mode's own sounds (ItemView), item_*: new files only, so a
+    // recording put in place of another sound is never written over.
+    [MenuItem("Tools/Alkkagi/Build item sounds")]
+    private static void BuildItems()
+    {
+        Directory.CreateDirectory(AudioDir);
+        var noise = new System.Random(20261026);
+        // Used: a bright two-note lift.
+        Write("item_use", 0.5f, 0.6f, t => Bell(t, 1318.5f, 0.18f) + 0.8f * Bell(t - 0.07f, 1760f, 0.22f), Swish(noise, 0.2f, 1800, 5200));
+        // Got one: a run up of three, sparkling.
+        Write("item_gain", 0.8f, 0.65f, t => Bell(t, 1046.5f, 0.2f) + Bell(t - 0.06f, 1318.5f, 0.2f) + Bell(t - 0.12f, 1568f, 0.35f),
+            Grains(noise, 0.6f, 26, 4200, 7800, 0.01f, 0.18f, 0.35f));
+        // A box turns up: one soft high chime.
+        Write("item_box", 0.6f, 0.45f, t => Bell(t, 2093f, 0.25f), null);
+        // The blast: a boom, a crack and debris.
+        Write("item_blast", 1.1f, 0.95f, t => Mode(t, 55, 0.25f, 1f) + Mode(t, 110, 0.12f, 0.6f),
+            Mix(Burst(noise, 0.02f, 1.1f, lowpass: 3500), Rumble(noise, 1.0f, 180, 1.3f), Grains(noise, 0.9f, 30, 900, 2600, 0.015f, 0.12f, 0.5f)));
+        // Frozen: ice crackling.
+        Write("item_freeze", 0.7f, 0.6f, t => Mode(t, 3520, 0.05f, 0.3f), Grains(noise, 0.7f, 60, 3000, 9000, 0.004f, 0.3f, 0.45f));
+        // A pad: a whoosh rising.
+        Write("item_boost", 0.4f, 0.75f, t => Glide(t, 300, 900, 0.3f, 0.15f) * 0.4f, Swish(noise, 0.35f, 700, 6000));
+        // A bumper: a springy boing falling in pitch.
+        Write("item_bumper", 0.45f, 0.85f, t => Glide(t, 520, 260, 0.35f, 0.14f) + 0.3f * Glide(t, 1040, 520, 0.35f, 0.07f), Burst(noise, 0.002f, 0.4f, highpass: 1500));
+        // Down a hole: a hollow plop and a drop.
+        Write("item_sink", 0.6f, 0.75f, t => Glide(t, 420, 140, 0.18f, 0.08f) + Mode(t - 0.2f, 90, 0.12f, 0.6f), null);
+        // A shield: a shimmer.
+        Write("item_shield", 0.7f, 0.55f, t => Bell(t, 1568f, 0.3f) + Bell(t, 1575f, 0.3f) * 0.7f + Bell(t - 0.05f, 2349f, 0.25f) * 0.5f, null);
+        // Glue: a sticky squelch.
+        Write("item_glue", 0.3f, 0.6f, t => Glide(t, 180, 90, 0.2f, 0.06f), Burst(noise, 0.04f, 0.4f, lowpass: 900));
+        // A quake: the board rumbling.
+        Write("item_quake", 1.4f, 0.9f, t => Mode(t, 42, 0.5f, 0.6f), Mix(Rumble(noise, 1.4f, 120, 1.4f), Grains(noise, 1.3f, 24, 300, 900, 0.03f, 0.15f, 1.0f)));
+        // Fog: a long soft breath.
+        Write("item_fog", 1.0f, 0.5f, t => 0f, Swish(noise, 0.95f, 400, 1400));
+        AssetDatabase.Refresh();
+        SoundLibrary.Load();
+        Debug.Log("[Alkkagi] Item sounds built into " + AudioDir + ".");
+    }
+
+    // A tone gliding from one pitch to another over seconds, then holding,
+    // under a decay.
+    private static float Glide(float t, float from, float to, float seconds, float decay)
+    {
+        if (t < 0) return 0;
+        var phase = t < seconds ? from * t + (to - from) * t * t / (2 * seconds) : from * seconds + (to - from) * seconds / 2 + to * (t - seconds);
+        return (1 - Mathf.Exp(-t / 0.002f)) * Mathf.Exp(-t / decay) * Mathf.Sin(2 * Mathf.PI * phase);
+    }
+
     // One take of a knock: by strength (tier) duller or brighter, and
     // detuned (1 = the recipe's own pitch).
     private static void Take(string key, Knock knock, System.Random noise, string tier, int take, float detune)

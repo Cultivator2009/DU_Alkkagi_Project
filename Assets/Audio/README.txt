@@ -31,6 +31,11 @@ Unity가 알아서 다시 읽습니다(수동: Tools > Alkkagi > Load sounds).
   notch(조준 세기 눈금), cancel, stamp(결과 도장), open(창 열기),
   damage(체력전 피해, 세기별 권장), zone_warn(자기장 예고), countdown(랭크전 다음 판 3·2·1)
 
+아이템전 (ItemView, Tools > Alkkagi > Build item sounds로 합성: item_* 새 파일만 만듦)
+  item_use(사용), item_gain(얻음), item_box(상자 등장), item_blast(폭발), item_freeze(빙결),
+  item_boost(가속 패드), item_bumper(범퍼), item_sink(싱크홀), item_shield(보호막: 씌울 때와 튕겨 돌아올 때),
+  item_glue(접착: 씌울 때와 붙을 때), item_quake(지진), item_fog(안개)
+
 음악 (Music 폴더, MusicPlayer)
   music_menu      메인 메뉴와 로비 (로비로 가도 이어서)
   music_match     대전 중. music_match_1, _2 ... 여럿이면 판마다 하나 (직전 것은 피해서)

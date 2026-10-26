@@ -458,7 +458,17 @@ public class ItemView : MonoBehaviour
                     if (effects != null) effects.PlayTurn(at, 0.2f, 0);
                     Pulse(e.Position, colour, 0.4f, 0.55f);
                 }
-                GameAudio.PlayInterface(GameAudio.Bank.stamp, 0.6f, 1.15f);
+                var bank = GameAudio.Bank;
+                var sound = e.Item switch
+                {
+                    ItemId.Freeze => bank.itemFreeze,
+                    ItemId.Shield => bank.itemShield,
+                    ItemId.Glue => bank.itemGlue,
+                    ItemId.Quake => bank.itemQuake,
+                    ItemId.Fog => bank.itemFog,
+                    _ => bank.itemUse,
+                };
+                GameAudio.PlayBoard(sound, 0.75f);
                 break;
             case ItemEventKind.Gained:
             case ItemEventKind.CatchUp:
@@ -469,14 +479,15 @@ public class ItemView : MonoBehaviour
                     Pulse(e.Position, gold, 0.35f, 0.5f);
                     Pulse(e.Position, gold, 0.6f, 0.8f);
                 }
-                GameAudio.PlayInterface(GameAudio.Bank.open, 0.8f, 1.2f);
+                GameAudio.PlayInterface(GameAudio.Bank.itemGain, 0.8f);
                 break;
             case ItemEventKind.BoxAppeared:
-                GameAudio.PlayInterface(GameAudio.Bank.notch, 0.6f, 1.4f);
+                GameAudio.PlayInterface(GameAudio.Bank.itemBox, 0.6f);
                 break;
             case ItemEventKind.Blast:
                 Pulse(e.Position, new Color(1f, 0.55f, 0.2f, 0.95f), ItemSystem.BlastRadius * 1.05f, 0.45f);
                 Pulse(e.Position, new Color(1f, 0.85f, 0.5f, 0.9f), ItemSystem.BlastRadius * 0.6f, 0.3f);
+                GameAudio.PlayBoard(GameAudio.Bank.itemBlast, 1f);
                 if (effects == null) break;
                 effects.Play(at, 1f);
                 for (var i = 0; i < 3; i++) effects.PlayTurn(at, ItemSystem.BlastRadius * (0.35f + 0.3f * i), i * 2);
@@ -484,24 +495,27 @@ public class ItemView : MonoBehaviour
             case ItemEventKind.Shielded:
                 if (effects != null) effects.PlayTurn(at, 0.18f, 0);
                 Pulse(e.Position, gold, 0.3f, 0.45f);
-                GameAudio.PlayInterface(GameAudio.Bank.notch, 0.8f, 0.8f);
+                GameAudio.PlayBoard(GameAudio.Bank.itemShield, 0.8f);
                 break;
             case ItemEventKind.Stuck:
                 if (effects != null) effects.PlayTurn(at, 0.14f, 0);
                 Pulse(e.Position, ItemDefs.ColorOf(ItemCategory.Piece), 0.2f, 0.4f);
+                GameAudio.PlayBoard(GameAudio.Bank.itemGlue, 0.7f);
                 break;
             case ItemEventKind.Sunk:
                 if (effects != null) effects.PlayTurn(at, ItemSystem.SinkholeRadius, 0);
                 Pulse(e.Position, new Color(0.1f, 0.07f, 0.05f, 0.9f), 0.3f, 0.5f);
+                GameAudio.PlayBoard(GameAudio.Bank.itemSink, 0.85f);
                 break;
             case ItemEventKind.Boosted:
                 if (effects != null) effects.PlayTurn(at, 0.1f, 0);
                 Pulse(e.Position, gold, 0.18f, 0.3f);
-                GameAudio.PlayInterface(GameAudio.Bank.notch, 0.7f, 1.6f);
+                GameAudio.PlayBoard(GameAudio.Bank.itemBoost, 0.8f);
                 break;
             case ItemEventKind.Bumped:
                 if (effects != null) effects.Play(at, 0.5f);
                 Pulse(e.Position, ItemDefs.ColorOf(ItemCategory.Shot), 0.25f, 0.35f);
+                GameAudio.PlayBoard(GameAudio.Bank.itemBumper, 0.85f);
                 break;
         }
     }

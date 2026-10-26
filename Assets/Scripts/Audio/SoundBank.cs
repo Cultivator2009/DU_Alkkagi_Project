@@ -52,4 +52,18 @@ public class SoundBank : ScriptableObject
     public SoundSet zoneWarn => Get("zone_warn"); // the edge will give way when this turn ends
     public SoundSet crumble => Get("crumble");    // the edge giving way
     public SoundSet countdown => Get("countdown"); // the last seconds before a ranked series' next game
+
+    // The item mode (ItemView; Tools > Alkkagi > Build item sounds)
+    public SoundSet itemUse => Get("item_use");
+    public SoundSet itemGain => Get("item_gain");     // an item got (a box, the round's, the catch-up)
+    public SoundSet itemBox => Get("item_box");       // a box turning up
+    public SoundSet itemBlast => Get("item_blast");
+    public SoundSet itemFreeze => Get("item_freeze");
+    public SoundSet itemBoost => Get("item_boost");   // a pad sending a piece on
+    public SoundSet itemBumper => Get("item_bumper");
+    public SoundSet itemSink => Get("item_sink");     // a piece down a sinkhole
+    public SoundSet itemShield => Get("item_shield"); // put on, and bringing a piece back
+    public SoundSet itemGlue => Get("item_glue");     // put on, and taking hold
+    public SoundSet itemQuake => Get("item_quake");
+    public SoundSet itemFog => Get("item_fog");
 }

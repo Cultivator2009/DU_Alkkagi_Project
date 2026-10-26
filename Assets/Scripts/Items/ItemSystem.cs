@@ -686,7 +686,6 @@ public class ItemSystem : MonoBehaviour
                 if (spared.Contains(piece) || piece.Body.linearVelocity.magnitude > SinkSpeed) continue;
                 var at = Flat(piece.Body.position);
                 var id = piece.Manager.pieceID;
-                if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Fall, 0f, piece.Body.position, piece: id);
                 game.PieceOut(piece);
                 Emit(new ItemEvent { Kind = ItemEventKind.Sunk, Side = hole.Owner, Item = ItemId.Sinkhole, Piece = id, Position = at });
                 Changed();

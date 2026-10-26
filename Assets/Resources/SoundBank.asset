@@ -113,6 +113,78 @@ MonoBehaviour:
     hard:
     - {fileID: 8300000, guid: 4400a5e5df0c947cbab1ae23caa8d66a, type: 3}
     - {fileID: 8300000, guid: 23ad4d14111c940fea717b68f7d597d7, type: 3}
+  - key: item_blast
+    any:
+    - {fileID: 8300000, guid: 7ba881ffefb4f443ca8cccc46545e814, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_boost
+    any:
+    - {fileID: 8300000, guid: 66ccf52f36e334e768cea52221161b95, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_box
+    any:
+    - {fileID: 8300000, guid: 0e0746fcb645845149c36c27a5669870, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_bumper
+    any:
+    - {fileID: 8300000, guid: 8846ead177c81411587f4571771fffa4, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_fog
+    any:
+    - {fileID: 8300000, guid: ba870e8dff55142439989abd1d8e4e8b, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_freeze
+    any:
+    - {fileID: 8300000, guid: ed0ff8463eab9435b90ab3b29288e2cc, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_gain
+    any:
+    - {fileID: 8300000, guid: e9fee601c57d547cf86129df809163bc, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_glue
+    any:
+    - {fileID: 8300000, guid: c071a480e70a74e3792a002c36a5f80e, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_quake
+    any:
+    - {fileID: 8300000, guid: 815cd35f8ee9b4e6fa869c2e983ea505, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_shield
+    any:
+    - {fileID: 8300000, guid: e5a02638ce8844c459cb661f62e14a29, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_sink
+    any:
+    - {fileID: 8300000, guid: 27d17cd925306487fa942d66057ab28a, type: 3}
+    soft: []
+    mid: []
+    hard: []
+  - key: item_use
+    any:
+    - {fileID: 8300000, guid: f071fd24bfd7344bfa044d673b9f6fdc, type: 3}
+    soft: []
+    mid: []
+    hard: []
   - key: kill
     any:
     - {fileID: 8300000, guid: ced802c2b6f9c4a289b7daa8be1956c7, type: 3}
