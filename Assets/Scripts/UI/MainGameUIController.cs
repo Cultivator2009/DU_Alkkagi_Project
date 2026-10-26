@@ -173,6 +173,7 @@ public class MainGameUIController : MonoBehaviour
             Render();
         }
         if (resultAt >= 0 && Time.realtimeSinceStartup >= resultAt) ShowResultCard();
+        Celebrate();
         if (noticeUntil > 0 && Time.time >= noticeUntil)
         {
             noticeUntil = 0;
@@ -574,6 +575,23 @@ public class MainGameUIController : MonoBehaviour
         var onBoard = reason == MatchEndReason.Knockout || reason == MatchEndReason.BothOut;
         resultAt = Time.realtimeSinceStartup + (onBoard ? GamePace.HeldFor + ResultBeat : 0);
         Render();
+    }
+
+    // While the result is up, rings go out of the winners' pieces on the
+    // board round the card, every so often.
+    private float celebrateAt = -1;
+
+    private void Celebrate()
+    {
+        if (!winnerPlayerId.HasValue || winnerPlayerId.Value < 0 || resultAt >= 0 || HitEffects.Instance == null) return;
+        if (Time.realtimeSinceStartup < celebrateAt) return;
+        celebrateAt = Time.realtimeSinceStartup + 1.6f;
+        var gameManager = GameManager.manager;
+        var team = gameManager.TeamOf(winnerPlayerId.Value);
+        var index = 0;
+        foreach (var piece in gameManager.gamePieceScripts)
+            if (piece != null && piece.gameObject.activeSelf && gameManager.TeamOf(piece.Manager.playerIndex) == team)
+                HitEffects.Instance.PlayTurn(piece.transform.position, piece.Manager.radius * 1.4f, index++);
     }
 
     private void ShowResultCard()

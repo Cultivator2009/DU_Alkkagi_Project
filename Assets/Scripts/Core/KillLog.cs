@@ -46,6 +46,8 @@ public class KillLog
     public event Action<IReadOnlyList<KillEvent>> OnShotResolved;
 
     public IReadOnlyList<KillEvent> LastShot { get; private set; } = Array.Empty<KillEvent>();
+    // The match's best shot: the most of the others' knocked off at once, the first to do it.
+    public (int shooter, int count) BestShot { get; private set; } = (-1, 0);
 
     private readonly int[] kills;
     private readonly int[] nongae; // shots, not pieces: one per shot that traded its own piece
@@ -129,6 +131,8 @@ public class KillLog
             }
         }
         if (events.Any(e => e.Kind == KillKind.Nongae) && events[0].ShooterId >= 0) nongae[events[0].ShooterId]++;
+        var off = events.Count(e => e.Kind == KillKind.Kill || e.Kind == KillKind.Nongae);
+        if (events[0].ShooterId >= 0 && off > BestShot.count) BestShot = (events[0].ShooterId, off);
         OnShotResolved?.Invoke(events);
     }
 }

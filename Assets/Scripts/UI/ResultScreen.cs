@@ -192,10 +192,14 @@ public class ResultScreen : MonoBehaviour
                               : Loc.Get("series.score", SideStyle.Name(0), MatchSeries.Wins(0), MatchSeries.Wins(1), SideStyle.Name(1)))
                           + (MatchSeries.Draws > 0 ? Loc.Get("series.draws", MatchSeries.Draws) : string.Empty);
 
+        // Two or more off in one shot: the match's best, under the scoreboard
+        // (online, while there's nothing about the rematch to say).
+        var best = kills.BestShot;
+        var highlight = best.count >= 2 ? Loc.Get("result.best", SideStyle.Name(best.shooter), best.count) : string.Empty;
         if (bridge == null)
         {
             rematchLabel.text = Loc.Get("win.rematch");
-            statusText.text = string.Empty;
+            statusText.text = highlight;
             SetInteractable(rematchButton, true);
             return;
         }
@@ -223,7 +227,7 @@ public class ResultScreen : MonoBehaviour
             status = Loc.Get("rematch.count", wanting, bridge.OthersPresent + 1);
         else if (!multi && bridge.OthersWantingRematch > 0 && !bridge.LocalWantsRematch)
             status = Loc.Get("rematch.opponentWants");
-        statusText.text = status;
+        statusText.text = status.Length > 0 ? status : highlight;
 
         rematchLabel.text = Loc.Get(bridge.LocalWantsRematch ? "rematch.waiting"
             : bridge.OthersWantingRematch > 0 ? "rematch.accept" : "rematch.request");
