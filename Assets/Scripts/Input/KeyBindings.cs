@@ -4,7 +4,7 @@ using UnityEngine;
 
 public enum GameAction
 {
-    CameraView, // hold for the other camera angle
+    CameraView, // on and off: the free camera
     CancelAim,
     PanView,    // hold and drag: move the main view across the board
     ResetView,

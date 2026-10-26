@@ -3,22 +3,24 @@ using Cinemachine;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-// The board camera during a match. The main view looks straight down; the
-// camera-view key (held) swaps to the free-look orbit. Pan (the middle button,
-// held) drags the main view across the board: the point grabbed stays under
-// the cursor, and the middle of the view stays on the inner part of the
-// board, so most of the board is always in sight. The free look orbits that
-// same middle, so after a pan it turns about what's in the centre of the
-// screen. The wheel brings the main view a little closer or takes it
-// further back: back out, a full pull is a shorter reach of the mouse, so a
-// piece near the screen's edge can still be pulled all the way without the
-// cursor stopping at the edge. Reset view (its key, or the HUD button)
-// glides back from both. While the camera moves - a pan, or the free look -
-// the board takes no clicks, and a pull in progress is dropped.
+// The board camera during a match. The main view looks straight down. Pan
+// (the middle button, held) drags it across the board: the point grabbed
+// stays under the cursor, and the middle of the view stays on the inner
+// part of the board, so most of the board is always in sight; the
+// movement keys (WASD, the arrows) slide it too. The wheel brings it a
+// little closer or takes it further back: back out, a full pull is a
+// shorter reach of the mouse, so a piece near the screen's edge can still
+// be pulled all the way without the cursor stopping at the edge. The
+// camera-view key swaps to a free camera, flown round the room - the
+// mouse turns it, WASD moves it, Q and E down and up, Shift faster - and
+// back to the main view as it's pressed again (or the game is paused).
+// Reset view (its key, or the HUD button) glides the main view back.
+// While the camera moves - a pan, or the free camera - the board takes no
+// clicks, and a pull in progress is dropped.
 public class CameraRig : MonoBehaviour
 {
     public static CameraRig Instance { get; private set; }
-    public static bool Busy => Instance != null && (Instance.panning || Instance.freeLook);
+    public static bool Busy => Instance != null && (Instance.panning || Instance.flying);
 
     public float reach = 0.5f;         // how far the middle of the view may go, as a share of the way from the board's centre to its edge
     public float resetSharpness = 12f; // how fast Reset view glides back (1/s)
@@ -33,10 +35,16 @@ public class CameraRig : MonoBehaviour
     // Under the room's rafters (RoomBuilder): the view stays under them,
     // zoomed all the way out too, a wider lens making up the rest.
     public float ceiling = 12.5f;
+    public Vector2 roomHalf = new Vector2(22f, 16f); // the free camera stays inside the walls
+    public float keyPan = 0.8f;        // the movement keys' pan, in view heights a second
+    public float flySpeed = 3f;        // the free camera, units a second (Shift: three times)
+    public float lookSpeed = 0.12f;    // degrees per pixel the mouse moves
 
     private Transform mainView;  // the main virtual camera
     private float mainFieldOfView;
-    private Transform pivot;     // what the free look orbits
+    private CinemachineVirtualCamera main;
+    private CinemachineVirtualCamera fly; // the free camera, over the main view while on
+    private Transform pivot;     // the middle of the main view, on the board
     private Vector3 mainHome;
     private Vector3 pivotHome;
     private Rect limits;         // where the pivot may go (x, z)
@@ -47,7 +55,8 @@ public class CameraRig : MonoBehaviour
     private float zoomTarget = 1f;
     private Vector3 grabbed;     // the board point held under the cursor
     private bool panning;
-    private bool freeLook;
+    private bool flying;
+    private float yaw, pitch;    // the free camera's
     private bool resetting;
 
     // A hard knock's shake (Shake): the most, in board units, and how long it
@@ -69,14 +78,21 @@ public class CameraRig : MonoBehaviour
     }
 
     // vcams: the scene's tagged virtual cameras; the main view is the plain
-    // one with the highest priority, the free look's target is its pivot.
+    // one with the highest priority, the free look's target is its pivot
+    // (the orbit itself is put away: the free camera has its place).
     public void Init(GameObject[] vcams, Bounds surface, bool tallPieces = false)
     {
         Instance = this;
-        var main = vcams.Select(v => v.GetComponent<CinemachineVirtualCamera>()).Where(v => v != null).OrderByDescending(v => v.Priority).First();
+        main = vcams.Select(v => v.GetComponent<CinemachineVirtualCamera>()).Where(v => v != null).OrderByDescending(v => v.Priority).First();
         mainView = main.transform;
         mainFieldOfView = main.m_Lens.FieldOfView;
-        pivot = vcams.Select(v => v.GetComponent<CinemachineFreeLook>()).First(v => v != null).Follow;
+        var orbit = vcams.Select(v => v.GetComponent<CinemachineFreeLook>()).First(v => v != null);
+        pivot = orbit.Follow;
+        orbit.gameObject.SetActive(false);
+        fly = new GameObject("FreeCamera").AddComponent<CinemachineVirtualCamera>();
+        fly.transform.SetParent(transform, false);
+        fly.Priority = main.Priority + 1;
+        fly.gameObject.SetActive(false);
         mainHome = mainView.position;
         pivotHome = pivot.position;
         var center = surface.center;
@@ -116,6 +132,7 @@ public class CameraRig : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (flying) Cursor.lockState = CursorLockMode.None;
         if (Instance == this) Instance = null;
     }
 
@@ -146,21 +163,21 @@ public class CameraRig : MonoBehaviour
 
     private void Update()
     {
-        var look = KeyBindings.Held(GameAction.CameraView);
-        if (look != freeLook)
+        if (Time.timeScale > 0 && KeyBindings.Down(GameAction.CameraView)) Fly(!flying);
+        else if (flying && Time.timeScale <= 0) Fly(false);
+        if (flying)
         {
-            freeLook = look;
-            mainView.gameObject.SetActive(!look);
-            if (look) DropPulls();
+            Steer();
+            return;
         }
 
-        if (!panning && !freeLook && Time.timeScale > 0 && KeyBindings.Down(GameAction.PanView) && !PointerOverUI() && BoardPoint(out grabbed))
+        if (!panning && Time.timeScale > 0 && KeyBindings.Down(GameAction.PanView) && !PointerOverUI() && BoardPoint(out grabbed))
         {
             panning = true;
             resetting = false;
             DropPulls();
         }
-        else if (panning && (freeLook || !KeyBindings.Held(GameAction.PanView)))
+        else if (panning && !KeyBindings.Held(GameAction.PanView))
             panning = false;
         if (panning && BoardPoint(out var under))
         {
@@ -168,9 +185,19 @@ public class CameraRig : MonoBehaviour
             BoardPoint(out grabbed); // the same point, unless the edge stopped the view
         }
 
-        // Not over the HUD (a menu), in the free look, or paused.
+        // The movement keys, not while a piece is pulled (its pull is read
+        // off the board under the cursor).
+        var keys = new Vector3(Axis(KeyCode.D, KeyCode.RightArrow, KeyCode.A, KeyCode.LeftArrow), 0, Axis(KeyCode.W, KeyCode.UpArrow, KeyCode.S, KeyCode.DownArrow));
+        if (keys != Vector3.zero && !panning && !AimCursor.Held && Time.timeScale > 0)
+        {
+            resetting = false;
+            var depth = homeDistance * zoom * Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) * 2;
+            MoveTo(offset + keys.normalized * (keyPan * depth * Time.unscaledDeltaTime));
+        }
+
+        // Not over the HUD (a menu), or paused.
         var scroll = Input.mouseScrollDelta.y;
-        if (scroll != 0 && !freeLook && Time.timeScale > 0 && !PointerOverUI())
+        if (scroll != 0 && Time.timeScale > 0 && !PointerOverUI())
             zoomTarget = Mathf.Clamp(zoomTarget - scroll * zoomStep, minZoom, maxZoom);
         if (zoom != zoomTarget)
         {
@@ -189,6 +216,48 @@ public class CameraRig : MonoBehaviour
                 resetting = false;
             }
         }
+    }
+
+    private static float Axis(KeyCode plus, KeyCode plus2, KeyCode minus, KeyCode minus2) =>
+        (Input.GetKey(plus) || Input.GetKey(plus2) ? 1 : 0) - (Input.GetKey(minus) || Input.GetKey(minus2) ? 1 : 0);
+
+    // Into the free camera from wherever the view is now, or back to the
+    // main view (Cinemachine blends either way).
+    private void Fly(bool on)
+    {
+        if (on == flying) return;
+        flying = on;
+        if (on)
+        {
+            DropPulls();
+            panning = false;
+            var seen = Camera.main != null ? Camera.main.transform : mainView;
+            fly.transform.SetPositionAndRotation(seen.position, seen.rotation);
+            var angles = seen.rotation.eulerAngles;
+            yaw = angles.y;
+            pitch = Mathf.DeltaAngle(0, angles.x);
+            fly.m_Lens = main.m_Lens;
+            Cursor.lockState = CursorLockMode.Locked;
+        }
+        else Cursor.lockState = CursorLockMode.None;
+        fly.gameObject.SetActive(on);
+    }
+
+    private void Steer()
+    {
+        Cursor.lockState = CursorLockMode.Locked; // a pull dropped as it began lets go of it
+        var mouse = Input.mousePositionDelta;
+        yaw += mouse.x * lookSpeed;
+        pitch = Mathf.Clamp(pitch - mouse.y * lookSpeed, -80f, 89f);
+        var turn = Quaternion.Euler(pitch, yaw, 0);
+        var move = turn * new Vector3(Axis(KeyCode.D, KeyCode.RightArrow, KeyCode.A, KeyCode.LeftArrow), 0, Axis(KeyCode.W, KeyCode.UpArrow, KeyCode.S, KeyCode.DownArrow))
+                   + Vector3.up * Axis(KeyCode.E, KeyCode.E, KeyCode.Q, KeyCode.Q);
+        var fast = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift) ? 3f : 1f;
+        var at = fly.transform.position + Vector3.ClampMagnitude(move, 1f) * (flySpeed * fast * Time.unscaledDeltaTime);
+        at.x = Mathf.Clamp(at.x, -roomHalf.x, roomHalf.x);
+        at.z = Mathf.Clamp(at.z, -roomHalf.y, roomHalf.y);
+        at.y = Mathf.Clamp(at.y, boardHeight - 0.3f, ceiling);
+        fly.transform.SetPositionAndRotation(at, turn);
     }
 
     // The shake on top of wherever the view is, easing out (the square of
