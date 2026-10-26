@@ -111,11 +111,24 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         plane = new Plane(Vector3.up, 0);
     }
     // Gone mid-pull (the match over, the piece out): the cursor comes back.
+    // Gone off the board's edge: a look-alike falls on to the table (FallenPieces).
     private void OnDisable()
     {
+        if (transform.position.y < FallenBelow && GameManager.manager != null && GameManager.manager.TurnController != null)
+            FallenPieces.Add(this, seenVelocity);
         if (!pulling) return;
         pulling = false;
         AimCursor.Release();
+    }
+
+    private const float FallenBelow = -0.15f;   // the board's top is 0
+    private Vector3 seenAt, seenVelocity;       // how it was last seen moving (a guest's too, moved by the host)
+
+    private void LateUpdate()
+    {
+        var at = transform.position;
+        if (Time.deltaTime > 0) seenVelocity = (at - seenAt) / Time.deltaTime;
+        seenAt = at;
     }
 
     private void Update()

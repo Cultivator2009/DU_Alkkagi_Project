@@ -80,7 +80,7 @@ namespace AlkkagiUIEditor
             // Wide enough for "흑 차례 · 30" when the turn timer is on.
             pill.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0, -10), new Vector2(340, 56));
             controller.turnPill = pill.gameObject;
-            controller.turnPulse = Pulse(pill.gameObject, 1.12f, 0.3f);
+            controller.turnPulse = Pulse(pill.gameObject, 1.3f, 0.4f); // the turn's own breath (no card: TurnController.TurnBeat)
 
             var stone = UIKit.Stone(pill.transform, "TurnStone", 28, Theme.StoneBlack, Theme.Ink, false);
             stone.Place(new Vector2(0, 0.5f), new Vector2(26, 0), new Vector2(28, 28), new Vector2(0, 0.5f));
@@ -283,8 +283,8 @@ namespace AlkkagiUIEditor
 
         // Top of the left column, clear of the board: whose go it is, what to
         // do, both clocks, and Ready.
-        // Over the board's upper middle, while a new turn takes its breath:
-        // whose turn, and at a new round its number and what each side has left.
+        // Over the board's upper middle, while a new round takes its breath:
+        // its number, who opens it and what each side has left.
         private static void BuildBeatCard(Transform root, MainGameUIController controller)
         {
             var card = UIKit.Panel(root, "BeatCard", Theme.Hanji, Theme.Ink, 0.8f);

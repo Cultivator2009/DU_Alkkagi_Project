@@ -17,12 +17,15 @@ public class AIOpponent : MonoBehaviour
 
     // Spread (one sigma) of the aim, in degrees, and of the strength, as a
     // fraction. Planning itself is near perfect: with no error the AI
-    // knocked out what it aimed at ten shots in ten.
+    // knocked out what it aimed at ten shots in ten. Tuned 2026-10-26 by
+    // AI against AI on the go board (stones knocked off a shot): at 1°
+    // hard took 0.91, normal 0.71 at 2.5°, easy 0.33 but sent its own off
+    // one shot in three, too often too hard.
     private static readonly Dictionary<AILevel, (float aimDegrees, float power)> Error = new Dictionary<AILevel, (float, float)>
     {
-        { AILevel.Easy, (5f, 0.25f) },
-        { AILevel.Normal, (2.5f, 0.12f) },
-        { AILevel.Hard, (1f, 0.05f) },
+        { AILevel.Easy, (10f, 0.15f) },
+        { AILevel.Normal, (4f, 0.1f) },
+        { AILevel.Hard, (3f, 0.08f) },
     };
 
     private readonly System.Random random = new System.Random();
@@ -90,7 +93,10 @@ public class AIOpponent : MonoBehaviour
                     powerError *= 2.5f;
                 }
                 var direction = Quaternion.Euler(0, Gaussian() * aimError, 0) * shot.Value.Direction;
-                var power = Mathf.Clamp(shot.Value.Power * (1 + Gaussian() * powerError), 0.05f, 1f);
+                // An easy AI holds back a little: its wide misses stop short
+                // rather than carry its own stone off after them.
+                var held = level == AILevel.Easy ? 0.85f : 1f;
+                var power = Mathf.Clamp(shot.Value.Power * held * (1 + Gaussian() * powerError), 0.05f, 1f);
                 var piece = shot.Value.Piece;
                 turns.TryApplyExternalFlick(piece, direction * (power * piece.maxForce));
             }
