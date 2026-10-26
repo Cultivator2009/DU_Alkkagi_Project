@@ -195,6 +195,12 @@ namespace AlkkagiUIEditor
 
             UIKit.Label(c, "Title", "match.title", 40, true, Theme.Ink, TextAlignmentOptions.MidlineLeft)
                 .rectTransform.Place(TopLeft, new Vector2(pad, -52), new Vector2(RulesCardSize.x - pad * 2, 72));
+            // The chosen board, small, at the title's right.
+            ui.rulesBoard = UIKit.Image(c, "Board", null, Color.white);
+            ui.rulesBoard.preserveAspect = true;
+            ui.rulesBoard.rectTransform.Place(TopRight, new Vector2(-pad + 8, -30), new Vector2(112, 112));
+            ui.boardPreviews = System.Enum.GetValues(typeof(BoardType)).Cast<BoardType>()
+                .Select(type => AssetDatabase.LoadAssetAtPath<Sprite>($"{BoardPreviewBuilder.Dir}/Board_{type}.png")).ToArray();
             // Between the title and the caption; more rules than that scroll.
             ui.rulesPanel = UIKit.RulesPanel(c, "Rules", RulesCardSize.x - pad * 2, rowHeight, gap, 24, online: true, height: RulesCardSize.y - 148 - 96);
             var rules = ui.rulesPanel.GetComponent<RectTransform>();

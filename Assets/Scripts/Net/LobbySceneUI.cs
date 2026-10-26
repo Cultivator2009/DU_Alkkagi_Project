@@ -37,6 +37,8 @@ public class LobbySceneUI : MonoBehaviour
     public LobbyPlayerSlot[] seats; // SteamLobbyManager.SeatOrder: the host first
     public MatchSettingsPanel rulesPanel; // host edits, the guest sees it read-only
     public TMP_Text rulesCaption;
+    public Image rulesBoard;        // the chosen board from above, by the rules' title
+    public Sprite[] boardPreviews;  // by BoardType (Tools > Alkkagi > Build board previews); none for Random
     public SegmentedToggle visibilityToggle; // LobbyVisibility order; the host's to change
     public Button leaveButton;
     public Button startButton;
@@ -289,6 +291,16 @@ public class LobbySceneUI : MonoBehaviour
         RefreshBrowser();
     }
 
+    // Random: a faint go board, any of them.
+    private void ShowBoard(MatchSettings rules)
+    {
+        if (rulesBoard == null) return;
+        var board = (int)rules.BoardType;
+        var sprite = board < boardPreviews.Length ? boardPreviews[board] : null;
+        rulesBoard.sprite = sprite != null ? sprite : boardPreviews[(int)BoardType.Go];
+        rulesBoard.color = sprite != null ? Color.white : new Color(1, 1, 1, 0.25f);
+    }
+
     private void OnRulesChanged(MatchSettings settings)
     {
         // Seats can't go below the players already in.
@@ -298,6 +310,7 @@ public class LobbySceneUI : MonoBehaviour
             settings.Set(MatchSettingId.Seats, members);
             rulesPanel.Show(settings, true);
         }
+        ShowBoard(settings);
         lobbyManager.SetLobbySettings(settings);
         settings.SavePrefs(lobby: true); // the next lobby this player hosts starts from these
     }
@@ -429,6 +442,7 @@ public class LobbySceneUI : MonoBehaviour
         SideMark.ShowAll(lobbyView.transform, rules.PieceType);
 
         rulesPanel.Show(rules, lobbyManager.IsHost && !ranked);
+        ShowBoard(rules);
         rulesCaption.text = Loc.Get(rules.Mode == MatchMode.Ranked ? "lobby.rulesRanked" : rules.Mode == MatchMode.Custom ? "lobby.rulesCustom" : "lobby.rulesNormal");
         visibilityToggle.Show((int)lobbyManager.Visibility, lobbyManager.IsHost && !ranked);
 
