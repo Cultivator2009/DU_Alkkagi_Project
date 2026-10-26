@@ -14,7 +14,7 @@ public class PieceShatter : MonoBehaviour
     private const int Shards = 7;
     private const float Life = 1.4f;       // seconds of game time
     private const float ShrinkFrom = 0.9f; // when they start to shrink away
-    public const float TableTop = -0.495f;  // the table under the board (TableBuilder.Top)
+    public const float TableTop = -0.495f;  // the floor under the board (RoomBuilder.Top)
     private const float BoardTop = 0.002f;
 
     private struct Shard

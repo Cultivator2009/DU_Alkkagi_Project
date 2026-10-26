@@ -7,7 +7,7 @@ using UnityEngine.SceneManagement;
 // Puts the main menu's living board into MainMenuScene (MenuDemo): copies
 // of GameScene's go, janggi, hexagon and cross boards and of its black and
 // white go stones, scripts taken off (their meshes copied, since GameScene
-// owns them), the walnut table under them (TableBuilder), and the menu's
+// owns them), the room round them (RoomBuilder), and the menu's
 // camera and light as the match's. Again replaces it. Run after
 // Tools > Alkkagi > Build boards and piece templates changes the boards.
 public static class MenuDemoBuilder
@@ -23,7 +23,7 @@ public static class MenuDemoBuilder
         var setup = Object.FindAnyObjectByType<BoardSetup>();
         var gameLight = game.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<Light>(true)).FirstOrDefault(l => l.type == LightType.Directional);
         var menu = EditorSceneManager.OpenScene(MenuScenePath, OpenSceneMode.Additive);
-        foreach (var old in menu.GetRootGameObjects().Where(g => g.name == RootName || g.name == TableBuilder.Name)) Object.DestroyImmediate(old);
+        foreach (var old in menu.GetRootGameObjects().Where(g => g.name == RootName || g.name == RoomBuilder.Name || g.name == "Table")) Object.DestroyImmediate(old);
 
         var root = new GameObject(RootName);
         SceneManager.MoveGameObjectToScene(root, menu);
@@ -51,10 +51,10 @@ public static class MenuDemoBuilder
         demo.blackStone = Copy(setup.blackTemplate.gameObject, root.transform);
         demo.whiteStone = Copy(setup.whiteTemplate.gameObject, root.transform);
 
-        var table = TableBuilder.Make(TableBuilder.TableMaterial());
-        SceneManager.MoveGameObjectToScene(table, menu);
+        var room = RoomBuilder.Make();
+        SceneManager.MoveGameObjectToScene(room, menu);
 
-        // The menu's camera and light: lit as the match is, the table's edge in shadow.
+        // The menu's camera and light: lit as the match is.
         var camera = menu.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<Camera>(true)).First();
         camera.clearFlags = CameraClearFlags.SolidColor;
         camera.backgroundColor = new Color(0.09f, 0.06f, 0.04f);

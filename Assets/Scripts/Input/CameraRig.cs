@@ -30,9 +30,9 @@ public class CameraRig : MonoBehaviour
     // back so the board is framed the same: seen from straight above at the
     // scene's 60 degrees, a king by the edge leaned a whole square out over it.
     public float tallFieldOfView = 35f;
-    // The house's ceiling over the table (Environment_House): the view stays
-    // under it, zoomed all the way out too, a wider lens making up the rest.
-    public float ceiling = 8.6f;
+    // Under the room's rafters (RoomBuilder): the view stays under them,
+    // zoomed all the way out too, a wider lens making up the rest.
+    public float ceiling = 12.5f;
 
     private Transform mainView;  // the main virtual camera
     private float mainFieldOfView;

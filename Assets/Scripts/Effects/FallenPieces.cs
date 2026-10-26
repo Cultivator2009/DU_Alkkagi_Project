@@ -3,9 +3,9 @@ using UnityEngine;
 
 // A piece knocked off the board is out the moment it drops past the board
 // (DeathTrigger), well before it reaches the table: it used to vanish in
-// mid air. This lets a look-alike fall on - onto the table, a bounce, a
+// mid air. This lets a look-alike fall on - onto the floor, a bounce, a
 // roll - and fade a few seconds later. Only for show: a copy with no
-// scripts, in a physics layer of its own that meets nothing but the table
+// scripts, in a physics layer of its own that meets nothing but the floor
 // and the other fallen (on every screen alike, a guest's from how its
 // piece was last seen moving).
 public class FallenPieces : MonoBehaviour
@@ -33,7 +33,7 @@ public class FallenPieces : MonoBehaviour
         instance.waiting.Add((piece, velocity));
     }
 
-    // The table, for them alone: a slab just under its top.
+    // The floor, for them alone: a slab just under its top.
     private static void Floor()
     {
         var floor = new GameObject("Fallen floor") { layer = Layer };
