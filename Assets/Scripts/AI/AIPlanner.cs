@@ -37,11 +37,12 @@ public struct PlannedShot
 public class AIPlanner : IDisposable
 {
     // Both measured on the board: a flicked piece slows at about 8.8 m/s²
-    // (the friction, 0.875 g) times how hard these pieces grip (PieceSet.Grip:
-    // go stones and janggi pieces twice that), and one piece hitting another
-    // square passes on about 70% of its speed.
+    // (the friction, 0.135 g) times how hard these pieces grip (PieceSet.Grip:
+    // go stones and janggi pieces twice that). One piece hitting another
+    // square passes on (1 + e) / 2 of its speed, e their material's bounce
+    // (Restitution): glass or slate stones 0.85, wood 0.55.
     private static float Deceleration => GamePieceDragAndReleaseForce.BoardSlowing * PieceSet.Current.Grip;
-    private const float Restitution = 0.4f;
+    private static float Restitution(Stand piece) => piece.Solid != null && piece.Solid.sharedMaterial != null ? piece.Solid.sharedMaterial.bounciness : 0.4f;
     private const int MaxSteps = 250;        // 5 s of play; nearly every shot has settled by then
     private const float OutHeight = -0.3f;
     private const float FrameBudgetMs = 6f;  // per frame, so the game keeps its frame rate while the AI thinks
@@ -71,6 +72,7 @@ public class AIPlanner : IDisposable
 
     private readonly Scene scene;
     private readonly PhysicsScene physics;
+    private readonly BoxCollider clipped; // the board copy's, standing in for its shape (BoardVariant.Clip)
     private readonly List<Stand> stands = new List<Stand>();
     private readonly BoardShape shape;    // what's left of the board
     private readonly BoardVariant ground; // the board: where its top is, under each point
@@ -93,7 +95,10 @@ public class AIPlanner : IDisposable
         afterShot = edgeComing ? shape.Inset(ZoneRule.Step) : shape;
         bothOutRule = rule;
 
-        Copy(board.Active.gameObject);
+        // A box standing in for the board's shape stands in here too.
+        var cover = Copy(board.Active.gameObject).transform.Find(BoardVariant.SlabName);
+        clipped = cover != null && board.Playable.Parts.Count > 1 ? cover.GetComponent<BoxCollider>() : null;
+        if (clipped != null) BoardVariant.Clip(clipped, board.Playable);
         ground = board.Active;
         foreach (var piece in pieces)
         {
@@ -116,6 +121,7 @@ public class AIPlanner : IDisposable
 
     public void Dispose()
     {
+        BoardVariant.Unclip(clipped);
         if (scene.IsValid() && scene.isLoaded) SceneManager.UnloadSceneAsync(scene);
     }
 
@@ -441,7 +447,7 @@ public class AIPlanner : IDisposable
         var targetSpeed = Mathf.Sqrt(2 * Deceleration * toEdge);
         var m1 = shooter.Body.mass;
         var m2 = target.Body.mass;
-        var impact = targetSpeed * (m1 + m2) / ((1 + Restitution) * m1);
+        var impact = targetSpeed * (m1 + m2) / ((1 + Restitution(shooter)) * m1);
         var gap = Mathf.Max(0, distance - shooter.Radius - target.Radius);
         var launch = Mathf.Sqrt(impact * impact + 2 * Deceleration * gap);
         var source = shooter.Source;

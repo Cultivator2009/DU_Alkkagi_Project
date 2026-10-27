@@ -258,7 +258,7 @@ internal static class BoardBuilder
         piece.GetComponent<MeshRenderer>().sharedMaterial = Material("JanggiPiece", new Color(0.90f, 0.79f, 0.57f), 0.35f, 0);
         var collider = piece.gameObject.AddComponent<MeshCollider>();
         collider.convex = true;
-        collider.sharedMaterial = physics;
+        collider.sharedMaterial = WoodPhysics(physics);
 
         var label = new GameObject("Label", typeof(RectTransform)).AddComponent<TextMeshPro>();
         label.transform.SetParent(piece.transform, false);
@@ -462,7 +462,7 @@ internal static class BoardBuilder
         piece.GetComponent<MeshRenderer>().sharedMaterial = Material(ChessDir, "ChessPiece", Color.white, 0.55f, 0);
         var collider = piece.gameObject.AddComponent<MeshCollider>();
         collider.convex = true;
-        collider.sharedMaterial = physics;
+        collider.sharedMaterial = WoodPhysics(physics);
         piece.GetComponent<Rigidbody>().angularDamping = 1.2f;
 
         piece.gameObject.SetActive(false);
@@ -519,6 +519,27 @@ internal static class BoardBuilder
         material.staticFriction = stone.staticFriction;
         material.frictionCombine = stone.frictionCombine;
         material.bounciness = 0.4f;
+        material.bounceCombine = PhysicsMaterialCombine.Average;
+        EditorUtility.SetDirty(material);
+        return material;
+    }
+
+    // Janggi and chess pieces are wood: they slide as a stone does, and one
+    // knocks another on with less of its speed than glass or slate (about
+    // 0.55 against a stone's 0.85).
+    private static PhysicsMaterial WoodPhysics(PhysicsMaterial stone)
+    {
+        var path = $"{AssetDir}/Wood.physicMaterial";
+        var material = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(path);
+        if (material == null)
+        {
+            material = new PhysicsMaterial("Wood");
+            AssetDatabase.CreateAsset(material, path);
+        }
+        material.dynamicFriction = stone.dynamicFriction;
+        material.staticFriction = stone.staticFriction;
+        material.frictionCombine = stone.frictionCombine;
+        material.bounciness = 0.55f;
         material.bounceCombine = PhysicsMaterialCombine.Average;
         EditorUtility.SetDirty(material);
         return material;

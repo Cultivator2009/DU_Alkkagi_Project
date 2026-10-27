@@ -10322,7 +10322,7 @@ MeshCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 989083177}
-  m_Material: {fileID: 13400000, guid: 73dc958c11ed63142a71629c00c79387, type: 2}
+  m_Material: {fileID: 13400000, guid: ca9f2ba2ed82048c7a9f8eea11fbc04a, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -10483,7 +10483,7 @@ MonoBehaviour:
   settleFrameThreshold: 5
   referenceMass: 3
   massExponent: 0.25
-  maxRiseSpeed: 0.4
+  maxRiseSpeed: 1
   isSelected: 0
   isDragging: 0
   isOnfire: 0
@@ -12488,7 +12488,7 @@ MeshCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1141979684}
-  m_Material: {fileID: 13400000, guid: 73dc958c11ed63142a71629c00c79387, type: 2}
+  m_Material: {fileID: 13400000, guid: ca9f2ba2ed82048c7a9f8eea11fbc04a, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -12649,7 +12649,7 @@ MonoBehaviour:
   settleFrameThreshold: 5
   referenceMass: 3
   massExponent: 0.25
-  maxRiseSpeed: 0.4
+  maxRiseSpeed: 1
   isSelected: 0
   isDragging: 0
   isOnfire: 0
@@ -22036,7 +22036,7 @@ MonoBehaviour:
   settleFrameThreshold: 5
   referenceMass: 3
   massExponent: 0.25
-  maxRiseSpeed: 0.4
+  maxRiseSpeed: 1
   isSelected: 0
   isDragging: 0
   isOnfire: 0
@@ -24873,7 +24873,7 @@ MonoBehaviour:
   settleFrameThreshold: 5
   referenceMass: 3
   massExponent: 0.25
-  maxRiseSpeed: 0.4
+  maxRiseSpeed: 1
   isSelected: 0
   isDragging: 0
   isOnfire: 0
@@ -25251,7 +25251,7 @@ MonoBehaviour:
   settleFrameThreshold: 5
   referenceMass: 3
   massExponent: 0.25
-  maxRiseSpeed: 0.4
+  maxRiseSpeed: 1
   isSelected: 0
   isDragging: 0
   isOnfire: 0
@@ -25352,6 +25352,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 3145062450220516247, guid: 733eef0287f86604a8b90071dfbc4f99, type: 3}
+      propertyPath: maxRiseSpeed
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 4822918026328764107, guid: 733eef0287f86604a8b90071dfbc4f99, type: 3}
       propertyPath: m_RootOrder
       value: 16

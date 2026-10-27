@@ -12,7 +12,10 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // board (PieceSet.Grip) are flicked harder (BoardSetup.Spawn).
     public float maxForce = 35.36f;
     // A piece sliding on the board slows at about this from PhysX's friction
-    // alone (0.875 g); AIPlanner counts on it too.
+    // alone (0.135 of the real gravity the world has, 65.4 units/s² at a
+    // unit of 15 cm: a go stone's 22 mm is 0.147); AIPlanner counts on it too.
+    // With a go stone's grip (PieceSet.Grip) 0.27 g in all, a stone glass or
+    // slate on a wooden board's.
     public const float BoardSlowing = 8.8f;
     private const float SettleBelow = 0.08f; // m/s: on the landscape, slow enough to be stopped (Slow)
     private const float SettleSpin = 2.5f;   // rad/s: and turning no faster (a toppling chess piece goes on)
@@ -31,6 +34,14 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     public float minShotPower = 0.03f;
     public float settleVelocityThreshold = 0.05f;
     public int settleFrameThreshold = 5;
+    // Barely moving this long (game seconds), it's stopped: under real
+    // gravity a domed stone spinning on its one point of contact, or shaking
+    // in a crease of the landscape, went on for a minute and more, the shot
+    // never over. A slide or a topple is well past these.
+    private const float CrawlBelow = 0.1f;  // m/s
+    private const float CrawlSpin = 3f;     // rad/s
+    private const float CrawlSeconds = 2f;
+    private float crawling;
     // A flick is the impulse a go stone of referenceMass gets. Other masses
     // leave at speed / (mass / referenceMass)^massExponent: 1 would give every
     // piece the same momentum (the janggi general left so slowly it hardly
@@ -46,8 +57,9 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // Upward speed limit (m/s). The flick itself is level, but a piece that
     // leans - on another piece, or over a board hinge - is pushed up by
     // whatever it rests on, and a hard shot launched it up to 2 units high.
-    // Capped, the hop stays under a piece's height.
-    public float maxRiseSpeed = 0.4f;
+    // Capped, the hop stays under a piece's height (a hundredth of a unit
+    // at the world's gravity).
+    public float maxRiseSpeed = 1f;
 
     private int lowVelocityFrameCount = 0;
     private int powerNotch; // tenths of the pull's power reached so far, for the ratchet tick
@@ -302,6 +314,13 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
 
     private void UpdateSettleState()
     {
+        var crawl = rb.linearVelocity.sqrMagnitude < CrawlBelow * CrawlBelow && rb.angularVelocity.sqrMagnitude < CrawlSpin * CrawlSpin;
+        crawling = crawl && isGamePieceMoving ? crawling + Time.fixedDeltaTime : 0; // from when it last moved, not from rest
+        if (crawling > CrawlSeconds && !rb.isKinematic)
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
         bool isSlow = rb.linearVelocity.sqrMagnitude < settleVelocityThreshold * settleVelocityThreshold &&
                       rb.angularVelocity.sqrMagnitude < settleVelocityThreshold * settleVelocityThreshold;
         if (isSlow)

@@ -8,8 +8,8 @@ PhysicsMaterial:
   m_PrefabAsset: {fileID: 0}
   m_Name: Gonggi
   serializedVersion: 2
-  m_DynamicFriction: 0.8
-  m_StaticFriction: 0.8
+  m_DynamicFriction: 0.12
+  m_StaticFriction: 0.45
   m_Bounciness: 0.4
   m_FrictionCombine: 0
   m_BounceCombine: 0

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -250,19 +251,25 @@ public class BoardTerrain : MonoBehaviour
         low.sharedMesh = LowGround();
     }
 
-    // A cut pyramid, its foot a hair under the ground.
+    // A cut pyramid on a block sunk under the ground. With its foot a hair
+    // under (as at first), a stone driven into the slope by a hard shot was
+    // pushed out the nearer way, down through the thin foot, and stayed
+    // inside, shaking, its shot never over.
     private static void Mound(MeshCollider collider, Vector2 at)
     {
         var points = new List<Vector3>();
-        foreach (var (half, y) in new[] { (MoundFoot, -0.002f), (MoundTop, MoundHeight) })
+        foreach (var (half, y) in new[] { (MoundFoot, -MoundSunk), (MoundFoot, -0.002f), (MoundTop, MoundHeight) })
             foreach (var (dx, dz) in new[] { (-1, -1), (1, -1), (1, 1), (-1, 1) })
                 points.Add(new Vector3(at.x + dx * half, y, at.y + dz * half));
         var mesh = new Mesh { name = "Mound" };
         mesh.SetVertices(points);
-        mesh.SetTriangles(new[] { 0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 1, 5, 6, 1, 6, 2, 2, 6, 7, 2, 7, 3, 3, 7, 4, 3, 4, 0 }, 0);
+        // Any faces over all the corners: a convex collider is their hull.
+        mesh.SetTriangles(Enumerable.Range(0, points.Count).ToArray(), 0);
         collider.sharedMesh = mesh;
         collider.convex = true;
     }
+
+    private const float MoundSunk = 0.3f;
 
     // The ground at its own level: the board in large squares, but round each
     // pond a square holding the flat down to the bank, the bank straight down

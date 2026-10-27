@@ -637,7 +637,8 @@ internal static class SelfCheck
                 }
                 if (state == GameManager.GameState.ProcessingTurn && Time.realtimeSinceStartup - since > 15)
                 {
-                    var unsettled = gameManager.gamePieceScripts.Where(p => p != null && !p.IsSettled).Select(p => p.name);
+                    var unsettled = gameManager.gamePieceScripts.Where(p => p != null && !p.IsSettled)
+                        .Select(p => $"{p.name} at {p.Body.position.ToString("F3")} moving {p.Body.linearVelocity.ToString("F3")} turning {p.Body.angularVelocity.ToString("F2")}");
                     Result(false, "a shot never settled: " + string.Join(", ", unsettled));
                     yield break;
                 }

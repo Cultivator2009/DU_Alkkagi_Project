@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -10,7 +11,8 @@ using UnityEngine.Rendering;
 // The board itself is its shape (parts, seen from above) made solid at run
 // time: a top with its texture, sides, and a collider - a box for a
 // rectangle, a convex prism for another single part, and for several (the
-// cross's bars) one solid of their outline, so the top has no seams. Built
+// cross's bars) one box round them all, its touches outside them dropped
+// (Clip), so the top has no seams. Built
 // again smaller as the edge crumbles (Build with an inset), the texture
 // staying where it was.
 public class BoardVariant : MonoBehaviour
@@ -93,6 +95,7 @@ public class BoardVariant : MonoBehaviour
             // Its meshes are its own (made below), not assets: they go with it.
             var meshes = old.GetComponentsInChildren<MeshCollider>().Select(c => c.sharedMesh).Concat(old.GetComponentsInChildren<MeshFilter>().Select(f => f.sharedMesh));
             foreach (var mesh in meshes.Where(m => m != null).Distinct().ToList()) Discard(mesh);
+            Unclip(old.GetComponent<BoxCollider>());
             Discard(old.gameObject);
         }
         var oldWalls = transform.Find(WallsName);
@@ -117,13 +120,18 @@ public class BoardVariant : MonoBehaviour
         renderer.shadowCastingMode = ShadowCastingMode.On;
 
         // Where two parts' colliders met, a piece sliding from one onto the
-        // other caught the other's edge and now and then came back.
-        var outline = playable.Parts.Count > 1 ? Loop(playable.Outline()) : null;
-        if (outline != null)
+        // other caught the other's edge and now and then came back; one
+        // solid of their outline (a mesh) caught a piece by its edge or an
+        // inner corner, the flick sending it nowhere, or back. A box's edge
+        // never does: one round the parts, touching only where they are.
+        if (playable.Parts.Count > 1)
         {
-            var solid = slab.gameObject.AddComponent<MeshCollider>();
-            solid.sharedMesh = Solid(outline);
-            solid.sharedMaterial = physics;
+            var rect = playable.Bounds;
+            var cover = slab.gameObject.AddComponent<BoxCollider>();
+            cover.center = new Vector3(rect.center.x, -thickness / 2, rect.center.y);
+            cover.size = new Vector3(rect.width, thickness, rect.height);
+            cover.sharedMaterial = physics;
+            Clip(cover, playable);
             return;
         }
         foreach (var part in playable.Parts)
@@ -141,6 +149,50 @@ public class BoardVariant : MonoBehaviour
             prism.convex = true;
             prism.sharedMaterial = physics;
         }
+    }
+
+    // Boxes standing in for a shape (Build, and the AI's copies of them): a
+    // touch outside the shape - over a corner the box fills in - isn't one.
+    // Read during the physics step, on its threads; changed only between.
+    private static readonly Dictionary<int, (BoardShape shape, Vector2 origin)> clips = new Dictionary<int, (BoardShape, Vector2)>();
+    private const float ClipSlack = 0.002f; // a touch on the edge itself still counts
+
+    public static void Clip(Collider cover, BoardShape shape)
+    {
+        if (clips.Count == 0)
+        {
+            Physics.ContactModifyEvent += DropOutside;
+            Physics.ContactModifyEventCCD += DropOutside;
+        }
+        clips[cover.GetInstanceID()] = (shape, new Vector2(cover.transform.position.x, cover.transform.position.z));
+        cover.hasModifiableContacts = true;
+    }
+
+    public static void Unclip(Collider cover)
+    {
+        if (cover == null || !clips.Remove(cover.GetInstanceID()) || clips.Count > 0) return;
+        Physics.ContactModifyEvent -= DropOutside;
+        Physics.ContactModifyEventCCD -= DropOutside;
+    }
+
+    private static void DropOutside(PhysicsScene scene, NativeArray<ModifiableContactPair> pairs)
+    {
+        for (var p = 0; p < pairs.Length; p++)
+        {
+            var pair = pairs[p];
+            if (!clips.TryGetValue(pair.colliderInstanceID, out var clip) && !clips.TryGetValue(pair.otherColliderInstanceID, out clip)) continue;
+            for (var i = 0; i < pair.contactCount; i++)
+            {
+                var point = pair.GetPoint(i);
+                if (!clip.shape.Contains(new Vector2(point.x, point.z) - clip.origin, -ClipSlack)) pair.IgnoreContact(i);
+            }
+        }
+    }
+
+    private void OnDestroy()
+    {
+        var slab = transform.Find(SlabName);
+        if (slab != null) Unclip(slab.GetComponent<BoxCollider>());
     }
 
     public const string SlabName = "Slab";
@@ -282,79 +334,6 @@ public class BoardVariant : MonoBehaviour
         if (b.xMin > a.xMin) yield return Rect.MinMaxRect(a.xMin, yMin, b.xMin, yMax);
         if (b.xMax < a.xMax) yield return Rect.MinMaxRect(b.xMax, yMin, a.xMax, yMax);
     }
-
-    // The outline's edges joined into one loop of corners, anticlockwise,
-    // straight runs merged. Null unless they make exactly one loop.
-    private static List<Vector2> Loop(List<(Vector2 a, Vector2 b)> edges)
-    {
-        if (edges.Count < 3) return null;
-        var left = edges.Skip(1).ToList();
-        var loop = new List<Vector2> { edges[0].a };
-        var at = edges[0].b;
-        while (left.Count > 0)
-        {
-            var next = left.FindIndex(e => (e.a - at).sqrMagnitude < 1e-8f);
-            if (next < 0) return null;
-            loop.Add(at);
-            at = left[next].b;
-            left.RemoveAt(next);
-        }
-        if ((at - loop[0]).sqrMagnitude > 1e-8f) return null;
-        for (var i = 0; i < loop.Count && loop.Count > 3;)
-        {
-            var before = loop[(i + loop.Count - 1) % loop.Count];
-            var after = loop[(i + 1) % loop.Count];
-            if (Mathf.Abs(Cross(loop[i] - before, after - loop[i])) < 1e-7f) loop.RemoveAt(i);
-            else i++;
-        }
-        var area = 0f;
-        for (var i = 0; i < loop.Count; i++) area += Cross(loop[i], loop[(i + 1) % loop.Count]);
-        if (area < 0) loop.Reverse();
-        return loop;
-    }
-
-    private static float Cross(Vector2 a, Vector2 b) => a.x * b.y - a.y * b.x;
-
-    // A loop of corners made solid: its top cut into triangles corner to
-    // corner (ear clipping, no corner on another's edge), its bottom, its sides.
-    private Mesh Solid(List<Vector2> loop)
-    {
-        var n = loop.Count;
-        var vertices = loop.Select(c => new Vector3(c.x, 0, c.y)).Concat(loop.Select(c => new Vector3(c.x, -thickness, c.y))).ToList();
-        var triangles = new List<int>();
-        var left = Enumerable.Range(0, n).ToList();
-        while (left.Count > 3)
-        {
-            var clipped = false;
-            for (var i = 0; i < left.Count && !clipped; i++)
-            {
-                var a = left[(i + left.Count - 1) % left.Count];
-                var b = left[i];
-                var c = left[(i + 1) % left.Count];
-                if (Cross(loop[b] - loop[a], loop[c] - loop[b]) <= 1e-7f) continue; // a reflex corner
-                if (left.Any(k => k != a && k != b && k != c && InTriangle(loop[k], loop[a], loop[b], loop[c]))) continue;
-                triangles.AddRange(new[] { a, c, b, n + a, n + b, n + c });
-                left.RemoveAt(i);
-                clipped = true;
-            }
-            if (!clipped) break; // not a simple loop: what's left stays open
-        }
-        if (left.Count == 3) triangles.AddRange(new[] { left[0], left[2], left[1], n + left[0], n + left[1], n + left[2] });
-        for (var i = 0; i < n; i++)
-        {
-            var j = (i + 1) % n;
-            triangles.AddRange(new[] { i, j, n + j, i, n + j, n + i });
-        }
-        var mesh = new Mesh { name = "Board solid" };
-        mesh.SetVertices(vertices);
-        mesh.SetTriangles(triangles, 0);
-        mesh.RecalculateBounds();
-        return mesh;
-    }
-
-    // On its edges counts as in.
-    private static bool InTriangle(Vector2 p, Vector2 a, Vector2 b, Vector2 c) =>
-        Cross(b - a, p - a) >= -1e-7f && Cross(c - b, p - b) >= -1e-7f && Cross(a - c, p - c) >= -1e-7f;
 
     // A convex part made solid, for its collider.
     private Mesh Prism(Vector2[] part)

@@ -155,7 +155,7 @@ public class MenuDemo : MonoBehaviour
                 continue;
             }
             var velocity = body.linearVelocity;
-            if (velocity.y > 0.4f) body.linearVelocity = new Vector3(velocity.x, 0.4f, velocity.z);
+            if (velocity.y > 1f) body.linearVelocity = new Vector3(velocity.x, 1f, velocity.z);
             var flat = new Vector3(velocity.x, 0, velocity.z);
             var speed = flat.magnitude;
             if (speed < 0.05f || body.position.y > 0.08f) continue;
