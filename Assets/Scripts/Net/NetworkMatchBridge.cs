@@ -21,7 +21,6 @@ using UnityEngine.SceneManagement;
 // lobby is active.
 public class NetworkMatchBridge : MonoBehaviour
 {
-    private const int SnapshotIntervalFixedFrames = 3;
     // How long past zero a guest's turn runs on the host's clock (see
     // TurnController.RemoteGraceSeconds): a round trip on a slow relay.
     private const float GuestFlickGraceSeconds = 0.5f;
@@ -84,7 +83,9 @@ public class NetworkMatchBridge : MonoBehaviour
     private ulong localId;
     private ulong hostId;
     private int localPlayerId;
-    private int snapshotTickCounter;
+    private const int SnapshotPieces = 30;
+    private int hostTick;  // the host's physics steps, stamped on its snapshots
+    private readonly Dictionary<char, PieceTransform> lastSent = new Dictionary<char, PieceTransform>();
     private bool matchResolved;
     private bool hostInitialized;
     private bool matchBegun;
@@ -97,8 +98,26 @@ public class NetworkMatchBridge : MonoBehaviour
     private PieceSelector guestSelector;
     private bool awaitingTurnResult;
     private bool sentFastForward; // on the host: what the guests were last told
-    private readonly Dictionary<char, Vector3> snapshotTargetPosition = new Dictionary<char, Vector3>();
-    private readonly Dictionary<char, Quaternion> snapshotTargetRotation = new Dictionary<char, Quaternion>();
+    // A guest plays the host's poses back a few steps behind the newest
+    // heard (PlaybackDelay), between two real poses - never guessed ahead -
+    // so a knock shows where it happened. Its clock runs at the rate the
+    // steps come in (the host's pace, fast-forward and hit-stops included),
+    // pulled toward that delay.
+    private struct Pose
+    {
+        public int Tick;
+        public Vector3 Position;
+        public Quaternion Rotation;
+    }
+    private readonly Dictionary<char, List<Pose>> tracks = new Dictionary<char, List<Pose>>();
+    private int newestTick = -1;
+    private float newestHeardAt;
+    private float playTick;
+    private float tickRate = GamePace.Speed / 0.02f; // steps a real second, as heard
+    private const float PlaybackDelay = 4f;  // steps: covers a late packet or two
+    private const float CatchUp = 3f;        // 1/s, the clock toward that delay
+    private const float SnapBehind = 20f;    // steps off: jumps there (a new shot, after a wait)
+    private const int StillGap = 3;          // steps unheard of a piece: it lay still meanwhile
 
     private IEnumerable<ulong> Guests => roster.SteamIds.Skip(1).Where(id => !MatchRoster.IsBotId(id)); // the bots are the host's
     private TurnController Controller => gameManager.TurnController;
@@ -150,10 +169,7 @@ public class NetworkMatchBridge : MonoBehaviour
             .On<Msg.StartMatch>((_, m) => ApplyGuestRole(m.PlayerId, m.Owners))
             .On<Msg.PlacementState>(HandleGuestPlacementState)
             .On<Msg.PieceSnapshot>(HandleGuestSnapshot)
-            .On<Msg.BoardSound>((_, m) =>
-            {
-                if (BoardSounds.Instance != null) BoardSounds.Instance.PlayRemote(m.Sound);
-            })
+            .On<Msg.BoardSound>((_, m) => StartCoroutine(PlayLater(m.Sound)))
             .On<Msg.TurnResult>(HandleGuestTurnResult)
             .On<Msg.MatchStateUpdate>((_, m) => Controller.ApplyRemote(m.State, Array.Empty<KillEvent>()))
             .On<Msg.FastForward>((_, m) => HostFastForwarding = m.On)
@@ -552,8 +568,9 @@ public class NetworkMatchBridge : MonoBehaviour
             piece.Body.position = t.Position;
             piece.Body.rotation = t.Rotation;
             piece.transform.SetPositionAndRotation(t.Position, t.Rotation);
+            piece.Manager.health = t.Health;
+            tracks[t.PieceId] = new List<Pose> { new Pose { Tick = newestTick, Position = t.Position, Rotation = t.Rotation } };
         }
-        ApplyTransforms(message.Pieces);
         Controller.ApplyRemoteSides(message.Sides);
         Items.ApplyRemote(message.State, message.Events);
     }
@@ -615,18 +632,22 @@ public class NetworkMatchBridge : MonoBehaviour
     private void FixedUpdate()
     {
         if (isHost) HostFixedUpdate();
-        else GuestFixedUpdate();
     }
 
+    // Every step of a shot, the pieces that moved since they were last sent.
     private void HostFixedUpdate()
     {
+        hostTick++;
         if (Controller == null) return;
         if (gameManager.gameState != GameManager.GameState.ProcessingTurn) return;
 
-        snapshotTickCounter++;
-        if (snapshotTickCounter < SnapshotIntervalFixedFrames) return;
-        snapshotTickCounter = 0;
-        session.Broadcast(new Msg.PieceSnapshot { Pieces = CurrentTransforms() });
+        var moved = CurrentTransforms().Where(t => !lastSent.TryGetValue(t.PieceId, out var sent) || (sent.Position - t.Position).sqrMagnitude > 1e-8f
+                                                   || Quaternion.Angle(sent.Rotation, t.Rotation) > 0.1f || sent.Health != t.Health).ToList();
+        if (moved.Count == 0) return;
+        foreach (var t in moved) lastSent[t.PieceId] = t;
+        // Under an unreliable packet's 1200 bytes (about 32 a piece).
+        for (var i = 0; i < moved.Count; i += SnapshotPieces)
+            session.Broadcast(new Msg.PieceSnapshot { Tick = hostTick, Pieces = moved.GetRange(i, Mathf.Min(SnapshotPieces, moved.Count - i)) });
     }
 
     // ---- Guest ----
@@ -639,7 +660,11 @@ public class NetworkMatchBridge : MonoBehaviour
             Items.BecomeMirror();
             Items.OnRequestUse += (slot, target) => session.Send(hostId, new Msg.UseItem { Slot = slot, Target = target });
             Items.OnRequestDiscard += index => session.Send(hostId, new Msg.DiscardItem { Index = index });
-            Items.OnPieceRestored += piece => pieceLookup[piece.Manager.pieceID] = piece;
+            Items.OnPieceRestored += piece =>
+            {
+                pieceLookup[piece.Manager.pieceID] = piece;
+                tracks.Remove(piece.Manager.pieceID); // back where it's put, not eased there from where it went
+            };
         }
         guestSelector = new PieceSelector(gameManager.gamePieceScripts) { LocalPlayerId = null };
         session.Send(hostId, new Msg.ClientReady());
@@ -660,11 +685,11 @@ public class NetworkMatchBridge : MonoBehaviour
             var piece = kv.Value;
             var rb = piece.Body;
             // Kinematic bodies don't support ContinuousDynamic; set the mode
-            // first so the switch doesn't warn. Interpolate keeps the
-            // MovePosition-driven motion smooth between physics steps.
+            // first so the switch doesn't warn. Posed every frame (Play), not
+            // interpolated between physics steps.
             rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             rb.isKinematic = true;
-            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.interpolation = RigidbodyInterpolation.None;
             piece.isAuthority = false;
             piece.OnFlickRequested += force =>
             {
@@ -686,6 +711,7 @@ public class NetworkMatchBridge : MonoBehaviour
             sentFastForward = GamePace.FastForwarding;
             session.Broadcast(new Msg.FastForward { On = sentFastForward });
         }
+        if (!isHost && pieceLookup != null) Play();
         if (isHost || pieceLookup == null || guestSelector == null || !guestSelector.LocalPlayerId.HasValue) return;
 
         // Turns only; not while placing stones or after the result.
@@ -697,37 +723,80 @@ public class NetworkMatchBridge : MonoBehaviour
         if (picked != null) picked.isDragging = true;
     }
 
-    // Drives the kinematic guest pieces toward the host's latest poses through
-    // the Rigidbody. Writing transform directly (as before) fights the
-    // Rigidbody's own interpolation, which re-applies the physics pose every
-    // frame.
-    private void GuestFixedUpdate()
+    // The guest's clock a frame on, and every piece where the host had it
+    // then.
+    private void Play()
     {
-        if (pieceLookup == null) return;
-        var t = 15f * Time.fixedDeltaTime;
+        var dt = Time.unscaledDeltaTime;
+        var target = newestTick - PlaybackDelay;
+        if (Mathf.Abs(target - playTick) > SnapBehind) playTick = target;
+        else playTick += dt * tickRate + (target - playTick) * (1 - Mathf.Exp(-CatchUp * dt));
         foreach (var kv in pieceLookup)
         {
-            if (kv.Value == null || !kv.Value.gameObject.activeSelf || !snapshotTargetPosition.TryGetValue(kv.Key, out var targetPos)) continue;
-            var rb = kv.Value.Body;
-            rb.MovePosition(Vector3.Lerp(rb.position, targetPos, t));
-            rb.MoveRotation(Quaternion.Slerp(rb.rotation, snapshotTargetRotation[kv.Key], t));
+            var piece = kv.Value;
+            if (piece == null || !piece.gameObject.activeSelf || !tracks.TryGetValue(kv.Key, out var track) || track.Count == 0) continue;
+            // Behind the clock, only the pose just before it is still needed.
+            while (track.Count > 2 && track[1].Tick <= playTick) track.RemoveAt(0);
+            var from = track[0];
+            var to = track.Count > 1 ? track[1] : from;
+            var t = to.Tick > from.Tick ? Mathf.Clamp01((playTick - from.Tick) / (to.Tick - from.Tick)) : 1;
+            var position = Vector3.Lerp(from.Position, to.Position, t);
+            var rotation = Quaternion.Slerp(from.Rotation, to.Rotation, t);
+            var body = piece.Body;
+            body.position = position;
+            body.rotation = rotation;
+            piece.transform.SetPositionAndRotation(position, rotation);
         }
+    }
+
+    // A piece's pose at a host step. One unheard of for a while lay still
+    // till just before it (only what moves is sent).
+    private void Track(PieceTransform pose, int tick)
+    {
+        if (pieceLookup.TryGetValue(pose.PieceId, out var piece) && piece != null) piece.Manager.health = pose.Health;
+        if (!tracks.TryGetValue(pose.PieceId, out var track)) tracks[pose.PieceId] = track = new List<Pose>();
+        if (track.Count > 0 && tick <= track[track.Count - 1].Tick) return; // late, overtaken
+        if (track.Count == 0 && piece != null) track.Add(new Pose { Tick = tick - 1, Position = piece.Body.position, Rotation = piece.Body.rotation });
+        else if (track.Count > 0 && tick - track[track.Count - 1].Tick > StillGap)
+        {
+            var still = track[track.Count - 1];
+            still.Tick = tick - 1;
+            track.Add(still);
+        }
+        track.Add(new Pose { Tick = tick, Position = pose.Position, Rotation = pose.Rotation });
+    }
+
+    private void Heard(int tick)
+    {
+        if (tick <= newestTick) return;
+        var now = Time.unscaledTime;
+        if (newestTick >= 0 && now > newestHeardAt + 1e-3f)
+            tickRate = Mathf.Lerp(tickRate, Mathf.Clamp((tick - newestTick) / (now - newestHeardAt), 1f, 400f), 0.15f);
+        newestTick = tick;
+        newestHeardAt = now;
     }
 
     private void HandleGuestSnapshot(ulong _, Msg.PieceSnapshot message)
     {
         Controller.MirrorShotUnderway(); // a shot is in flight
-        ApplyTransforms(message.Pieces);
+        Heard(message.Tick);
+        foreach (var t in message.Pieces) Track(t, message.Tick);
     }
 
+    // The host's word on where pieces are, after what it already sent: played
+    // after it.
     private void ApplyTransforms(List<PieceTransform> transforms)
     {
         foreach (var t in transforms)
-        {
-            snapshotTargetPosition[t.PieceId] = t.Position;
-            snapshotTargetRotation[t.PieceId] = t.Rotation;
-            if (pieceLookup.TryGetValue(t.PieceId, out var piece) && piece != null) piece.Manager.health = t.Health;
-        }
+            Track(t, tracks.TryGetValue(t.PieceId, out var track) && track.Count > 0 ? Mathf.Max(newestTick, track[track.Count - 1].Tick) + 1 : newestTick + 1);
+    }
+
+    // A knock heard as the pieces are seen to meet: as far behind as they're played.
+    private IEnumerator PlayLater(BoardSoundEvent sound)
+    {
+        var behind = Mathf.Max(0, newestTick - playTick) / Mathf.Max(1f, tickRate);
+        if (behind > 0.01f) yield return new WaitForSecondsRealtime(Mathf.Min(behind, 0.3f));
+        if (BoardSounds.Instance != null) BoardSounds.Instance.PlayRemote(sound);
     }
 
     private void HandleGuestTurnResult(ulong _, Msg.TurnResult message)
@@ -745,8 +814,8 @@ public class NetworkMatchBridge : MonoBehaviour
             if (Items != null) Items.BenchRemote(piece);
             else Destroy(piece.gameObject);
         }
-        // The host's settled board is the truth; GuestFixedUpdate eases every
-        // piece onto it whatever the snapshots did or didn't deliver.
+        // The host's settled board is the truth; Play brings every piece
+        // onto it whatever the snapshots did or didn't deliver.
         ApplyTransforms(message.Pieces);
 
         var controller = Controller;

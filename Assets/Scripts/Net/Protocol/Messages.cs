@@ -72,13 +72,24 @@ public static class Msg
         }
     }
 
-    // Host -> guests, a few times a second while pieces move (unreliable).
+    // Host -> guests, every physics step while pieces move (unreliable):
+    // the step, and the pieces that moved since they were last sent.
     public sealed class PieceSnapshot : INetMessage
     {
+        public int Tick;
         public List<PieceTransform> Pieces = new List<PieceTransform>();
 
-        public void Write(NetWriter w) => w.List(Pieces, PieceTransform.Write);
-        public void Read(NetReader r) => Pieces = r.List(PieceTransform.Read);
+        public void Write(NetWriter w)
+        {
+            w.Int(Tick);
+            w.List(Pieces, PieceTransform.Write);
+        }
+
+        public void Read(NetReader r)
+        {
+            Tick = r.Int();
+            Pieces = r.List(PieceTransform.Read);
+        }
     }
 
     // Host -> guests at every turn's start and at the result: the match
