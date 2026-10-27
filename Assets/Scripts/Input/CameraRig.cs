@@ -49,6 +49,12 @@ public class CameraRig : MonoBehaviour
     private CinemachineVirtualCamera fly; // the free camera, over the main view while on
     private Transform pivot;     // the middle of the main view, on the board
     private Vector3 mainHome;
+    private Vector3 builtHome;   // the main view as the scene has it, before Frame
+    private Quaternion builtRotation;
+    private float builtFieldOfView;
+    private Bounds surface;
+    private bool tallPieces;
+    private float facing;        // the seat it's seen from (Face)
     private Vector3 pivotHome;
     private Rect limits;         // where the pivot may go (x, z)
     private float boardHeight;
@@ -104,21 +110,51 @@ public class CameraRig : MonoBehaviour
         fly.transform.SetParent(transform, false);
         fly.Priority = main.Priority + 1;
         fly.gameObject.SetActive(false);
-        mainHome = mainView.position;
+        builtHome = mainView.position;
+        builtRotation = mainView.rotation;
+        builtFieldOfView = mainFieldOfView;
         pivotHome = pivot.position;
+        this.surface = surface;
+        this.tallPieces = tallPieces;
+        Frame();
+    }
+
+    // Seen from a side's edge (BoardSetup.SeatAngle): that side's pieces at
+    // the bottom of the screen, as the first side's are from the scene's
+    // own view. Online, each screen from its own side.
+    public void Face(float seatAngle)
+    {
+        if (Mathf.Approximately(facing, seatAngle)) return;
+        facing = seatAngle;
+        Frame();
+        MoveTo(offset);
+    }
+
+    // The main view's home, turned to the side it faces and framing the
+    // board (or a big board's middle) from as far back as it takes.
+    private void Frame()
+    {
+        var turn = Quaternion.Euler(0, -facing, 0);
         var center = surface.center;
+        var pivotLevel = new Vector3(pivotHome.x, 0, pivotHome.z);
+        mainHome = pivotLevel + turn * (builtHome - pivotLevel);
+        mainView.rotation = turn * builtRotation;
+        mainFieldOfView = builtFieldOfView;
+        main.m_Lens.FieldOfView = mainFieldOfView;
+        // Across the screen and up it, as the view now lies.
+        var sideways = Mathf.Abs(Mathf.Sin(facing * Mathf.Deg2Rad)) > 0.7f;
         big = Mathf.Max(surface.size.x, surface.size.z) > BigView * 1.2f;
-        var framed = surface;
-        if (big) framed.size = new Vector3(Mathf.Min(surface.size.x, BigView), surface.size.y, Mathf.Min(surface.size.z, BigView));
-        Framed = framed;
+        var framedSize = big ? new Vector3(Mathf.Min(surface.size.x, BigView), surface.size.y, Mathf.Min(surface.size.z, BigView)) : surface.size;
+        Framed = new Bounds(center, framedSize);
+        var framed = sideways ? new Vector3(framedSize.z, framedSize.y, framedSize.x) * 0.5f : framedSize * 0.5f;
         // A big board's view goes far enough that its edges come into sight.
-        var half = big ? Vector3.Max(Vector3.zero, surface.extents - framed.extents * 0.55f) : surface.extents * reach;
+        var half = big ? Vector3.Max(Vector3.zero, surface.extents - framedSize * 0.5f * 0.55f) : surface.extents * reach;
         limits = Rect.MinMaxRect(center.x - half.x, center.z - half.z, center.x + half.x, center.z + half.z);
         boardHeight = surface.max.y;
         // The scene frames a board FramedDepth deep; another is framed the
         // same, from further back or closer in, so it fills the same height.
         var distance = (boardHeight - mainHome.y) / Mathf.Min(-0.01f, mainView.forward.y);
-        var fit = framed.size.z / FramedDepth;
+        var fit = framed.z * 2 / FramedDepth;
         if (tallPieces)
         {
             fit *= Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Tan(tallFieldOfView * 0.5f * Mathf.Deg2Rad);
@@ -130,7 +166,7 @@ public class CameraRig : MonoBehaviour
         // the HUD its columns either side (HudRoom, in screen heights).
         var aspect = Camera.main != null ? Camera.main.aspect : 16f / 9f;
         var across = aspect / 2 - HudRoom;
-        if (across > 0.1f) homeDistance = Mathf.Max(homeDistance, framed.extents.x / (2 * Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) * across));
+        if (across > 0.1f) homeDistance = Mathf.Max(homeDistance, framed.x / (2 * Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) * across));
         var highest = (ceiling - boardHeight) / Mathf.Max(0.01f, -mainView.forward.y) / maxZoom;
         if (homeDistance > highest)
         {
@@ -218,7 +254,7 @@ public class CameraRig : MonoBehaviour
             gliding = false;
             movedThisTurn = true;
             var depth = homeDistance * zoom * Mathf.Tan(mainFieldOfView * 0.5f * Mathf.Deg2Rad) * 2;
-            MoveTo(offset + keys.normalized * (keyPan * depth * Time.unscaledDeltaTime));
+            MoveTo(offset + Quaternion.Euler(0, -facing, 0) * keys.normalized * (keyPan * depth * Time.unscaledDeltaTime));
         }
 
         // Not over the HUD (a menu), or paused.

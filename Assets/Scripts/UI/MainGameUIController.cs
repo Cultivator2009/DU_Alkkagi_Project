@@ -70,6 +70,8 @@ public class MainGameUIController : MonoBehaviour
     private bool hintFits = true; // the key legend is big enough to read (Arrange)
     private int lastTickSecond = -1; // the countdown second last ticked
     private float arrangedWidth = -1; // the canvas width Arrange last laid out for
+    private int viewSide;             // the side the board is seen from, at the bottom of the screen
+    private Vector2[] builtCorners;   // the two sides' panels as built: anchor, pivot, position
     private RatingTracker rating; // the bridge's, once it has one
 
     private void Awake()
@@ -157,6 +159,14 @@ public class MainGameUIController : MonoBehaviour
         }
         ShowFastForward();
         var gameManager = GameManager.manager;
+        // Seen from this screen's own side (online, a guest's is known
+        // once the host has said which it is).
+        if ((OwnSide ?? 0) != viewSide)
+        {
+            viewSide = OwnSide ?? 0;
+            if (CameraRig.Instance != null) CameraRig.Instance.Face(gameManager.Board.SeatAngle(viewSide));
+            arrangedWidth = -1;
+        }
         if (!Mathf.Approximately(CanvasRect.rect.width, arrangedWidth)) Arrange(PlayerCount); // the window changed shape
 
         // Turns begin after the guest has loaded and any placement is done;
@@ -287,10 +297,19 @@ public class MainGameUIController : MonoBehaviour
         var panelSize = ((RectTransform)playerPanels[0].transform).rect.size;
         if (players <= 2)
         {
+            // The first side's corner, the bottom one, goes to the side seen
+            // from below.
+            if (builtCorners == null)
+                builtCorners = playerPanels.Take(2).SelectMany(p => { var r = (RectTransform)p.transform; return new[] { r.anchorMin, r.anchorMax, r.pivot, r.anchoredPosition }; }).ToArray();
             var scale = Mathf.Min(1, room / panelSize.x);
             for (var i = 0; i < players; i++)
             {
                 var rect = (RectTransform)playerPanels[i].transform;
+                var corner = 4 * ((i + viewSide) % 2);
+                rect.anchorMin = builtCorners[corner];
+                rect.anchorMax = builtCorners[corner + 1];
+                rect.pivot = builtCorners[corner + 2];
+                rect.anchoredPosition = builtCorners[corner + 3];
                 Scale(rect, scale);
                 // Just outside the panel, toward the middle of the column.
                 var skip = (RectTransform)playerPanels[i].skipButton.transform;
@@ -306,7 +325,7 @@ public class MainGameUIController : MonoBehaviour
         // Left column: the sides whose edge is on the left (and the south),
         // up from the bottom; right column: the rest, down from the top.
         var board = GameManager.manager.Board;
-        var directions = Enumerable.Range(0, players).Select(i => board.SeatDirection(i)).ToArray();
+        var directions = Enumerable.Range(0, players).Select(i => BoardSetup.Turn(board.SeatDirection(i), -board.SeatAngle(viewSide))).ToArray();
         bool Left(int i) => directions[i].x < -0.1f || (Mathf.Abs(directions[i].x) <= 0.1f && directions[i].y < 0);
         for (var i = 0; i < players; i++)
         {
