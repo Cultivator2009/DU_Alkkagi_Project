@@ -393,8 +393,8 @@ public class NetworkMatchBridge : MonoBehaviour
         controller.OnTurnStarted += _ => BroadcastTurnResult();
         controller.OnMatchEnded += HandleHostMatchEnded;
         controller.OnPlayerOut += HandleHostPlayerOut;
-        // The edge giving way: the shot before it and the crumble go out now,
-        // so the guests see the board go when it goes.
+        // The circle closing in: the shot before it and the closing go out
+        // now, so the guests see it close when it does.
         controller.OnZoneChanged += () =>
         {
             if (controller.Collapsing) BroadcastTurnResult();

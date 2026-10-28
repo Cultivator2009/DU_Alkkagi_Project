@@ -51,7 +51,7 @@ public class ItemForesight : MonoBehaviour
         if (planner == null || aimed != piece)
         {
             Stop();
-            planner = new AIPlanner(game.Board, game.gamePieceScripts, game.Ruleset, game.Sides, MatchSettings.Current.BothOutRule, false, game.TeamOf);
+            planner = new AIPlanner(game.Board, game.gamePieceScripts, game.Ruleset, game.Sides, MatchSettings.Current.BothOutRule, null, game.TeamOf);
             aimed = piece;
         }
         if (!tracing && (Vector3.Angle(piece.AimDirection, tracedDirection) > 0.8f || Mathf.Abs(piece.AimPower - tracedPower) > 0.015f))

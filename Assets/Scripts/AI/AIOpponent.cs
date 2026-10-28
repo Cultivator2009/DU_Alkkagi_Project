@@ -75,7 +75,7 @@ public class AIOpponent : MonoBehaviour
         // Leave a second and a half of a timed turn for the shot itself.
         var budget = turns.TurnSeconds > 0 ? Mathf.Max(0.3f, turns.TurnTimeRemaining - thinkSeconds - 1.5f) : 4f;
         PlannedShot? shot = null;
-        planner = new AIPlanner(gameManager.Board, gameManager.gamePieceScripts, gameManager.Ruleset, gameManager.Sides, MatchSettings.Current.BothOutRule, turns.Zone.Warned, gameManager.TeamOf);
+        planner = new AIPlanner(gameManager.Board, gameManager.gamePieceScripts, gameManager.Ruleset, gameManager.Sides, MatchSettings.Current.BothOutRule, turns.Zone, gameManager.TeamOf);
         yield return planner.Plan(playerId, level, budget, s => shot = s);
         planner.Dispose();
         planner = null;

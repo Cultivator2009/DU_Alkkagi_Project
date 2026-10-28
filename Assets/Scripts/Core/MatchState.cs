@@ -17,12 +17,11 @@ public sealed class MatchState
     public int Winner = -1;       // -1: no one (a draw, or the host left)
     public MatchEndReason Reason;
     public List<Side> Sides = new List<Side>();
-    // The crumbling edge (ZoneRule), and the round it's counted in.
+    // The closing circle (ZoneRule), and the round it's counted in.
     public int Round = 1;
-    public int QuietRounds;
     public int ZoneStage;
     public bool ZoneWarned;
-    public bool Collapsing;     // the edge is giving way now: no one's turn
+    public bool Collapsing;     // the circle is closing in now: no one's turn
 
     public void Write(NetWriter writer)
     {
@@ -40,7 +39,6 @@ public sealed class MatchState
             side.Write(w);
         });
         writer.Int(Round);
-        writer.Int(QuietRounds);
         writer.Int(ZoneStage);
         writer.Bool(ZoneWarned);
         writer.Bool(Collapsing);
@@ -66,7 +64,6 @@ public sealed class MatchState
             return side;
         });
         state.Round = reader.Int();
-        state.QuietRounds = reader.Int();
         state.ZoneStage = reader.Int();
         state.ZoneWarned = reader.Bool();
         state.Collapsing = reader.Bool();

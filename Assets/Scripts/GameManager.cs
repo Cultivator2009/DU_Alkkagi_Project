@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -139,10 +140,11 @@ public class GameManager : MonoBehaviour
         new GameObject("HitEffects").AddComponent<HitEffects>();
         foreach (var piece in gamePieceScripts) piece.gameObject.AddComponent<PieceSounds>().knocksBoard = pieceSet.KnocksBoard;
 
-        var zone = new ZoneRule { Enabled = settings.Zone, MaxStage = ZoneRule.StagesFor(Board.Active.Shape) };
+        var zone = new ZoneRule { Enabled = settings.Zone, Centre = Board.Middle, Reach = Board.Reach };
         TurnController = new TurnController(Ruleset, Sides, gamePieceScripts, new PieceSelector(gamePieceScripts), settings.TurnSeconds, zone, settings.RoundLimit, TeamOf)
         {
-            Crumble = stage => Board.Crumble(stage, gamePieceScripts),
+            Close = stage => StartCoroutine(CloseZone(stage)),
+            Sweep = SweepZone,
         };
         TurnController.OnPlayerOut += RetirePieces;
         new GameObject("BoardZoneView").AddComponent<BoardZoneView>().Init(Board, TurnController);
@@ -273,6 +275,52 @@ public class GameManager : MonoBehaviour
         if (ItemSystem.Instance != null) ItemSystem.Instance.Bench(piece);
         else Destroy(piece.gameObject);
     }
+
+    // The circle closes in to stage, sweeping in over ZoneRule.CloseSeconds
+    // as BoardZoneView draws it: a piece goes as it passes its middle,
+    // breaking as one does at the end of its health, out on no one's shot.
+    // On the authority; a guest sees them break and go with the host's word.
+    private IEnumerator CloseZone(int stage)
+    {
+        var turns = TurnController;
+        var zone = turns.Zone;
+        var from = stage > 1 ? zone.Radius(stage - 1) : zone.Reach;
+        var to = zone.Radius(stage);
+        var began = Time.time;
+        while (true)
+        {
+            if (TurnController != turns || turns.IsMirror) yield break;
+            var t = Mathf.Clamp01((Time.time - began) / ZoneRule.CloseSeconds);
+            var radius = Mathf.Lerp(from, to, ZoneSweep(t));
+            foreach (var piece in gamePieceScripts.Where(p => p != null && p.gameObject.activeInHierarchy && !p.Manager.isDestroyed).ToList())
+            {
+                var at = piece.Body.position;
+                if (!zone.Outside(new Vector2(at.x, at.z), radius)) continue;
+                if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Shatter, 0f, at, piece: piece.Manager.pieceID);
+                PieceOut(piece);
+            }
+            if (t >= 1) yield break;
+            yield return null;
+        }
+    }
+
+    // A shot over, once the circle has closed: what it left outside the
+    // circle goes, breaking, on that shot's account.
+    private void SweepZone()
+    {
+        var zone = TurnController.Zone;
+        if (TurnController.IsMirror || zone.Stage == 0) return;
+        foreach (var piece in gamePieceScripts.Where(p => p != null && p.gameObject.activeInHierarchy && !p.Manager.isDestroyed).ToList())
+        {
+            var at = piece.Body.position;
+            if (!zone.Outside(new Vector2(at.x, at.z), zone.Safe)) continue;
+            if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Shatter, 0f, at, piece: piece.Manager.pieceID);
+            PieceOut(piece);
+        }
+    }
+
+    // How far the circle has swept in at t (0 to 1): quick, then slowing to its place.
+    public static float ZoneSweep(float t) => 1 - (1 - t) * (1 - t);
 
     // ---- A battle of health ----
 

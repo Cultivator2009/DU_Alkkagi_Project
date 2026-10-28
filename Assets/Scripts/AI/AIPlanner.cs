@@ -74,17 +74,22 @@ public class AIPlanner : IDisposable
     private readonly PhysicsScene physics;
     private readonly BoxCollider clipped; // the board copy's, standing in for its shape (BoardVariant.Clip)
     private readonly List<Stand> stands = new List<Stand>();
-    private readonly BoardShape shape;    // what's left of the board
+    private readonly BoardShape shape;    // the board
     private readonly BoardVariant ground; // the board: where its top is, under each point
-    private readonly BoardShape afterShot; // and what will be once this turn is over (the edge may be coming in)
+    // The closing circle (ZoneRule): its middle, the one closing as this
+    // round ends (a piece left outside it is as good as gone) and the next
+    // (one outside it has to come in); infinite, none.
+    private readonly Vector2 zoneCentre;
+    private readonly float safe = float.PositiveInfinity; // closed: outside it, a piece goes as the shot ends
+    private readonly float closing = float.PositiveInfinity;
+    private readonly float nextCircle = float.PositiveInfinity;
     private readonly BothOutRule bothOutRule;
     private readonly IRuleset ruleset;
     private readonly IReadOnlyList<Side> sides;
     private readonly Func<int, int> teamOf; // a teammate's pieces are as its own
 
-    // edgeComing: the edge gives way when this turn ends (ZoneRule), so a
-    // piece left on that ground is as good as gone.
-    public AIPlanner(BoardSetup board, IEnumerable<GamePieceDragAndReleaseForce> pieces, IRuleset ruleset, IReadOnlyList<Side> sides, BothOutRule rule, bool edgeComing = false, Func<int, int> teamOf = null)
+    // zone: the match's closing circle, or null to leave it out (Foresight).
+    public AIPlanner(BoardSetup board, IEnumerable<GamePieceDragAndReleaseForce> pieces, IRuleset ruleset, IReadOnlyList<Side> sides, BothOutRule rule, ZoneRule zone = null, Func<int, int> teamOf = null)
     {
         this.ruleset = ruleset;
         this.sides = sides;
@@ -92,7 +97,13 @@ public class AIPlanner : IDisposable
         scene = SceneManager.CreateScene("AIPlanner " + Time.frameCount, new CreateSceneParameters(LocalPhysicsMode.Physics3D));
         physics = scene.GetPhysicsScene();
         shape = board.Playable;
-        afterShot = edgeComing ? shape.Inset(ZoneRule.Step) : shape;
+        if (zone != null && zone.Enabled)
+        {
+            zoneCentre = zone.Centre;
+            safe = zone.Safe;
+            nextCircle = zone.Next;
+            if (zone.Warned) closing = zone.Next;
+        }
         bothOutRule = rule;
 
         // A box standing in for the board's shape stands in here too.
@@ -278,6 +289,9 @@ public class AIPlanner : IDisposable
     // piece it can knock counts for a little: out of reach of everything,
     // the next shot can't score.
     private const float Approach = 1.5f;
+    private const float OutsideNext = 3f; // a piece of its own outside the next circle (an opponent's: half for it)
+
+    private bool Outside(Vector2 point, float radius) => !float.IsInfinity(radius) && (point - zoneCentre).sqrMagnitude > radius * radius;
 
     private float Score(int player, Stand shooter)
     {
@@ -308,10 +322,10 @@ public class AIPlanner : IDisposable
                 else theirsOut += damage;
                 lost[stand.Owner].value += damage;
             }
-            // Near the edge is where a piece gets knocked out next; on
-            // ground about to give way, it's out.
+            // Near the edge is where a piece gets knocked out next; outside
+            // the circle, or the one closing as this round ends, it's out.
             var flat = new Vector2(stand.Body.position.x, stand.Body.position.z);
-            if (!afterShot.Contains(flat))
+            if (!shape.Contains(flat) || Outside(flat, safe) || Outside(flat, closing))
             {
                 if (mine) mineOut += stand.Value;
                 else theirsOut += stand.Value;
@@ -319,8 +333,12 @@ public class AIPlanner : IDisposable
                 lost[stand.Owner].value += stand.Value;
                 continue;
             }
-            var nearEdge = 1f - Mathf.Clamp01(afterShot.Margin(flat) / 0.5f);
+            var margin = shape.Margin(flat);
+            if (!float.IsInfinity(safe)) margin = Mathf.Min(margin, safe - (flat - zoneCentre).magnitude);
+            var nearEdge = 1f - Mathf.Clamp01(margin / 0.5f);
             position += mine ? -0.8f * nearEdge : 0.8f * nearEdge;
+            // Outside the next circle: gone when it closes, unless brought in.
+            if (Outside(flat, nextCircle)) position += mine ? -OutsideNext : OutsideNext * 0.5f;
             // A pond's rim is as near as an edge, and the slope into it reaches further:
             // its own piece left by one is as good as in it at the next miss.
             if (ground.IsRelief)
@@ -388,6 +406,26 @@ public class AIPlanner : IDisposable
                 yield return new Candidate { Shooter = shooter, Direction = aim, Power = power, Priority = priority };
                 if (power < 0.8f) yield return new Candidate { Shooter = shooter, Direction = aim, Power = power * 1.25f, Priority = priority - 0.2f };
                 if (power < 1f) yield return new Candidate { Shooter = shooter, Direction = aim, Power = 1f, Priority = priority - 0.4f };
+            }
+        }
+        // Its own pieces outside the next circle: in again, straight for the
+        // middle or a little either side, past the line by a piece and more.
+        // Before all else when it closes as this round ends.
+        foreach (var shooter in mine)
+        {
+            var from = Flat(shooter.Source.transform.position);
+            var flat = new Vector2(from.x, from.z);
+            if (!Outside(flat, nextCircle)) continue;
+            var middle = new Vector3(zoneCentre.x, from.y, zoneCentre.y);
+            var travel = (middle - from).magnitude - nextCircle + shooter.Radius + 0.3f;
+            var priority = Outside(flat, closing) ? 2f : -1.5f;
+            foreach (var turn in new[] { 0f, 15f, -15f, 30f, -30f })
+            {
+                var way = Quaternion.Euler(0, turn, 0) * (middle - from).normalized;
+                var stop = from + way * travel;
+                if (PathBlocked(shooter, from, stop)) continue;
+                var power = Mathf.Clamp(Mathf.Sqrt(2 * Deceleration * travel) / FullSpeed(shooter), 0.12f, 1f);
+                yield return new Candidate { Shooter = shooter, Direction = way, Power = power, Priority = priority - Mathf.Abs(turn) / 30f };
             }
         }
         if (!ground.IsRelief) yield break;
@@ -483,7 +521,15 @@ public class AIPlanner : IDisposable
     }
 
     // How far from point along direction the board ends.
-    private float EdgeDistance(Vector3 point, Vector3 direction) => shape.Exit(new Vector2(point.x, point.z), new Vector2(direction.x, direction.z));
+    // How far from a point, going one way, the board ends - or the closed
+    // circle, which is its edge now.
+    private float EdgeDistance(Vector3 point, Vector3 direction)
+    {
+        var from = new Vector2(point.x, point.z);
+        var way = new Vector2(direction.x, direction.z);
+        var exit = shape.Exit(from, way);
+        return way.sqrMagnitude < 1e-8f ? exit : Mathf.Min(exit, ZoneRule.Exit(from, way.normalized, zoneCentre, safe));
+    }
 
     private static Vector3 Flat(Vector3 v) => new Vector3(v.x, 0, v.z);
 }

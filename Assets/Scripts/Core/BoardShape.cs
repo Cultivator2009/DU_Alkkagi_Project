@@ -31,8 +31,8 @@ public struct BoardPart
 // plain board one rectangle, the hexagon one, the cross two overlapping
 // bars). The questions the game asks of an edge - where a shot leaves the
 // board, how far a piece is from falling, what's in reach - go through
-// here, so nothing assumes a rectangle. Inset gives the board as it
-// crumbles in from the edge (BoardZone).
+// here, so nothing assumes a rectangle. Inset gives it in from its edge
+// (a side's placing zone).
 public sealed class BoardShape
 {
     private readonly Vector2[][] parts;

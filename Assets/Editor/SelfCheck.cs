@@ -642,12 +642,25 @@ internal static class SelfCheck
                     Result(false, "a shot never settled: " + string.Join(", ", unsettled));
                     yield break;
                 }
+                // The circle, once closed, is the edge: nothing left outside it between turns.
+                var zone = turns.Zone;
+                if (state == GameManager.GameState.WaitingForInput && zone.Stage > 0)
+                {
+                    var stray = gameManager.gamePieceScripts.FirstOrDefault(p => p != null && p.gameObject.activeInHierarchy && !p.Manager.isDestroyed
+                                                                                 && zone.Outside(new Vector2(p.Body.position.x, p.Body.position.z), zone.Safe + 0.01f));
+                    if (stray != null)
+                    {
+                        Result(false, $"{stray.name} left outside the closed circle (stage {zone.Stage}, {zone.Safe:F2}) at {stray.Body.position.ToString("F2")}");
+                        yield break;
+                    }
+                }
                 yield return null;
             }
             // The landscape's matches run long by design: enough turns played through is a pass.
             var longEnough = !over && rules.BoardType == BoardType.Landscape && turns.TurnsEnded >= 40;
-            Result(over || longEnough, over ? $"winner {winner}, {turns.TurnsEnded} turns, longest shot {longest:F1}s, {Time.realtimeSinceStartup - started:F0}s{itemsUsed()}"
-                : $"not over after 150 s ({turns.TurnsEnded} turns{(longEnough ? $", longest shot {longest:F1}s{itemsUsed()}" : "")})");
+            var circle = turns.Zone.Enabled ? $", circle stage {turns.Zone.Stage}" : "";
+            Result(over || longEnough, over ? $"winner {winner}, {turns.TurnsEnded} turns, longest shot {longest:F1}s, {Time.realtimeSinceStartup - started:F0}s{circle}{itemsUsed()}"
+                : $"not over after 150 s ({turns.TurnsEnded} turns{(longEnough ? $", longest shot {longest:F1}s{circle}{itemsUsed()}" : "")})");
         }
 
         // ---- Network ----

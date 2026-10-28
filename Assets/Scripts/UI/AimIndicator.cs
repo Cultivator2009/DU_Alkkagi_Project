@@ -151,11 +151,16 @@ public class AimIndicator : MonoBehaviour
 
     // First contact along the shot, on the board plane: the nearest piece
     // whose center comes within the two pieces' radii of the shot line, else
-    // where the moving piece would cross the board edge.
+    // where the moving piece would cross the board edge (or the closed
+    // circle's, which is the edge now).
     private void DrawGuide(GamePieceDragAndReleaseForce piece, GameManager gameManager, Vector3 origin, float radius, Vector2 from)
     {
         var dir = piece.AimDirection;
-        var best = gameManager.Board.Playable.Exit(new Vector2(origin.x, origin.z), new Vector2(dir.x, dir.z));
+        var flat = new Vector2(origin.x, origin.z);
+        var way = new Vector2(dir.x, dir.z);
+        var best = gameManager.Board.Playable.Exit(flat, way);
+        var zone = gameManager.TurnController?.Zone;
+        if (zone != null && way.sqrMagnitude > 1e-8f) best = Mathf.Min(best, ZoneRule.Exit(flat, way.normalized, zone.Centre, zone.Safe));
         GamePieceDragAndReleaseForce target = null;
         foreach (var other in gameManager.gamePieceScripts)
         {
@@ -197,6 +202,7 @@ public class AimIndicator : MonoBehaviour
     private void DrawCurve(GamePieceDragAndReleaseForce piece, GameManager gameManager, Vector3 origin, float radius, int sign)
     {
         var shape = gameManager.Board.Playable;
+        var zone = gameManager.TurnController?.Zone;
         var at = new Vector2(origin.x, origin.z);
         var heading = new Vector2(piece.AimDirection.x, piece.AimDirection.z).normalized;
         const float step = 0.02f;
@@ -207,7 +213,7 @@ public class AimIndicator : MonoBehaviour
             var turn = sign * step / ItemSystem.CurveRadius;
             heading = new Vector2(heading.x * Mathf.Cos(turn) - heading.y * Mathf.Sin(turn), heading.x * Mathf.Sin(turn) + heading.y * Mathf.Cos(turn));
             at += heading * step;
-            if (!shape.Contains(at)) break;
+            if (!shape.Contains(at) || (zone != null && zone.Outside(at, zone.Safe))) break;
             foreach (var other in gameManager.gamePieceScripts)
             {
                 if (other == null || other == piece || !other.gameObject.activeSelf) continue;

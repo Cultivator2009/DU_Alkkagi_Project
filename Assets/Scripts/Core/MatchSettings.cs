@@ -236,12 +236,12 @@ public sealed class MatchSettings
             v => Loc.Get("option.seconds", v), s => s.SpawnMode == global::SpawnMode.Placement, normal: new[] { 60 }, ranked: new[] { 60 }),
         new MatchSettingDef(MatchSettingId.TurnSeconds, "turnTime", "match.turnTime", new[] { 0, 10, 15, 20, 30, 60 }, 0,
             v => v == 0 ? Loc.Get("option.noLimit") : Loc.Get("option.seconds", v), normal: new[] { 10, 15, 20, 30, 60 }, normalFallback: 30, ranked: new[] { 20 }),
-        // The board's edge crumbling in once nothing has gone out for a
-        // while (TurnController), so no one can hold a match by passing.
-        // Normal: always, and a round limit behind it. Ranked: the round
-        // limit alone.
+        // The closing circle (ZoneRule): from round 4, every three rounds, it
+        // closes in on the middle and takes what's left outside, so the sides have to meet
+        // and no one can hold a match by passing. Normal: always, and a
+        // round limit behind it. Ranked: the round limit alone.
         new MatchSettingDef(MatchSettingId.Zone, "zone", "match.zone", new[] { 1, 0 }, 1,
-            v => Loc.Get(v == 1 ? "option.on" : "option.off"), s => !s.Walled && s.BoardType != global::BoardType.Landscape, normal: new[] { 1 }, ranked: new[] { 0 }),
+            v => Loc.Get(v == 1 ? "option.on" : "option.off"), normal: new[] { 1 }, ranked: new[] { 0 }),
         new MatchSettingDef(MatchSettingId.RoundLimit, "roundLimit", "match.roundLimit", new[] { 0, 15, 20, 30, 40 }, 0,
             v => v == 0 ? Loc.Get("option.noLimit") : Loc.Get("option.rounds", v), normal: new[] { 20 }, ranked: new[] { 20 }),
         new MatchSettingDef(MatchSettingId.BothOutRule, "bothOut", "match.bothOut",
@@ -310,7 +310,7 @@ public sealed class MatchSettings
     public HealthRule HealthRule => (HealthRule)Get(MatchSettingId.HealthRule);
     public int PieceHealth => Get(MatchSettingId.PieceHealth);
     public int SideHealth => Get(MatchSettingId.SideHealth);
-    // Walls round the board (a battle of health's choice): nothing falls, so the edge doesn't crumble.
+    // Walls round the board (a battle of health's choice): nothing falls off.
     public bool Walled => Variant == GameVariant.Health && Get(MatchSettingId.Barrier) == 1;
     public BoardType BoardType => (BoardType)Get(MatchSettingId.BoardType);
     public PieceType PieceType => (PieceType)Get(MatchSettingId.PieceType);
@@ -330,8 +330,7 @@ public sealed class MatchSettings
     public PlacementStyle PlacementStyle => (PlacementStyle)Get(MatchSettingId.PlacementStyle);
     public int PlacementSeconds => Get(MatchSettingId.PlacementSeconds);
     public int TurnSeconds => Get(MatchSettingId.TurnSeconds); // 0 = no limit
-    // Not on the landscape: its bases are in its corners, the first ground to go.
-    public bool Zone => Get(MatchSettingId.Zone) == 1 && !Walled && BoardType != BoardType.Landscape;
+    public bool Zone => Get(MatchSettingId.Zone) == 1;
     public int RoundLimit => Get(MatchSettingId.RoundLimit); // 0 = none
     public BothOutRule BothOutRule => (BothOutRule)Get(MatchSettingId.BothOutRule);
     public bool ItemsOn => Get(MatchSettingId.Items) == 1;

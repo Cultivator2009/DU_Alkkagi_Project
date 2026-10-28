@@ -78,7 +78,7 @@ public class ItemSystem : MonoBehaviour
     {
         public int Shooter;
         public int TurnsEnded; // when it was taken: the shot it's of ends with one more
-        public int Stage;      // the edge's: a crumble since and there's no going back
+        public int Stage;      // the circle's: closed in since and there's no going back
         public int Standing;
         public List<(GamePieceDragAndReleaseForce piece, Vector3 position, Quaternion rotation, int health)> Pieces;
         public List<(int pieces, int score, int health)> Sides;
@@ -527,13 +527,13 @@ public class ItemSystem : MonoBehaviour
 
     private static IEnumerable<Collider> Solids(GamePieceDragAndReleaseForce piece) => piece.GetComponentsInChildren<Collider>().Where(c => !c.isTrigger);
 
-    // The edge gave way: what stood on the lost ground goes.
+    // The circle closed in: what stood outside it goes.
     private void ZoneChanged()
     {
         if (!Authority || !turns.Collapsing) return;
-        var shape = Board.Playable;
-        State.Boxes.RemoveAll(b => !shape.Contains(b.Position));
-        State.Objects.RemoveAll(o => !shape.Contains(o.Position));
+        var zone = turns.Zone;
+        State.Boxes.RemoveAll(b => zone.Outside(b.Position, zone.Safe));
+        State.Objects.RemoveAll(o => zone.Outside(o.Position, zone.Safe));
         Changed();
     }
 
@@ -544,12 +544,14 @@ public class ItemSystem : MonoBehaviour
     {
         var every = rules.ItemBoxRounds;
         if (every <= 0 || round % every != 0 || State.Boxes.Count >= MaxBoxes) return;
-        var shape = turns.Zone.Warned ? Board.Playable.Inset(ZoneRule.Step) : Board.Playable;
+        var shape = Board.Playable;
+        var zone = turns.Zone;
         var bounds = shape.Bounds;
         for (var attempt = 0; attempt < 80; attempt++)
         {
             var point = new Vector2(Mathf.Lerp(bounds.xMin, bounds.xMax, (float)random.NextDouble()), Mathf.Lerp(bounds.yMin, bounds.yMax, (float)random.NextDouble()));
             if (!shape.Contains(point, 0.25f) || !Clear(point, BoxRadius + 0.15f, null)) continue;
+            if (zone.Outside(point, Mathf.Min(zone.Safe, zone.Next) - 0.25f)) continue; // inside the next circle: where it's worth going
             if (Board.RiseAt(point) < -0.01f) continue; // not in a pond or on the slope into it (the landscape)
             if (State.Boxes.Any(b => (b.Position - point).magnitude < 0.4f)) continue;
             if (State.Objects.Any(o => (o.Position - point).magnitude < RadiusOf(o.Kind) + BoxRadius + 0.1f)) continue;

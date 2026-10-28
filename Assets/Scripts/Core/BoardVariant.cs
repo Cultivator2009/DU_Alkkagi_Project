@@ -12,9 +12,7 @@ using UnityEngine.Rendering;
 // time: a top with its texture, sides, and a collider - a box for a
 // rectangle, a convex prism for another single part, and for several (the
 // cross's bars) one box round them all, its touches outside them dropped
-// (Clip), so the top has no seams. Built
-// again smaller as the edge crumbles (Build with an inset), the texture
-// staying where it was.
+// (Clip), so the top has no seams.
 public class BoardVariant : MonoBehaviour
 {
     public BoardType type;
@@ -43,12 +41,10 @@ public class BoardVariant : MonoBehaviour
     public float zoneDepth = 0.8f;
 
     private BoardShape shape;
-    private BoardShape playable;
 
     public BoardShape Shape => shape ??= new BoardShape(parts);
-    // What's left to play on: the shape, crumbled in by Build's inset.
-    public BoardShape Playable => playable ?? Shape;
-    public float Inset { get; private set; }
+    // Where the pieces play: all of it (the closing circle takes pieces, not board).
+    public BoardShape Playable => Shape;
 
     private BoardTerrain terrain;
     private bool terrainLooked;
@@ -73,7 +69,7 @@ public class BoardVariant : MonoBehaviour
 
     public float[] Seats(int players) => players <= 2 ? seats2 : players == 3 ? seats3 : seats4;
 
-    // The whole board's bounds (not the crumbled one's): the camera frames this.
+    // The board's bounds: the camera frames this.
     public Bounds Bounds
     {
         get
@@ -84,11 +80,10 @@ public class BoardVariant : MonoBehaviour
         }
     }
 
-    // The board, inset from its edge by inset. Replaces whatever it built before.
-    public void Build(float inset = 0f)
+    // The board. Replaces whatever it built before.
+    public void Build()
     {
-        Inset = inset;
-        playable = inset > 0 ? Shape.Inset(inset) : Shape;
+        var playable = Shape;
         var old = transform.Find(SlabName);
         if (old != null)
         {

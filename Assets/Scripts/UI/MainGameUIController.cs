@@ -386,14 +386,16 @@ public class MainGameUIController : MonoBehaviour
             playerPanels[i].skipButton.gameObject.SetActive(i == currentPlayerId && CanSkip(i));
     }
 
-    // The crumbling edge's stage once it's come (or announced), and the
+    // The closing circle: how many rounds until it comes, or (announced)
+    // that it closes this round, and its stage once it's come; and the
     // round when there's a round limit.
     private void RenderStatusChip(bool playing)
     {
         var parts = new List<string>();
         var zone = turnController.Zone;
+        if (zone.Stage > 0) parts.Add(Loc.Get("hud.zoneChip", zone.Stage));
         if (zone.Warned) parts.Add(Loc.Get("hud.zoneChipWarn"));
-        else if (zone.Stage > 0) parts.Add(Loc.Get("hud.zoneChip", zone.Stage));
+        else if (zone.Enabled && zone.Stage < ZoneRule.Stages) parts.Add(Loc.Get(zone.Stage > 0 ? "hud.zoneChipNext" : "hud.zoneChipIn", zone.ClosingRound - turnController.Round + 1));
         if (turnController.RoundLimit > 0) parts.Add(Loc.Get("hud.roundChip", turnController.Round, turnController.RoundLimit));
         statusChip.SetActive(playing && parts.Count > 0);
         if (parts.Count > 0) statusChipText.text = string.Join(" · ", parts);
@@ -547,7 +549,7 @@ public class MainGameUIController : MonoBehaviour
         noticeUntil = Time.time + noticeSeconds;
     }
 
-    // The edge announced for this turn, or giving way now.
+    // The circle announced for this round, or closing in now.
     private void HandleZoneChanged()
     {
         if (turnController.Zone.Warned)
@@ -557,7 +559,7 @@ public class MainGameUIController : MonoBehaviour
         }
         else if (turnController.Collapsing)
         {
-            ShowNotice(Loc.Get("hud.zoneCrumbled"));
+            ShowNotice(Loc.Get("hud.zoneClosed"));
             GameAudio.PlayBoard(GameAudio.Bank.crumble, 0.9f);
         }
         Render();

@@ -50,7 +50,7 @@ public class SoundBank : ScriptableObject
     public SoundSet open => Get("open");          // a card opening
     public SoundSet damage => Get("damage");      // a battle of health's knock, with its number (by strength)
     public SoundSet zoneWarn => Get("zone_warn"); // the edge will give way when this turn ends
-    public SoundSet crumble => Get("crumble");    // the edge giving way
+    public SoundSet crumble => Get("crumble");    // the circle closing in (a rumble; it was the edge giving way)
     public SoundSet countdown => Get("countdown"); // the last seconds before a ranked series' next game
 
     // The item mode (ItemView; Tools > Alkkagi > Build item sounds)

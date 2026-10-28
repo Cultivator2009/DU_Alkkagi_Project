@@ -96,8 +96,27 @@ public class BoardSetup : MonoBehaviour
     public BoardVariant Active { get; private set; }
     public int Players { get; private set; } = 2;
     public Bounds SurfaceBounds => ActiveOrFirst.Bounds;
-    // What's left of the board to play on (BoardZone crumbles it).
+    // The board to play on.
     public BoardShape Playable => ActiveOrFirst.Playable;
+    // Its middle (world x, z), and how far its furthest corner is from there:
+    // the closing circle's (ZoneRule).
+    public Vector2 Middle
+    {
+        get
+        {
+            var centre = ActiveOrFirst.Shape.Bounds.center;
+            var at = ActiveOrFirst.transform.position;
+            return new Vector2(at.x + centre.x, at.z + centre.y);
+        }
+    }
+    public float Reach
+    {
+        get
+        {
+            var shape = ActiveOrFirst.Shape;
+            return shape.Parts.SelectMany(part => part).Max(corner => (corner - shape.Bounds.center).magnitude);
+        }
+    }
     // How far over the board's top the ground stands at a point (BoardVariant.RiseAt).
     public float RiseAt(Vector2 point) => ActiveOrFirst.RiseAt(point);
     // Where pieces rest while placed by hand (they drop onto the board when
@@ -201,7 +220,7 @@ public class BoardSetup : MonoBehaviour
     private void UseBoard(BoardType type)
     {
         Active = Array.Find(boards, b => b.type == type) ?? boards[0];
-        Active.Build(); // whole again, whatever the last match left of it
+        Active.Build(); // afresh: no walls left from the last match
         foreach (var board in boards) board.gameObject.SetActive(board == Active);
         var props = FindAnyObjectByType<RoomProps>();
         if (props != null) props.Clear(Active.Bounds);
@@ -493,10 +512,10 @@ public class BoardSetup : MonoBehaviour
 
     private static float Sq(float x) => x * x;
 
-    // A random spot in the zone clear of every piece in `occupied`, on what's
-    // left of the board. Falls back to scanning the zone on a grid, which
-    // with 12 pieces always finds room - unless the board has crumbled away
-    // under it, when the spot goes as near the side's edge as there's board.
+    // A random spot in the zone clear of every piece in `occupied`, on the
+    // board. Falls back to scanning the zone on a grid, which with 12 pieces
+    // always finds room; failing that, the spot goes as near the side's
+    // edge as there's board.
     public Vector3 RandomFreePosition(int player, GamePieceManager piece, List<(GamePieceManager piece, Vector3 position)> occupied, System.Random random)
     {
         var zone = Zone(player);
@@ -525,16 +544,6 @@ public class BoardSetup : MonoBehaviour
             if (Free(FromSeat(player, new Vector2(-x, z)), false, out var left)) return left;
         }
         return OnBoard(Vector2.zero);
-    }
-
-    // The edge gives way to this step (ZoneRule): the board is built again
-    // smaller, and the pieces are woken so whatever stood on the lost
-    // ground falls (a resting body wouldn't notice the board go).
-    public void Crumble(int stage, IEnumerable<GamePieceDragAndReleaseForce> pieces)
-    {
-        ActiveOrFirst.Build(stage * ZoneRule.Step);
-        foreach (var piece in pieces)
-            if (piece != null && !piece.Body.isKinematic) piece.Body.WakeUp();
     }
 
     // ---- Placement phase view ----
