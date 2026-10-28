@@ -128,10 +128,13 @@ public class PieceShatter : MonoBehaviour
 
             var outward = middle - centre;
             outward.y = Mathf.Max(0, outward.y);
+            // As high and as far as they flew under the old gravity
+            // (9.81 units/s², a sixth of the world's real one now): faster.
+            var lively = Mathf.Sqrt(-Physics.gravity.y / 9.81f);
             shards.Add(new Shard
             {
                 Transform = shard,
-                Velocity = outward.normalized * Random.Range(1.2f, 2.6f) + Vector3.up * Random.Range(0.8f, 1.6f) + inherited,
+                Velocity = (outward.normalized * Random.Range(1.2f, 2.6f) + Vector3.up * Random.Range(0.8f, 1.6f)) * lively + inherited,
                 Spin = Random.insideUnitSphere * 25f,
             });
         }

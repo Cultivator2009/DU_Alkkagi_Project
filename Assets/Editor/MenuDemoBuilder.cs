@@ -40,6 +40,7 @@ public static class MenuDemoBuilder
             var source = setup.boards.First(b => b.type == s.Item1);
             var board = Copy(source.gameObject, root.transform);
             board.name = s.Item1 + " board";
+            Uncover(board, source);
             return new MenuDemo.Stage { board = board, sides = s.Item2, spawnDistance = s.Item3, view = s.Item4 };
         }).ToArray();
 
@@ -80,6 +81,24 @@ public static class MenuDemoBuilder
     private static bool CanRemove(Component component) =>
         !component.gameObject.GetComponents<Component>().Any(other => other != component && other.GetType().GetCustomAttributes(typeof(RequireComponent), true)
             .Cast<RequireComponent>().Any(r => r.m_Type0 == component.GetType() || r.m_Type1 == component.GetType() || r.m_Type2 == component.GetType()));
+
+    // A board of several parts stands in a match on one box round them all,
+    // its touches outside them dropped (BoardVariant.Clip) - which takes
+    // the board's script, gone from the copy: a box for each part instead.
+    private static void Uncover(GameObject board, BoardVariant source)
+    {
+        var slab = board.transform.Find(BoardVariant.SlabName);
+        if (slab == null || source.Shape.Parts.Count < 2) return;
+        foreach (var solid in slab.GetComponents<Collider>()) Object.DestroyImmediate(solid);
+        foreach (var part in source.Shape.Parts)
+        {
+            if (!BoardShape.IsRect(part, out var rect)) continue;
+            var box = slab.gameObject.AddComponent<BoxCollider>();
+            box.center = new Vector3(rect.center.x, -source.thickness / 2, rect.center.y);
+            box.size = new Vector3(rect.width, source.thickness, rect.height);
+            box.sharedMaterial = source.physics;
+        }
+    }
 
     // A copy with no scripts, inactive, its scene-made meshes its own.
     private static GameObject Copy(GameObject source, Transform parent)
