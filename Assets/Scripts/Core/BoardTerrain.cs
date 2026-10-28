@@ -4,14 +4,19 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 // The landscape board's ground (BoardType.Landscape): a relief carved from
-// one block of wood, twelve units a side, four times the go board and more,
-// too big to see whole from above. Every corner holds a side's base, a
-// raised step; between the corners, a pond by each edge's middle; in the
-// middle a raised mesa; ramps up onto the steps (off a step's edge a piece
-// drops to the ground below and plays on, back up only by a ramp); low
-// mounds on the low ground and rocks to hide behind. The same at every
-// corner, turned, so no seat is better than another. A piece that goes
-// into a pond is out, as one off the edge is.
+// one block of wood, ten units a side, three and a half times the go
+// board's, too big to see whole from above. The sides start on the level
+// ground of its corners, near enough the next corner's to reach it in a
+// shot. In the middle a raised mesa, ramps up onto it from the edges'
+// middles (off its edge a piece drops to the ground below and plays on,
+// back up only by a ramp) - the closing circle (ZoneRule) ends round it; a
+// low mound before each corner, small ponds by the edges' middles and rocks
+// beside them to hide behind. The same at every corner, turned, so no seat
+// is better than another. A piece that goes into a pond is out, as one off
+// the edge is.
+//
+// (Twelve a side at first, the sides on raised corners nine apart with a
+// pond between each two: the first knock came rounds into a match.)
 //
 // Every face of it is flat (the mounds are cut, the banks straight down to
 // the water), and what the pieces touch is boxes and a few large faces, not
@@ -25,28 +30,28 @@ using UnityEngine.Rendering;
 // scripts in any order: the AI's.)
 public class BoardTerrain : MonoBehaviour
 {
-    public const float Half = 6f;
-    public const float Step = 0.32f;          // a base's or the mesa's height over the ground: over any piece's, so none climbs it
+    public const float Half = 5f;
+    public const float Step = 0.24f;          // the mesa's height over the ground: over any piece's, so none climbs it
     private const float Cell = 0.04f;         // the drawn ground, on a grid this fine: a step's edge lies on its lines
-    private const float BaseIn = 3.2f;        // a base: where both |x| and |z| are at least this
-    private const float MesaHalf = 1.4f;
-    private const float RampLength = 1.2f;    // 15 degrees up
-    private const float PondAt = 4.3f;        // a pond's middle from the board's, along x or z
-    private const float PondRadius = 0.85f;
-    private const float Bank = 0.3f;          // round a pond the ground slopes down into it
-    private const float BankDepth = 0.14f;   // deep enough at the rim that the water hides where the ground ends
-    // A mound in every quarter: its middle this far along both axes, flat on
-    // top, its four faces sloping down to the ground.
-    private const float MoundAt = 2.4f;
-    private const float MoundHeight = 0.14f;
-    private const float MoundTop = 0.35f;     // half the top's side
-    private const float MoundFoot = 0.95f;    // half the foot's
-    // Rocks in one quarter (x, z, radius, height), mirrored into the others.
+    private const float MesaHalf = 1.1f;
+    private const float RampLength = 0.9f;    // 15 degrees up
+    private const float RampHalf = 0.5f;      // half a ramp's width
+    private const float PondAt = 4.2f;        // a pond's middle from the board's, along x or z: by the edge, off the way between two corners
+    private const float PondRadius = 0.35f;
+    private const float Bank = 0.12f;         // round a pond the ground slopes down into it
+    private const float BankDepth = 0.07f;    // deep enough at the rim that the water hides where the ground ends
+    // A mound in every quarter, before its corner: its middle this far along
+    // both axes, flat on top, its four faces sloping down to the ground.
+    private const float MoundAt = 1.85f;
+    private const float MoundHeight = 0.1f;
+    private const float MoundTop = 0.2f;      // half the top's side
+    private const float MoundFoot = 0.55f;    // half the foot's
+    // Rocks in one quarter (x, z, radius, height), mirrored into the others:
+    // either side of each pond.
     private static readonly Vector4[] Rocks =
     {
-        new Vector4(1.2f, 3.0f, 0.3f, 0.42f),
-        new Vector4(3.0f, 1.2f, 0.3f, 0.42f),
-        new Vector4(3.6f, 3.6f, 0.22f, 0.36f),
+        new Vector4(4.0f, 1.6f, 0.2f, 0.3f),
+        new Vector4(1.6f, 4.0f, 0.2f, 0.3f),
     };
 
     public Material groundMaterial;
@@ -98,16 +103,11 @@ public class BoardTerrain : MonoBehaviour
     // In the first quarter (x, z at least 0); pond: how far from the nearest pond's middle.
     private static float Ground(float x, float z, float pond)
     {
-        // A base, and its two ramps down toward its neighbours.
-        if (x >= BaseIn && z >= BaseIn) return Step;
-        var low = BaseIn - RampLength;
-        if (z >= 4f && z <= 5f && x >= low && x < BaseIn) return Step * (x - low) / RampLength;
-        if (x >= 4f && x <= 5f && z >= low && z < BaseIn) return Step * (z - low) / RampLength;
-        // The mesa, and its four ramps out toward the ponds.
+        // The mesa, and its four ramps out toward the edges' middles.
         if (x <= MesaHalf && z <= MesaHalf) return Step;
         var foot = MesaHalf + RampLength;
-        if (z <= 0.5f && x > MesaHalf && x <= foot) return Step * (foot - x) / RampLength;
-        if (x <= 0.5f && z > MesaHalf && z <= foot) return Step * (foot - z) / RampLength;
+        if (z <= RampHalf && x > MesaHalf && x <= foot) return Step * (foot - x) / RampLength;
+        if (x <= RampHalf && z > MesaHalf && z <= foot) return Step * (foot - z) / RampLength;
         // The low ground: the mounds, and the banks down into the ponds.
         var square = Mathf.Max(Mathf.Abs(x - MoundAt), Mathf.Abs(z - MoundAt));
         var h = MoundHeight * Mathf.Clamp01((MoundFoot - square) / (MoundFoot - MoundTop));
@@ -117,9 +117,8 @@ public class BoardTerrain : MonoBehaviour
 
     // ---- Building it ----
 
-    // The ground over what's left of the board (playable: a square, smaller
-    // as the edge crumbles), its sides down to the board's foot, the ponds'
-    // water and the rocks, under slab.
+    // The ground over the board (playable: a square), its sides down to the
+    // board's foot, the ponds' water and the rocks, under slab.
     public void Build(Transform slab, BoardShape playable, float thickness, PhysicsMaterial physics, Material side)
     {
         var rect = playable.Bounds;
@@ -197,9 +196,9 @@ public class BoardTerrain : MonoBehaviour
 
     // ---- What the pieces touch ----
 
-    // The bases and the mesa as boxes, the ramps as tilted boxes, the mounds
-    // as cut pyramids, the low ground and the ponds' banks as one mesh of
-    // large faces (it runs on under the rest), each with the board's grip.
+    // The mesa as a box, the ramps as tilted boxes, the mounds as cut
+    // pyramids, the low ground and the ponds' banks as one mesh of large
+    // faces (it runs on under the rest), each with the board's grip.
     private static void Solids(Transform slab, float thickness, PhysicsMaterial physics)
     {
         var solids = new GameObject("Solids").transform;
@@ -235,18 +234,11 @@ public class BoardTerrain : MonoBehaviour
 
         Block("Mesa", Rect.MinMaxRect(-MesaHalf, -MesaHalf, MesaHalf, MesaHalf));
         var foot = MesaHalf + RampLength;
-        var rampLow = BaseIn - RampLength;
         foreach (var sx in new[] { 1f, -1f })
         foreach (var sz in new[] { 1f, -1f })
-        {
-            Block("Base", Rect.MinMaxRect(Mathf.Min(sx * BaseIn, sx * Half), Mathf.Min(sz * BaseIn, sz * Half), Mathf.Max(sx * BaseIn, sx * Half), Mathf.Max(sz * BaseIn, sz * Half)));
-            // The base's two ramps, down toward its neighbours.
-            Ramp(new Vector2(sx * rampLow, sz * 4.5f), new Vector2(sx * BaseIn, sz * 4.5f), 1f);
-            Ramp(new Vector2(sx * 4.5f, sz * rampLow), new Vector2(sx * 4.5f, sz * BaseIn), 1f);
             Mound(Add<MeshCollider>("Mound"), new Vector2(sx * MoundAt, sz * MoundAt));
-        }
         foreach (var way in new[] { Vector2.right, Vector2.left, Vector2.up, Vector2.down })
-            Ramp(way * foot, way * MesaHalf, 1f);
+            Ramp(way * foot, way * MesaHalf, RampHalf * 2);
         var low = Add<MeshCollider>("Ground");
         low.sharedMesh = LowGround();
     }
@@ -276,7 +268,7 @@ public class BoardTerrain : MonoBehaviour
     // to the water, and the water (nothing: a piece falls through).
     private static Mesh LowGround()
     {
-        const float around = 1.2f; // half a pond's square
+        const float around = 0.55f; // half a pond's square: past its bank, inside the board
         const int segments = 32;   // round a pond: a multiple of four, a point at each square side's middle
         var lines = new[] { -Half, -PondAt - around, -PondAt + around, -around, around, PondAt - around, PondAt + around, Half };
         var vertices = new List<Vector3>();
@@ -399,8 +391,7 @@ public class BoardTerrain : MonoBehaviour
         for (var i = 0; i < vertices.Length; i++)
         {
             var v = vertices[i].normalized;
-            var bump = 0.8f + 0.4f * Mathf.PerlinNoise(v.x * 1.7f + seed, v.z * 1.7f + v.y * 1.3f + seed);
-            vertices[i] = v * (0.5f * bump);
+            vertices[i] = v * (0.5f * Bump(v, seed));
         }
         var mesh = new Mesh { name = "Rock" };
         mesh.vertices = vertices;
@@ -421,8 +412,31 @@ public class BoardTerrain : MonoBehaviour
         renderer.sharedMaterial = rockMaterial;
         renderer.shadowCastingMode = ShadowCastingMode.On;
         var solid = rock.AddComponent<MeshCollider>();
-        solid.sharedMesh = mesh;
+        solid.sharedMesh = Hull(seed);
         solid.convex = true;
         solid.sharedMaterial = physics;
+    }
+
+    private static float Bump(Vector3 way, float seed) => 0.8f + 0.4f * Mathf.PerlinNoise(way.x * 1.7f + seed, way.z * 1.7f + way.y * 1.3f + seed);
+
+    // A rock's collider: the same lumps on a coarse ball. The hull of the
+    // drawn one had more faces than PhysX takes, and it cut it short.
+    private static Mesh Hull(float seed)
+    {
+        const int rings = 6, round = 10;
+        var points = new List<Vector3> { Vector3.up * (0.5f * Bump(Vector3.up, seed)), Vector3.down * (0.5f * Bump(Vector3.down, seed)) };
+        for (var ring = 1; ring < rings; ring++)
+        for (var k = 0; k < round; k++)
+        {
+            var down = ring * Mathf.PI / rings;
+            var about = k * Mathf.PI * 2 / round;
+            var way = new Vector3(Mathf.Sin(down) * Mathf.Cos(about), Mathf.Cos(down), Mathf.Sin(down) * Mathf.Sin(about));
+            points.Add(way * (0.5f * Bump(way, seed)));
+        }
+        var mesh = new Mesh { name = "Rock hull" };
+        mesh.SetVertices(points);
+        // Any faces over all the points: a convex collider is their hull.
+        mesh.SetTriangles(Enumerable.Range(0, (points.Count + 2) / 3 * 3).Select(i => i % points.Count).ToArray(), 0);
+        return mesh;
     }
 }

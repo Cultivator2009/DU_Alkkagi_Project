@@ -360,15 +360,18 @@ internal static class BoardBuilder
         variant.parts = new[] { BoardPart.Rect(Rect.MinMaxRect(-half, -half, half, half)) };
         variant.uvRect = Rect.MinMaxRect(-half, -half, half, half);
         variant.physics = go.physics;
+        // The rows well in from the corner (a corner is half the diagonal,
+        // 7.07, from the middle): the front one 3.7 from the middle, its
+        // ends 4.2 from the next corner's.
         variant.multiSpacing = 0.34f;
-        variant.multiFront = 2.1f;
-        variant.multiBack = 1.6f;
+        variant.multiFront = 3.39f;
+        variant.multiBack = 2.9f;
         variant.sceneLayouts = false;
         // The corners: south-west, north-west, north-east, south-east.
         variant.seats2 = new[] { 315f, 135f };
         variant.seats3 = new[] { 315f, 225f, 135f };
         variant.seats4 = new[] { 315f, 225f, 135f, 45f };
-        variant.zoneDepth = 0.42f;
+        variant.zoneDepth = 0.55f;
 
         var ground = AssetDatabase.LoadAssetAtPath<Material>($"{BoardsDir}/Landscape.mat");
         if (ground == null)
