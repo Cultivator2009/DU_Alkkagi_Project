@@ -12,8 +12,10 @@ using UnityEngine.EventSystems;
 // shorter reach of the mouse, so a piece near the screen's edge can still
 // be pulled all the way without the cursor stopping at the edge. The
 // camera-view key swaps to a free camera, flown round the room - the
-// mouse turns it, WASD moves it, Q and E down and up, Shift faster - and
-// back to the main view as it's pressed again (or the game is paused).
+// mouse turns it, WASD moves it, Q and E down and up, Shift faster; a
+// wider lens than the main view's, so it's plain which one is on; it
+// slides along the board and what's on it rather than going into them -
+// and back to the main view as it's pressed again (or the game is paused).
 // Reset view (its key, or the HUD button) glides the main view back.
 // A board too big to frame whole (the landscape) is framed in part, and
 // panned to its edges; the view glides to each side's pieces as its turn
@@ -42,6 +44,7 @@ public class CameraRig : MonoBehaviour
     public float keyPan = 0.8f;        // the movement keys' pan, in view heights a second
     public float flySpeed = 3f;        // the free camera, units a second (Shift: three times)
     public float lookSpeed = 0.12f;    // degrees per pixel the mouse moves
+    public float flyWiden = 12f;       // the free camera's lens, this many degrees wider than the main view's
 
     private Transform mainView;  // the main virtual camera
     private float mainFieldOfView;
@@ -342,6 +345,9 @@ public class CameraRig : MonoBehaviour
             yaw = angles.y;
             pitch = Mathf.DeltaAngle(0, angles.x);
             fly.m_Lens = main.m_Lens;
+            fly.m_Lens.FieldOfView = Mathf.Min(main.m_Lens.FieldOfView + flyWiden, 100f);
+            // Near enough to come up to a piece: the main view's 0.3 kept it a hand's breadth off.
+            fly.m_Lens.NearClipPlane = FlyNear;
             Cursor.lockState = CursorLockMode.Locked;
         }
         else Cursor.lockState = CursorLockMode.None;
@@ -362,8 +368,43 @@ public class CameraRig : MonoBehaviour
         at.x = Mathf.Clamp(at.x, -roomHalf.x, roomHalf.x);
         at.z = Mathf.Clamp(at.z, -roomHalf.y, roomHalf.y);
         at.y = Mathf.Clamp(at.y, boardHeight - 0.3f, ceiling);
-        fly.transform.SetPositionAndRotation(at, turn);
+        fly.transform.SetPositionAndRotation(Collide(fly.transform.position, at), turn);
     }
+
+    // As far toward to as the free camera gets without its near plane going
+    // into anything solid (the board, its walls, the pieces), the rest of
+    // the way slid along what it met. Into the board, it went through it.
+    private Vector3 Collide(Vector3 from, Vector3 to)
+    {
+        var lens = fly.m_Lens;
+        var tan = Mathf.Tan(lens.FieldOfView * 0.5f * Mathf.Deg2Rad);
+        var aspect = Camera.main != null ? Camera.main.aspect : 16f / 9f;
+        // Round the near plane's corners, and a little more.
+        var radius = lens.NearClipPlane * Mathf.Sqrt(1 + tan * tan * (1 + aspect * aspect)) + 0.02f;
+        var start = from;
+        for (var i = 0; i < 3; i++)
+        {
+            var move = to - from;
+            var length = move.magnitude;
+            if (length < 1e-5f || !Physics.SphereCast(from, radius, move / length, out var hit, length, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            {
+                from = to;
+                break;
+            }
+            from += move / length * Mathf.Max(0, hit.distance - 0.005f);
+            to = from + Vector3.ProjectOnPlane(to - from, hit.normal);
+        }
+        // A slide round a corner can end in what it slid past (a cast
+        // doesn't see what it starts in): then only as far as is clear.
+        if (!Blocked(from)) return from;
+        var level = new Vector3(from.x, start.y, from.z);
+        if (!Blocked(level)) return level;
+        return start;
+
+        bool Blocked(Vector3 at) => Physics.CheckSphere(at, radius * 0.98f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+    }
+
+    private const float FlyNear = 0.05f;
 
     // The shake on top of wherever the view is, easing out (the square of
     // what's left), on noise rather than a sine so it doesn't hum.
