@@ -23,8 +23,7 @@ public class MenuDemo : MonoBehaviour
     public Stage[] stages;
     public GameObject blackStone;
     public GameObject whiteStone;
-    public float launchSpeed = 11.8f;  // m/s at full power (GamePieceDragAndReleaseForce's maxForce, for a stone)
-    public float slowing = 8.8f;       // m/s², a stone's extra grip on the board (PieceSet.Grip)
+    private const float StoneMass = 3f; // a go stone's (GamePieceDragAndReleaseForce.referenceMass): a full flick leaves at PhysicsTuning.Flick / 3
     public int stonesPerSide = 4;
     public float shotEvery = 2.4f;     // seconds from everything stopping to the next shot
     public int shotsPerStage = 14;
@@ -140,11 +139,13 @@ public class MenuDemo : MonoBehaviour
         if (distance < 1e-3f) return;
         way = Quaternion.Euler(0, Random.Range(-7f, 7f), 0) * (way / distance);
         var power = Mathf.Clamp(0.3f + distance * 0.22f + Random.Range(-0.05f, 0.1f), 0.25f, 0.85f);
-        shooter.linearVelocity = way * (power * launchSpeed);
+        shooter.linearVelocity = way * (power * PhysicsTuning.Current.Flick(PieceType.GoStones) / StoneMass);
     }
 
     private void FixedUpdate()
     {
+        var tuning = PhysicsTuning.Current;
+        var slowing = tuning.Extra(PieceType.GoStones);
         foreach (var (body, _) in stones)
         {
             if (!body.gameObject.activeSelf) continue;
@@ -155,10 +156,10 @@ public class MenuDemo : MonoBehaviour
                 continue;
             }
             var velocity = body.linearVelocity;
-            if (velocity.y > 1f) body.linearVelocity = new Vector3(velocity.x, 1f, velocity.z);
+            if (velocity.y > tuning.MaxRiseSpeed) body.linearVelocity = new Vector3(velocity.x, tuning.MaxRiseSpeed, velocity.z);
             var flat = new Vector3(velocity.x, 0, velocity.z);
             var speed = flat.magnitude;
-            if (speed < 0.05f || body.position.y > 0.08f) continue;
+            if (slowing <= 0 || speed < 0.05f || body.position.y > 0.08f) continue;
             body.AddForce(-flat * (Mathf.Min(speed, slowing * Time.fixedDeltaTime) / speed), ForceMode.VelocityChange);
         }
     }

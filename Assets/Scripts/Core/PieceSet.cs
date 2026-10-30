@@ -16,14 +16,6 @@ public sealed class PieceSet
     public bool Standing;      // topples and rolls: the camera frames the board from further back
     public bool KnocksBoard;   // lands with a knock of its own (PieceSounds)
     public string Sound;       // the pieces' material in sound names: "hit_" + Sound (SoundBank.Get)
-    // How hard the pieces are slowed on the board, against its friction as
-    // PhysX has it since 2026-10-02 (improved patch friction): go stones and
-    // janggi pieces 2, as they always played - stopping quickly - with a
-    // flick √2 as strong, so a shot goes as far (BoardSetup.Spawn). The
-    // extra slowing goes through the centre of mass (GamePieceDragAndReleaseForce.
-    // Slow), so it can't tip them. Standing pieces keep 1: grip at a small
-    // foot tipped them.
-    public float Grip = 1f;
 
     private static readonly Color StoneBlack = new Color32(0x15, 0x15, 0x15, 0xFF);
     private static readonly Color StoneWhite = new Color32(0xF7, 0xF7, 0xF7, 0xFF);
@@ -62,7 +54,7 @@ public sealed class PieceSet
     };
 
     // Black and white go stones, and the third and fourth sides' dyed ones.
-    private static PieceSet Stones(PieceType type, string sound, bool knocks, float grip) => new PieceSet
+    private static PieceSet Stones(PieceType type, string sound, bool knocks) => new PieceSet
     {
         Type = type,
         SideKeys = new[] { "player.black", "player.white", "player.blue", "player.red" },
@@ -71,14 +63,13 @@ public sealed class PieceSet
         Letters = new[] { Cho, Han, JanggiBlue, JanggiBlack },
         KnocksBoard = knocks,
         Sound = sound,
-        Grip = grip,
     };
 
     private static readonly Dictionary<PieceType, PieceSet> sets = new Dictionary<PieceType, PieceSet>
     {
-        { PieceType.GoStones, Stones(PieceType.GoStones, "go", false, 2f) },
+        { PieceType.GoStones, Stones(PieceType.GoStones, "go", false) },
         // Gonggi stones rattle, and land with a knock.
-        { PieceType.GonggiStones, Stones(PieceType.GonggiStones, "gonggi", true, 1f) },
+        { PieceType.GonggiStones, Stones(PieceType.GonggiStones, "gonggi", true) },
         // Cho (green, moves first, like black) and Han (red); the third and
         // fourth sides carry Cho's and Han's letters in blue and black.
         {
@@ -90,7 +81,6 @@ public sealed class PieceSet
                 Rings = new[] { Cho, Han, JanggiBlue, JanggiBlack },
                 Letters = new[] { Cho, Han, JanggiBlue, JanggiBlack },
                 Sound = "janggi",
-                Grip = 2f,
             }
         },
         // Chess's white moves first, as in chess.

@@ -44,11 +44,6 @@ public static class MenuDemoBuilder
             return new MenuDemo.Stage { board = board, sides = s.Item2, spawnDistance = s.Item3, view = s.Item4 };
         }).ToArray();
 
-        var template = setup.blackTemplate;
-        var grip = PieceSet.Of(PieceType.GoStones).Grip;
-        var mass = template.GetComponent<Rigidbody>().mass;
-        demo.launchSpeed = template.maxForce * Mathf.Sqrt(grip) / template.referenceMass * Mathf.Pow(template.referenceMass / mass, template.massExponent);
-        demo.slowing = GamePieceDragAndReleaseForce.BoardSlowing * (grip - 1);
         demo.blackStone = Copy(setup.blackTemplate.gameObject, root.transform);
         demo.whiteStone = Copy(setup.whiteTemplate.gameObject, root.transform);
 

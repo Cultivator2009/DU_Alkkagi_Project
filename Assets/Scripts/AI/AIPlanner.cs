@@ -36,12 +36,11 @@ public struct PlannedShot
 // of health's) the copy has them too.
 public class AIPlanner : IDisposable
 {
-    // Both measured on the board: a flicked piece slows at about 8.8 m/s²
-    // (the friction, 0.135 g) times how hard these pieces grip (PieceSet.Grip:
-    // go stones and janggi pieces twice that). One piece hitting another
-    // square passes on (1 + e) / 2 of its speed, e their material's bounce
-    // (Restitution): glass or slate stones 0.85, wood 0.55.
-    private static float Deceleration => GamePieceDragAndReleaseForce.BoardSlowing * PieceSet.Current.Grip;
+    // Both measured on the board: a flicked piece slows as the physics
+    // played has it (PhysicsTuning.Slowing: 17.6 m/s², 0.27 g). One piece
+    // hitting another square passes on (1 + e) / 2 of its speed, e their
+    // material's bounce (Restitution): glass or slate stones 0.85, wood 0.55.
+    private static float Deceleration => PhysicsTuning.Current.Slowing(PieceSet.Current.Type);
     private static float Restitution(Stand piece) => piece.Solid != null && piece.Solid.sharedMaterial != null ? piece.Solid.sharedMaterial.bounciness : 0.4f;
     private const int MaxSteps = 250;        // 5 s of play; nearly every shot has settled by then
     private const float OutHeight = -0.3f;

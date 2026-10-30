@@ -6,21 +6,13 @@ using UnityEngine;
 [RequireComponent(typeof(LineRenderer))]
 public class GamePieceDragAndReleaseForce : MonoBehaviour
 {
-    // A full-power flick. 50 until friction became real (improved patch
-    // friction, half what PhysX's default gave): 50 / sqrt(2) sends every
-    // piece as far as before, a little slower. Pieces slowed harder on the
-    // board (PieceSet.Grip) are flicked harder (BoardSetup.Spawn).
+    // A full-power flick: the impulse a piece of referenceMass gets. Set at
+    // spawn, as the physics played has it (PhysicsTuning.Flick).
     public float maxForce = 35.36f;
-    // A piece sliding on the board slows at about this from PhysX's friction
-    // alone (0.135 of the real gravity the world has, 65.4 units/s² at a
-    // unit of 15 cm: a go stone's 22 mm is 0.147); AIPlanner counts on it too.
-    // With a go stone's grip (PieceSet.Grip) 0.27 g in all, a stone glass or
-    // slate on a wooden board's.
-    public const float BoardSlowing = 8.8f;
     private const float SettleBelow = 0.08f; // m/s: on the landscape, slow enough to be stopped (Slow)
     private const float SettleSpin = 2.5f;   // rad/s: and turning no faster (a toppling chess piece goes on)
-    // Slowing on top of that (m/s², PieceSet.Grip) while the piece is down
-    // on the board. Set at spawn.
+    // Slowing on top of its friction (m/s², PhysicsTuning.Extra; tar and an
+    // anchor add to it) while the piece is down on the board. Set at spawn.
     [NonSerialized] public float extraSlowing;
     private Collider solid; // what it touches the board with (not its big pick-up trigger)
     // The pull that reads as 100% power, as a share of the screen's height:
@@ -58,7 +50,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // leans - on another piece, or over a board hinge - is pushed up by
     // whatever it rests on, and a hard shot launched it up to 2 units high.
     // Capped, the hop stays under a piece's height (a hundredth of a unit
-    // at the world's gravity).
+    // at the world's gravity). Set at spawn (PhysicsTuning.MaxRiseSpeed).
     public float maxRiseSpeed = 1f;
 
     private int lowVelocityFrameCount = 0;
@@ -226,10 +218,10 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             AimPower = 0;
         }
         LimitRise();
-        if (extraSlowing > 0 && !rb.isKinematic && GameManager.manager != null && GameManager.manager.Board != null)
+        var board = GameManager.manager != null ? GameManager.manager.Board : null;
+        if (!rb.isKinematic && board != null && (extraSlowing > 0 || board.Active.IsRelief))
         {
             if (solid == null) solid = Array.Find(GetComponentsInChildren<Collider>(), c => !c.isTrigger);
-            var board = GameManager.manager.Board;
             Slow(rb, solid, extraSlowing, board.Active, board.Playable);
         }
         UpdateSettleState();
@@ -238,11 +230,12 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // The extra slowing on a piece down on the board (its foot on the
     // ground under it - the board's top, or the landscape's rise there - not
     // up on another piece or a hinge, nor in the air off a step), through its
-    // centre of mass: friction at its foot would tip it. The AI's copies are
-    // slowed the same way (AIPlanner).
+    // centre of mass: friction at its foot would tip it. On the landscape a
+    // piece all but stopped is stopped, extra slowing or none. The AI's
+    // copies are slowed the same way (AIPlanner).
     public static void Slow(Rigidbody body, Collider solid, float slowing, BoardVariant ground, BoardShape board)
     {
-        if (slowing <= 0 || solid == null) return;
+        if (solid == null) return;
         var at = body.position;
         var flatAt = new Vector2(at.x, at.z);
         if (solid.bounds.min.y > ground.transform.position.y + ground.RiseAt(flatAt) + 0.003f) return;
@@ -264,7 +257,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
             body.angularVelocity = Vector3.zero;
             return;
         }
-        if (speed < 0.05f) return;
+        if (slowing <= 0 || speed < 0.05f) return;
         body.AddForce(-flat * (Mathf.Min(speed, slowing * Time.fixedDeltaTime) / speed), ForceMode.VelocityChange);
     }
 

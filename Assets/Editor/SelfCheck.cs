@@ -339,7 +339,7 @@ internal static class SelfCheck
         {
             for (var i = 0; i < 4; i++) savedSeats[i] = PlayerPrefs.GetInt("local.seat" + i, -1);
             report.Section("Play");
-            steps.Enqueue(("go stones and janggi pieces slow at about 17.4 m/s², gonggi stones at 8.6", Slowing));
+            steps.Enqueue(("go stones, janggi pieces and gonggi stones slow as the physics played has it (PhysicsTuning.Slowing)", Slowing));
             steps.Enqueue(("nothing catches on the cross board's seams", Seams));
             foreach (var (name, rules) in AiMatches()) steps.Enqueue(("AI match: " + name, () => AiMatch(rules)));
             steps.Enqueue(("network: the host's match with bots, replayed into a guest, ends the same", () => Network(false)));
@@ -482,8 +482,11 @@ internal static class SelfCheck
             Seats(Opponent.Human);
             var found = new List<string>();
             var ok = true;
-            foreach (var (type, expected, tolerance) in new[] { (PieceType.GoStones, 17.4f, 1.5f), (PieceType.JanggiPieces, 17.4f, 1.5f), (PieceType.GonggiStones, 8.6f, 1f) })
+            foreach (var type in new[] { PieceType.GoStones, PieceType.JanggiPieces, PieceType.GonggiStones })
             {
+                // As the physics played has it, within a tenth.
+                var expected = PhysicsTuning.Current.Slowing(type);
+                var tolerance = expected * 0.1f;
                 var load = Load(Rules(BoardType.Go, type));
                 while (load.MoveNext()) yield return load.Current;
                 var settle = Wait(1.5f);
@@ -494,7 +497,7 @@ internal static class SelfCheck
                 var rest = piece.Body.rotation;
                 var probe = piece.gameObject.AddComponent<SpeedProbe>();
                 Place(piece, new Vector3(-0.3f, piece.Body.position.y, -1.3f), rest);
-                piece.Body.AddForce(new Vector3(0.25f, 0, 1f).normalized * (PieceSet.Of(type).Grip > 1 ? 4f : 2.4f), ForceMode.VelocityChange);
+                piece.Body.AddForce(new Vector3(0.25f, 0, 1f).normalized * Mathf.Sqrt(2 * expected * 0.46f), ForceMode.VelocityChange); // to slide 0.46
                 var until = Time.realtimeSinceStartup + 5;
                 var moved = Time.realtimeSinceStartup;
                 while (Time.realtimeSinceStartup < until && (Time.realtimeSinceStartup - moved < 0.3f || piece.Body.linearVelocity.magnitude > 0.01f)) yield return null;

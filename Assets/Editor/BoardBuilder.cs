@@ -244,7 +244,6 @@ internal static class BoardBuilder
         if (old != null) Object.DestroyImmediate(old.gameObject);
 
         var source = setup.blackTemplate;
-        var physics = source.GetComponentsInChildren<Collider>(true).Select(c => c.sharedMaterial).FirstOrDefault(m => m != null);
         var piece = Object.Instantiate(source, templates);
         piece.name = "JanggiTemplate";
         piece.transform.localPosition = new Vector3(0, 0.005f, 0);
@@ -258,7 +257,7 @@ internal static class BoardBuilder
         piece.GetComponent<MeshRenderer>().sharedMaterial = Material("JanggiPiece", new Color(0.90f, 0.79f, 0.57f), 0.35f, 0);
         var collider = piece.gameObject.AddComponent<MeshCollider>();
         collider.convex = true;
-        collider.sharedMaterial = WoodPhysics(physics);
+        collider.sharedMaterial = WoodPhysics();
 
         var label = new GameObject("Label", typeof(RectTransform)).AddComponent<TextMeshPro>();
         label.transform.SetParent(piece.transform, false);
@@ -451,7 +450,6 @@ internal static class BoardBuilder
         if (old != null) Object.DestroyImmediate(old.gameObject);
 
         var source = setup.blackTemplate;
-        var physics = source.GetComponentsInChildren<Collider>(true).Select(c => c.sharedMaterial).FirstOrDefault(m => m != null);
         var piece = Object.Instantiate(source, templates);
         piece.name = "ChessTemplate";
         piece.transform.localPosition = new Vector3(0, 0.005f, 0);
@@ -465,7 +463,7 @@ internal static class BoardBuilder
         piece.GetComponent<MeshRenderer>().sharedMaterial = Material(ChessDir, "ChessPiece", Color.white, 0.55f, 0);
         var collider = piece.gameObject.AddComponent<MeshCollider>();
         collider.convex = true;
-        collider.sharedMaterial = WoodPhysics(physics);
+        collider.sharedMaterial = WoodPhysics();
         piece.GetComponent<Rigidbody>().angularDamping = 1.2f;
 
         piece.gameObject.SetActive(false);
@@ -485,7 +483,6 @@ internal static class BoardBuilder
         if (old != null) Object.DestroyImmediate(old.gameObject);
 
         var source = setup.blackTemplate;
-        var stone = source.GetComponentsInChildren<Collider>(true).Select(c => c.sharedMaterial).FirstOrDefault(m => m != null);
         var piece = Object.Instantiate(source, templates);
         piece.name = "GonggiTemplate";
         piece.transform.localPosition = new Vector3(0, 0.005f, 0);
@@ -499,7 +496,7 @@ internal static class BoardBuilder
         piece.GetComponent<MeshRenderer>().sharedMaterial = Material(GonggiDir, "GonggiPiece", Color.white, 0.8f, 0);
         var collider = piece.gameObject.AddComponent<MeshCollider>();
         collider.convex = true;
-        collider.sharedMaterial = GonggiPhysics(stone);
+        collider.sharedMaterial = GonggiPhysics();
         piece.GetComponent<Rigidbody>().angularDamping = 1.8f;
 
         piece.gameObject.SetActive(false);
@@ -508,8 +505,9 @@ internal static class BoardBuilder
 
     // Plastic on the board slides as a stone does; it bounces less. With no
     // bounce at all (as at first) a knocked stone went on with the one
-    // that hit it instead of being knocked away.
-    private static PhysicsMaterial GonggiPhysics(PhysicsMaterial stone)
+    // that hit it instead of being knocked away. Its values are the
+    // physics played's (PhysicsTuning).
+    private static PhysicsMaterial GonggiPhysics()
     {
         var path = $"{GonggiDir}/Gonggi.physicMaterial";
         var material = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(path);
@@ -518,19 +516,16 @@ internal static class BoardBuilder
             material = new PhysicsMaterial("Gonggi");
             AssetDatabase.CreateAsset(material, path);
         }
-        material.dynamicFriction = stone.dynamicFriction;
-        material.staticFriction = stone.staticFriction;
-        material.frictionCombine = stone.frictionCombine;
-        material.bounciness = 0.4f;
-        material.bounceCombine = PhysicsMaterialCombine.Average;
+        PhysicsTuning.Current.Gonggi.Apply(material);
         EditorUtility.SetDirty(material);
         return material;
     }
 
     // Janggi and chess pieces are wood: they slide as a stone does, and one
     // knocks another on with less of its speed than glass or slate (about
-    // 0.55 against a stone's 0.85).
-    private static PhysicsMaterial WoodPhysics(PhysicsMaterial stone)
+    // 0.55 against a stone's 0.85). Its values are the physics played's
+    // (PhysicsTuning).
+    private static PhysicsMaterial WoodPhysics()
     {
         var path = $"{AssetDir}/Wood.physicMaterial";
         var material = AssetDatabase.LoadAssetAtPath<PhysicsMaterial>(path);
@@ -539,11 +534,7 @@ internal static class BoardBuilder
             material = new PhysicsMaterial("Wood");
             AssetDatabase.CreateAsset(material, path);
         }
-        material.dynamicFriction = stone.dynamicFriction;
-        material.staticFriction = stone.staticFriction;
-        material.frictionCombine = stone.frictionCombine;
-        material.bounciness = 0.55f;
-        material.bounceCombine = PhysicsMaterialCombine.Average;
+        PhysicsTuning.Current.Wood.Apply(material);
         EditorUtility.SetDirty(material);
         return material;
     }

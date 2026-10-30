@@ -40,6 +40,8 @@ public class ItemSystem : MonoBehaviour
     public const float BlastSpeed = 7f;        // m/s at the blast's heart, less out to its edge
     public const float CurveRadius = 2.5f;     // a curving shot's arc, whatever its speed
     public const float QuakeSlide = 0.5f;      // how far a quake sends a lone piece
+    public const float TarSlowing = 35.2f;     // m/s² more on a piece in tar (a go stone slides to a stop at 17.6)
+    public const float AnchorSlowing = 26.4f;  // and on an anchored one
     public const int MaxBoxes = 3;
     public const float CatchUpShare = 0.2f;    // pieces (or health) left that bring the catch-up item
     public const float HealShare = 0.3f;
@@ -837,7 +839,7 @@ public class ItemSystem : MonoBehaviour
     private void Quake(Vector2 direction)
     {
         if (!turns.TryBeginMotion()) return;
-        var slowing = GamePieceDragAndReleaseForce.BoardSlowing * PieceSet.Current.Grip;
+        var slowing = PhysicsTuning.Current.Slowing(PieceSet.Current.Type);
         var speed = Mathf.Sqrt(2 * slowing * QuakeSlide);
         foreach (var piece in game.gamePieceScripts)
         {
@@ -1044,7 +1046,7 @@ public class ItemSystem : MonoBehaviour
         float scale = 1, mass = 1;
         var slip = onIce.Contains(piece);
         var extra = b.ExtraSlowing;
-        if (onTar.Contains(piece)) extra += GamePieceDragAndReleaseForce.BoardSlowing * 4f;
+        if (onTar.Contains(piece)) extra += TarSlowing;
         foreach (var effect in State.Effects)
         {
             if (effect.Piece != piece.Manager.pieceID) continue;
@@ -1060,7 +1062,7 @@ public class ItemSystem : MonoBehaviour
                     break;
                 case ItemId.Anchor:
                     mass *= 5f;
-                    extra += GamePieceDragAndReleaseForce.BoardSlowing * 3f;
+                    extra += AnchorSlowing;
                     break;
                 case ItemId.Grease:
                     slip = true;

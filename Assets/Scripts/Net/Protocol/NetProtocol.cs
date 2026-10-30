@@ -53,7 +53,7 @@ public static class NetProtocol
     // Lobbies advertise it and a build only joins lobbies on its own. The
     // messages stand fields added at their end (NetWriter), so it only has
     // to go up when a field changes or goes, or a message's meaning does.
-    public const int Version = 14;
+    public const int Version = 15;
 
     public readonly struct Entry
     {
