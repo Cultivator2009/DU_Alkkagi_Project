@@ -89,6 +89,7 @@ public class MenuDemo : MonoBehaviour
                 var stone = Instantiate(side == 0 ? blackStone : whiteStone, at, blackStone.transform.rotation, transform);
                 stone.SetActive(true);
                 stone.GetComponent<MeshCollider>().sharedMesh = GoStoneCollider.Get();
+                stone.AddComponent<RoundKnock>();
                 if (side >= 2)
                     foreach (var renderer in stone.GetComponentsInChildren<Renderer>()) renderer.sharedMaterial = Dyed(side, renderer.sharedMaterial);
                 stone.AddComponent<MenuDemoKnock>();

@@ -233,6 +233,7 @@ public class BoardSetup : MonoBehaviour
         var piece = Instantiate(template, position, template.transform.rotation, parent);
         piece.name = $"{new[] { "Black", "White", "Blue", "Red" }[player]} {index + 1}";
         piece.GetComponent<MeshCollider>().sharedMesh = GoStoneCollider.Get();
+        piece.gameObject.AddComponent<RoundKnock>();
         piece.GetComponent<GamePieceManager>().radius = StoneRadius;
         if (player >= 2)
             foreach (var renderer in piece.GetComponentsInChildren<Renderer>())

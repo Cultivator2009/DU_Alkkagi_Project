@@ -286,13 +286,15 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     {
         if (flickForce.magnitude > maxForce) flickForce = flickForce.normalized * maxForce;
         var launch = flickForce / referenceMass * Mathf.Pow(referenceMass / LaunchMass, massExponent);
-        Body.AddForce(launch, ForceMode.VelocityChange);
+        // Set at once, as the AI's copies are (AIPlanner): the step it goes
+        // in knows it from the start, a knock in that same step too (as an
+        // impulse it came in only partway through, and a stone close by was
+        // met as if it hadn't moved; GoStoneCollider).
+        Body.linearVelocity += launch;
         if (BoardSounds.Instance != null) BoardSounds.Instance.Emit(BoardSound.Flick, launch.magnitude, Body.position, Manager.playerIndex);
 
-        // The impulse only shows up in linearVelocity after the next physics
-        // step, so a resting piece would still read as settled for a frame
-        // and TurnController could end the turn before anything moved. Count
-        // it as moving until it has genuinely come to rest again.
+        // Counted as moving until it has genuinely come to rest again, so
+        // TurnController can't end the turn before anything moved.
         lowVelocityFrameCount = 0;
         isGamePieceMoving = true;
     }
