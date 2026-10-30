@@ -420,18 +420,26 @@ public class BoardTerrain : MonoBehaviour
     private static float Bump(Vector3 way, float seed) => 0.8f + 0.4f * Mathf.PerlinNoise(way.x * 1.7f + seed, way.z * 1.7f + way.y * 1.3f + seed);
 
     // A rock's collider: the same lumps on a coarse ball. The hull of the
-    // drawn one had more faces than PhysX takes, and it cut it short.
+    // drawn one had more faces than PhysX takes, and it cut it short. From
+    // about a stone's height down it goes straight into the ground: the
+    // ball's underside curved in over the ground, a stone slid under it, and
+    // squeezed there between rock and ground it spun on and never settled
+    // (a shot that never ended).
     private static Mesh Hull(float seed)
     {
         const int rings = 6, round = 10;
-        var points = new List<Vector3> { Vector3.up * (0.5f * Bump(Vector3.up, seed)), Vector3.down * (0.5f * Bump(Vector3.down, seed)) };
-        for (var ring = 1; ring < rings; ring++)
+        const int lowest = 4;      // 120° down from the top: about a stone's height over the ground
+        const float under = -0.6f; // the ground is at -0.42 (the rock's middle 0.42 of its height up)
+        var points = new List<Vector3> { Vector3.up * (0.5f * Bump(Vector3.up, seed)) };
+        for (var ring = 1; ring <= lowest; ring++)
         for (var k = 0; k < round; k++)
         {
             var down = ring * Mathf.PI / rings;
             var about = k * Mathf.PI * 2 / round;
             var way = new Vector3(Mathf.Sin(down) * Mathf.Cos(about), Mathf.Cos(down), Mathf.Sin(down) * Mathf.Sin(about));
-            points.Add(way * (0.5f * Bump(way, seed)));
+            var point = way * (0.5f * Bump(way, seed));
+            points.Add(point);
+            if (ring == lowest) points.Add(new Vector3(point.x, under, point.z));
         }
         var mesh = new Mesh { name = "Rock hull" };
         mesh.SetVertices(points);
