@@ -143,13 +143,17 @@ public static class ItemAI
                 if (back == null) return false;
                 var occupied = game.gamePieceScripts.Where(p => p != null && p.gameObject.activeSelf).Select(p => (p.Manager, p.Body.position)).ToList();
                 var random = new System.Random();
-                for (var attempt = 0; attempt < 6; attempt++)
+                // Anywhere free in its zone, as much of it as the circle has
+                // left; failing that, the zone's spot nearest the middle.
+                for (var attempt = 0; attempt < 20; attempt++)
                 {
                     var spot = game.Board.RandomFreePosition(side, back.Manager, occupied, random);
                     target = new ItemTarget { Point = ItemSystem.Flat(spot) };
                     if (items.CanTarget(side, id, target)) return true;
                 }
-                return false;
+                var centre = game.TurnController.Zone.Centre;
+                target = new ItemTarget { Point = ItemSystem.Flat(game.Board.ClampToZone(side, new Vector3(centre.x, 0, centre.y), back.Manager.radius)) };
+                return items.CanTarget(side, id, target);
             case ItemId.Swap:
                 var risky = Nearest(mine, 0.3f);
                 var safe = theirs.Where(p => Margin(p) > 0.7f).OrderByDescending(Margin).FirstOrDefault();

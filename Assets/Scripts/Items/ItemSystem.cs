@@ -185,7 +185,7 @@ public class ItemSystem : MonoBehaviour
         return id switch
         {
             ItemId.Rewind => State.RewindReady,
-            ItemId.Revive => BenchedOf(side) != null,
+            ItemId.Revive => BenchedOf(side) != null && ReviveRoom(side),
             ItemId.Heal => rules.HealthRule == HealthRule.Side ? turns.Sides[side].Health < turns.Sides[side].MaxHealth : PiecesOf(side).Any(p => p.Manager.health < rules.PieceHealth),
             ItemId.DoubleShot => !State.ExtraTurn,
             _ => true,
@@ -217,7 +217,7 @@ public class ItemSystem : MonoBehaviour
                 return Board.Playable.Contains(target.Point) && Mathf.Abs(target.Way.sqrMagnitude - 1) < 0.01f;
             case ItemAim.OwnZone:
                 var back = BenchedOf(side);
-                return back != null && Board.InZone(side, Flat3(target.Point), back.Manager.radius) && Clear(target.Point, back.Manager.radius, null);
+                return back != null && Board.InZone(side, Flat3(target.Point), back.Manager.radius) && InCircle(target.Point, back.Manager.radius) && Clear(target.Point, back.Manager.radius, null);
         }
         return false;
     }
@@ -238,6 +238,18 @@ public class ItemSystem : MonoBehaviour
     public IEnumerable<GamePieceDragAndReleaseForce> PiecesOf(int side) => game.gamePieceScripts.Where(p => p != null && p.gameObject.activeSelf && p.Manager.playerIndex == side);
 
     public GamePieceDragAndReleaseForce BenchedOf(int side) => benched.LastOrDefault(p => p != null && p.Manager.playerIndex == side);
+
+    // A revived piece comes back whole inside the closed circle (a piece
+    // outside it would go with the next shot): once the circle has closed
+    // past every bit of the side's zone, there's nowhere to bring it.
+    private bool InCircle(Vector2 point, float radius) => !turns.Zone.Outside(point, turns.Zone.Safe - radius);
+
+    private bool ReviveRoom(int side)
+    {
+        var radius = BenchedOf(side).Manager.radius;
+        var middle = turns.Zone.Centre;
+        return InCircle(Flat(Board.ClampToZone(side, new Vector3(middle.x, 0, middle.y), radius)), radius);
+    }
 
     // A post fits here: on the board, its foot clear of the edge, every piece and the other posts (and out of the landscape's ponds).
     public bool PostFits(Vector2 point, float radius) =>
