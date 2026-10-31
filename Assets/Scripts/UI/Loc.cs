@@ -449,7 +449,7 @@ public static class Loc
         { "option.everyRound", ("매 라운드", "Every round") },
         { "option.everyRounds", ("{0}라운드마다", "Every {0} rounds") },
         { "rules.group.items", ("아이템", "Items") },
-        { "rules.items", ("아이템: 차례마다 쏘기 전에 하나씩, 두 개까지 보유", "Items: one before each shot, two held at most") },
+        { "rules.items", ("아이템: 차례마다 쏘기 전에 이번 샷에 거는 것 하나와 다른 것 하나, 세 개까지 보유", "Items: before each shot, one on the shot and one other; three held at most") },
         { "rules.itemBoxes", ("아이템 상자: {0}", "Item boxes: {0}") },
         { "rules.itemCatchUp", ("남은 알(체력)이 20% 이하가 되면 아이템 하나", "An item once a side is down to a fifth") },
         { "rules.itemGift", ("모두에게 아이템 하나: {0}", "An item for everyone: {0}") },

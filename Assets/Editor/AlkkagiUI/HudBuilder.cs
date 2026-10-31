@@ -734,6 +734,11 @@ namespace AlkkagiUIEditor
             menu.rulesText.rectTransform.Place(top, new Vector2(0, -124), new Vector2(rulesWidth - pad * 2, rulesHeight - 124 - 140));
             menu.rulesText.textWrappingMode = TextWrappingModes.Normal;
             menu.rulesText.lineSpacing = 18;
+            // All of a match's rules in the card, smaller if need be: those of
+            // one with items and the circle ran on under the close button.
+            menu.rulesText.enableAutoSizing = true;
+            menu.rulesText.fontSizeMin = 18;
+            menu.rulesText.fontSizeMax = 26;
             menu.rulesCloseButton = UIKit.CapsuleButton(rulesCard.transform, "CloseButton", "rules.close", new Vector2(280, 84), true, 32);
             menu.rulesCloseButton.GetComponent<RectTransform>().Place(new Vector2(0.5f, 0), new Vector2(0, 44), new Vector2(280, 84), new Vector2(0.5f, 0));
             rulesOverlay.gameObject.SetActive(false);
