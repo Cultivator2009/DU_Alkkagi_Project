@@ -454,6 +454,8 @@ public class TurnController
         if (settledAt < 0) settledAt = Time.unscaledTime;
         if (Time.unscaledTime - settledAt < LingerSeconds) return;
         settledAt = -1;
+        foreach (var piece in gamePieceScripts)
+            if (piece != null) piece.Rest();
         if (Collapsing) EndCollapse();
         else if (motion) EndMotion();
         else if (!selGamePiece.isCancelled && !selGamePiece.isDragging) EndTurn();

@@ -235,7 +235,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // copies are slowed the same way (AIPlanner).
     public static void Slow(Rigidbody body, Collider solid, float slowing, BoardVariant ground, BoardShape board)
     {
-        if (solid == null) return;
+        if (solid == null || body.IsSleeping()) return;
         var at = body.position;
         var flatAt = new Vector2(at.x, at.z);
         if (solid.bounds.min.y > ground.transform.position.y + ground.RiseAt(flatAt) + 0.003f) return;
@@ -250,7 +250,9 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         // board's flat top lets it fall asleep). There it's stopped, as it
         // would stop on a board; the ground's grip holds it on a ramp
         // anyway. Stopped, not put to sleep: that would drop a flick or a
-        // knock given it this step.
+        // knock given it this step. Stopped, though, it's kept awake (a
+        // velocity set wakes a body), so once everything has stopped it's
+        // put to sleep (Rest) and left alone here till something moves it.
         if (ground.IsRelief && speed < SettleBelow && body.angularVelocity.sqrMagnitude < SettleSpin * SettleSpin)
         {
             body.linearVelocity = Vector3.zero;
@@ -259,6 +261,18 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
         }
         if (slowing <= 0 || speed < 0.05f) return;
         body.AddForce(-flat * (Mathf.Min(speed, slowing * Time.fixedDeltaTime) / speed), ForceMode.VelocityChange);
+    }
+
+    // Everything has stopped (TurnController): on the landscape, where Slow
+    // keeps a stopped piece awake, it's put to sleep - now, when nothing is
+    // moving to knock it (one put to sleep in the step it was knocked took
+    // none of the knock). Kept awake, stones leaning on one another at a
+    // mound's foot shook on between turns, 2-3° and most of a millimetre a
+    // step. Asleep, a piece lies still till one touches it or it's moved.
+    public void Rest()
+    {
+        var board = GameManager.manager != null ? GameManager.manager.Board : null;
+        if (board != null && board.Active.IsRelief && !rb.isKinematic && gameObject.activeInHierarchy) rb.Sleep();
     }
 
     // Kinematic pieces (network guest, placement) are moved, not simulated.
