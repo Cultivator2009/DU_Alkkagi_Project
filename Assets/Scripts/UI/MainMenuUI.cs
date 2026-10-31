@@ -37,6 +37,7 @@ public class MainMenuUI : MonoBehaviour
     public Button setupStartButton;
     public Button setupCancelButton;
     public GameObject steamUserRow;
+    public GameObject steamUserBack; // the row's capsule, beside it
     public TMP_Text steamUserText; // name and rating
     public RecordsPanel records;
     public LeaderboardPanel leaderboard;
@@ -164,7 +165,9 @@ public class MainMenuUI : MonoBehaviour
     private void RenderSteamUser()
     {
         var steamReady = SteamTransport.Instance != null && SteamTransport.Instance.IsReady;
+        // Its capsule too: left alone it showed empty, with Steam not running.
         steamUserRow.SetActive(steamReady);
+        steamUserBack.SetActive(steamReady);
         if (steamReady) steamUserText.text = Loc.Get("menu.steamUser", Steamworks.SteamClient.Name, PlayerRating.Current.Rating);
     }
 

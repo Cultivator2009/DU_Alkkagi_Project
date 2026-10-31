@@ -72,7 +72,9 @@ namespace AlkkagiUIEditor
             menu.quitButton = Small("QuitButton", "menu.quit", 3);
 
             // Under the card, on the table: a capsule of its own to stay readable.
-            UIKit.Capsule(root, "SteamUserBack", 56, Theme.Hanji, null).rectTransform.Place(new Vector2(0, 0), new Vector2(64, 48), new Vector2(696, 56));
+            var steamBack = UIKit.Capsule(root, "SteamUserBack", 56, Theme.Hanji, null);
+            steamBack.rectTransform.Place(new Vector2(0, 0), new Vector2(64, 48), new Vector2(696, 56));
+            menu.steamUserBack = steamBack.gameObject;
             var steamRow = UIKit.Node("SteamUser", root).Place(new Vector2(0, 0), new Vector2(112, 56), new Vector2(620, 40));
             UIKit.Image(steamRow, "Dot", UIKit.Circle, Theme.StatusOk).rectTransform.Place(new Vector2(0, 0.5f), Vector2.zero, new Vector2(16, 16), new Vector2(0, 0.5f));
             // ASCII placeholder: anything outside the baked charset would land in
