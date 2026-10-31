@@ -142,8 +142,13 @@ public class PlacementController : MonoBehaviour
             if (visible && phase.TryGetPosition(id, out var position)) piece.transform.position = position;
         }
 
-        gameManager.Board.ShowZones(player => viewer == player && phase.CanAct(player));
+        ShowZones(gameManager, phase, viewer);
     }
+
+    // Apart from LateUpdate: its lambda's captures, taken there, were
+    // garbage every frame of every match, placing or not.
+    private static void ShowZones(GameManager gameManager, PlacementPhase phase, int viewer) =>
+        gameManager.Board.ShowZones(player => viewer == player && phase.CanAct(player));
 
     private void Place(PlacementPhase phase, int player, char id, Vector3 position)
     {

@@ -44,6 +44,7 @@ public class ItemControls : MonoBehaviour
     private int discardSide = -1;
     private int giftFrame = -1;
     private readonly Dictionary<int, int> held = new Dictionary<int, int>(); // how many items each side had last time
+    private readonly List<string> tipLines = new List<string>();
     private Transform marker;        // where a spot would go, green or red
     private LineRenderer way;        // a quake's way, from the middle
     private Material markerMaterial;
@@ -111,7 +112,9 @@ public class ItemControls : MonoBehaviour
             var panel = hud.playerPanels[side];
             for (var slot = 0; slot < panel.itemSlots.Length; slot++) panel.itemSlots[slot].Show(state.Slots[slot], MayUse(side, state.Slots[slot]));
             // One more than before: the newest (the last filled) punches.
-            var count = state.Slots.Count(ItemDefs.IsValid);
+            var count = 0;
+            foreach (var item in state.Slots)
+                if (ItemDefs.IsValid(item)) count++;
             if (held.TryGetValue(side, out var before) && count > before && count <= panel.itemSlots.Length) panel.itemSlots[count - 1].Flash();
             held[side] = count;
         }
@@ -162,14 +165,24 @@ public class ItemControls : MonoBehaviour
     {
         if (worldCamera == null || !Pointer.OnScreen || AimCursor.Held) return null;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
-        var lines = new List<string>();
-        var piece = PiecePicker.UnderCursor(worldCamera).FirstOrDefault(p => !items.InFog(p));
+        // Loops, not LINQ: this runs every frame.
+        var lines = tipLines;
+        lines.Clear();
+        GamePieceDragAndReleaseForce piece = null;
+        foreach (var under in PiecePicker.UnderCursor(worldCamera))
+            if (!items.InFog(under))
+            {
+                piece = under;
+                break;
+            }
         if (piece != null)
-            foreach (var effect in items.State.Effects.Where(e => e.Piece == piece.Manager.pieceID))
-                lines.Add(TipLine(effect.Kind, effect.Kind == ItemId.Freeze ? Loc.Get("item.tip.freeze") : Left(effect.Expires)));
+            foreach (var effect in items.State.Effects)
+                if (effect.Piece == piece.Manager.pieceID)
+                    lines.Add(TipLine(effect.Kind, effect.Kind == ItemId.Freeze ? Loc.Get("item.tip.freeze") : Left(effect.Expires)));
         if (lines.Count == 0 && BoardPoint(out var point))
-            foreach (var o in items.State.Objects.Where(o => (o.Position - point).magnitude < Mathf.Max(ItemSystem.RadiusOf(o.Kind), 0.08f)))
-                lines.Add(TipLine(o.Kind, Left(o.Expires)));
+            foreach (var o in items.State.Objects)
+                if ((o.Position - point).magnitude < Mathf.Max(ItemSystem.RadiusOf(o.Kind), 0.08f))
+                    lines.Add(TipLine(o.Kind, Left(o.Expires)));
         return lines.Count > 0 ? string.Join("\n", lines) : null;
     }
 

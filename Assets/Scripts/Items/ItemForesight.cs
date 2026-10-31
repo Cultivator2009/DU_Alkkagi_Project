@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 // Foresight (ItemId.Foresight), on the screen aiming the shot that carries
@@ -42,7 +41,7 @@ public class ItemForesight : MonoBehaviour
     private void Update()
     {
         if (game == null || game.Board == null) return;
-        var piece = game.gamePieceScripts.FirstOrDefault(p => p != null && p.isDragging);
+        var piece = game.gamePieceScripts.Find(p => p != null && p.isDragging);
         if (piece == null || !items.ShotCarries(piece.Manager.playerIndex, ItemId.Foresight) || piece.AimPower < 0.03f || piece.AimDirection == Vector3.zero)
         {
             Stop();

@@ -31,6 +31,8 @@ public class ItemView : MonoBehaviour
     private GameObject ghost;       // a ghost shot's pale double, the piece itself unseen
     private char ghostOf;
     private readonly Dictionary<char, Transform> shells = new Dictionary<char, Transform>(); // a frozen piece's ice
+    private readonly HashSet<char> frozen = new HashSet<char>(); // Shells' own
+    private readonly List<char> thawed = new List<char>();
     private readonly Dictionary<ItemId, Material> ringMaterials = new Dictionary<ItemId, Material>();
     private Mesh ringMesh, discMesh, pulseMesh;
 
@@ -297,7 +299,9 @@ public class ItemView : MonoBehaviour
             if (piece == null) continue;
             var at = piece.Body.position;
             // Rings of two items on one piece sit one outside the other, in the items' order.
-            var inside = rings.Keys.Count(k => k.piece == kv.Key.piece && k.kind < kv.Key.kind);
+            var inside = 0;
+            foreach (var other in rings.Keys)
+                if (other.piece == kv.Key.piece && other.kind < kv.Key.kind) inside++;
             var size = piece.Manager.radius * (1.3f + 0.3f * inside);
             kv.Value.position = new Vector3(at.x, Top(at.x, at.z) + 0.003f, at.z);
             kv.Value.localScale = Vector3.one * size;
@@ -385,8 +389,14 @@ public class ItemView : MonoBehaviour
     // A frozen piece stands in a shell of ice till it may move again.
     private void Shells()
     {
-        var frozen = items.State.Effects.Where(e => e.Kind == ItemId.Freeze).Select(e => e.Piece).ToHashSet();
-        foreach (var id in shells.Keys.Where(id => !frozen.Contains(id)).ToList())
+        // Every frame: the sets are kept, not made anew.
+        frozen.Clear();
+        foreach (var effect in items.State.Effects)
+            if (effect.Kind == ItemId.Freeze) frozen.Add(effect.Piece);
+        thawed.Clear();
+        foreach (var id in shells.Keys)
+            if (!frozen.Contains(id)) thawed.Add(id);
+        foreach (var id in thawed)
         {
             if (shells[id] != null) Destroy(shells[id].gameObject);
             shells.Remove(id);
@@ -423,7 +433,7 @@ public class ItemView : MonoBehaviour
             if (renderer != null) renderer.forceRenderingOff = false;
         fogged.Clear();
         if (ghost != null) ghost.SetActive(true);
-        if (!items.State.Objects.Any(o => o.Kind == ItemId.Fog)) return;
+        if (!items.State.Objects.Exists(o => o.Kind == ItemId.Fog)) return;
         foreach (var piece in game.gamePieceScripts)
         {
             if (piece == null || !piece.gameObject.activeSelf || !items.InFog(piece)) continue;

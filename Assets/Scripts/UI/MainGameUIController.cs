@@ -69,6 +69,7 @@ public class MainGameUIController : MonoBehaviour
     private float noticeUntil;
     private bool hintFits = true; // the key legend is big enough to read (Arrange)
     private int lastTickSecond = -1; // the countdown second last ticked
+    private (int player, int second, Language language) turnShown = (-1, int.MinValue, default); // what the turn pill says now
     private float arrangedWidth = -1; // the canvas width Arrange last laid out for
     private int viewSide;             // the side the board is seen from, at the bottom of the screen
     private Vector2[] builtCorners;   // the two sides' panels as built: anchor, pivot, position
@@ -373,12 +374,19 @@ public class MainGameUIController : MonoBehaviour
     private void RenderTurn()
     {
         var remaining = TurnTimeRemaining();
-        turnText.text = remaining.HasValue
-            ? Loc.Get("hud.turnTimed", ColorName(currentPlayerId), Mathf.CeilToInt(remaining.Value))
-            : Loc.Get("hud.turn", ColorName(currentPlayerId));
+        var second = remaining.HasValue ? Mathf.CeilToInt(remaining.Value) : -1;
+        // Worded again only as it changes: made every frame, the words were
+        // garbage every frame.
+        var shown = (currentPlayerId, second, Loc.Current);
+        if (shown != turnShown)
+        {
+            turnShown = shown;
+            turnText.text = remaining.HasValue
+                ? Loc.Get("hud.turnTimed", ColorName(currentPlayerId), second)
+                : Loc.Get("hud.turn", ColorName(currentPlayerId));
+        }
         turnText.color = remaining.HasValue && remaining.Value <= clockWarningSeconds ? clockWarningColor : turnTextColor;
         // The last seconds tick, on both screens.
-        var second = remaining.HasValue ? Mathf.CeilToInt(remaining.Value) : -1;
         if (second > 0 && second <= clockWarningSeconds && second != lastTickSecond) GameAudio.PlayInterface(GameAudio.Bank.tick);
         lastTickSecond = second;
 

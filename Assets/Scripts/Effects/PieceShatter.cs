@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 
@@ -64,7 +65,7 @@ public class PieceShatter : MonoBehaviour
 
         var submeshes = new int[mesh.subMeshCount][];
         for (var s = 0; s < submeshes.Length; s++) submeshes[s] = mesh.GetTriangles(s);
-        var all = new List<(int submesh, int at)>();
+        var all = new List<(int submesh, int at)>(submeshes.Sum(triangles => triangles.Length / 3));
         for (var s = 0; s < submeshes.Length; s++)
             for (var t = 0; t < submeshes[s].Length; t += 3) all.Add((s, t));
         if (all.Count == 0) return;
@@ -95,11 +96,14 @@ public class PieceShatter : MonoBehaviour
             foreach (var tri in group) middle += Centroid(tri);
             middle /= group.Count;
 
-            var shardVertices = new List<Vector3>();
-            var shardNormals = new List<Vector3>();
-            var shardUvs = new List<Vector2>();
+            // Sized to begin with: grown as they filled, they made a stone's
+            // break a megabyte and more of garbage.
+            var corners = group.Count * 3;
+            var shardVertices = new List<Vector3>(corners);
+            var shardNormals = new List<Vector3>(corners);
+            var shardUvs = new List<Vector2>(corners);
             var shardTriangles = new List<int>[submeshes.Length];
-            for (var s = 0; s < submeshes.Length; s++) shardTriangles[s] = new List<int>();
+            for (var s = 0; s < submeshes.Length; s++) shardTriangles[s] = new List<int>(corners);
             foreach (var (submesh, at) in group)
                 for (var k = 0; k < 3; k++)
                 {

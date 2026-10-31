@@ -1,4 +1,3 @@
-using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -78,7 +77,11 @@ public class PlacementHud : MonoBehaviour
         // Everyone placing at once only happens online; there it's worth
         // knowing who else is done.
         var allAtOnce = phase.Placer == PlacementPhase.Everyone && actor >= 0;
-        var othersReady = Enumerable.Range(0, players).Count(p => p != actor && phase.IsReady(p));
+        // A loop: a lambda here took phase and actor with it, and that cost
+        // garbage every frame, even with no placement going.
+        var othersReady = 0;
+        for (var p = 0; p < players; p++)
+            if (p != actor && phase.IsReady(p)) othersReady++;
         statusText.text = !allAtOnce || othersReady == 0 ? Loc.Get("placement.timeoutNote")
             : players == 2 ? Loc.Get("placement.opponentReady")
             : Loc.Get("placement.othersReady", othersReady, players - 1);

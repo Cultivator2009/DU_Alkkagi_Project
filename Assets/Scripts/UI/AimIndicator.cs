@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -56,7 +55,7 @@ public class AimIndicator : MonoBehaviour
     private void LateUpdate()
     {
         var gameManager = GameManager.manager;
-        var piece = gameManager == null ? null : gameManager.gamePieceScripts.FirstOrDefault(p => p != null && p.isDragging);
+        var piece = gameManager == null ? null : gameManager.gamePieceScripts.Find(p => p != null && p.isDragging);
         if (piece == null || worldCamera == null)
         {
             SetVisible(false);
@@ -146,7 +145,9 @@ public class AimIndicator : MonoBehaviour
     {
         if (CameraRig.Busy || Time.timeScale <= 0 || AimCursor.Held || !Pointer.OnScreen) return null;
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject()) return null;
-        return PiecePicker.UnderCursor(worldCamera).FirstOrDefault(p => game.MayPickUp(p.Manager.playerIndex));
+        foreach (var piece in PiecePicker.UnderCursor(worldCamera))
+            if (game.MayPickUp(piece.Manager.playerIndex)) return piece;
+        return null;
     }
 
     // First contact along the shot, on the board plane: the nearest piece

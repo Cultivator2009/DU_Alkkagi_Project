@@ -157,7 +157,12 @@ public sealed class BoardShape
     }
 
     // Inside some part, at least margin from its edges.
-    public bool Contains(Vector2 point, float margin = 0f) => parts.Any(part => Depth(part, point) >= margin);
+    public bool Contains(Vector2 point, float margin = 0f)
+    {
+        foreach (var part in parts)
+            if (Depth(part, point) >= margin) return true;
+        return false;
+    }
 
     // How far inside: the most any part holds it by (0 outside).
     public float Margin(Vector2 point)

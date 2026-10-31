@@ -72,6 +72,7 @@ public readonly struct ItemDef
     public readonly ItemAim Aim;
     public readonly int Rounds;       // how long it lasts, in its user's turns; 0 = this turn, or once
     public readonly bool HealthOnly;  // only in a battle of health
+    private readonly string nameKey, descriptionKey; // made once: the HUD asks for the name every frame
 
     public ItemDef(ItemId id, ItemCategory category, ItemRarity rarity, ItemAim aim, int rounds = 0, bool healthOnly = false)
     {
@@ -81,10 +82,12 @@ public readonly struct ItemDef
         Aim = aim;
         Rounds = rounds;
         HealthOnly = healthOnly;
+        nameKey = "item." + id + ".name";
+        descriptionKey = "item." + id + ".desc";
     }
 
-    public string Name => Loc.Get("item." + Id + ".name");
-    public string Description => Loc.Get("item." + Id + ".desc");
+    public string Name => Loc.Get(nameKey);
+    public string Description => Loc.Get(descriptionKey);
 }
 
 public static class ItemDefs

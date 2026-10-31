@@ -94,6 +94,7 @@ public class ItemSystem : MonoBehaviour
     private readonly List<GamePieceDragAndReleaseForce> benched = new List<GamePieceDragAndReleaseForce>(); // out, kept to come back; latest last
     private readonly HashSet<GamePieceDragAndReleaseForce> onIce = new HashSet<GamePieceDragAndReleaseForce>();
     private readonly HashSet<GamePieceDragAndReleaseForce> onTar = new HashSet<GamePieceDragAndReleaseForce>();
+    private readonly List<BoardObject> patches = new List<BoardObject>(); // Patch's own
     private readonly HashSet<(int pad, GamePieceDragAndReleaseForce piece)> boosted = new HashSet<(int, GamePieceDragAndReleaseForce)>(); // this shot's
     private readonly Dictionary<int, HashSet<GamePieceDragAndReleaseForce>> overHole = new Dictionary<int, HashSet<GamePieceDragAndReleaseForce>>(); // there when it opened, and not gone off it since
     private readonly Dictionary<PhysicsMaterial, PhysicsMaterial> slippery = new Dictionary<PhysicsMaterial, PhysicsMaterial>();
@@ -232,8 +233,14 @@ public class ItemSystem : MonoBehaviour
 
     public bool IsEnemy(int side, int other) => other >= 0 && other < turns.Sides.Count && game.TeamOf(other) != game.TeamOf(side) && turns.Sides[other].Standing;
 
-    public GamePieceDragAndReleaseForce PieceOf(char id) =>
-        id == '\0' ? null : game.gamePieceScripts.Find(p => p != null && p.Manager.pieceID == id && p.gameObject.activeSelf);
+    // Asked every frame and physics step: a loop, no garbage.
+    public GamePieceDragAndReleaseForce PieceOf(char id)
+    {
+        if (id == '\0') return null;
+        foreach (var p in game.gamePieceScripts)
+            if (p != null && p.Manager.pieceID == id && p.gameObject.activeSelf) return p;
+        return null;
+    }
 
     public IEnumerable<GamePieceDragAndReleaseForce> PiecesOf(int side) => game.gamePieceScripts.Where(p => p != null && p.gameObject.activeSelf && p.Manager.playerIndex == side);
 
@@ -734,7 +741,13 @@ public class ItemSystem : MonoBehaviour
         for (var i = State.Boxes.Count - 1; i >= 0; i--)
         {
             var box = State.Boxes[i];
-            var reached = game.gamePieceScripts.Any(p => p != null && p.gameObject.activeSelf && (Flat(p.Body.position) - box.Position).magnitude < p.Manager.radius + BoxRadius);
+            var reached = false;
+            foreach (var p in game.gamePieceScripts)
+                if (p != null && p.gameObject.activeSelf && (Flat(p.Body.position) - box.Position).magnitude < p.Manager.radius + BoxRadius)
+                {
+                    reached = true;
+                    break;
+                }
             if (!reached) continue;
             State.Boxes.RemoveAt(i);
             Give(side, Draw(side), ItemEventKind.Gained, box.Position);
@@ -780,14 +793,23 @@ public class ItemSystem : MonoBehaviour
         Patch(ItemId.Tar, onTar);
     }
 
+    // Every physics step: loops over a kept list, no garbage.
     private void Patch(ItemId kind, HashSet<GamePieceDragAndReleaseForce> on)
     {
-        var patches = State.Objects.Where(o => o.Kind == kind).ToList();
+        patches.Clear();
+        foreach (var o in State.Objects)
+            if (o.Kind == kind) patches.Add(o);
         if (patches.Count == 0 && on.Count == 0) return;
         foreach (var piece in game.gamePieceScripts)
         {
             if (piece == null || !piece.gameObject.activeSelf) continue;
-            var now = patches.Any(o => Over(piece, o));
+            var now = false;
+            foreach (var o in patches)
+                if (Over(piece, o))
+                {
+                    now = true;
+                    break;
+                }
             if (now == on.Contains(piece)) continue;
             if (now) on.Add(piece);
             else on.Remove(piece);

@@ -7,16 +7,18 @@ public static class ItemIcons
 {
     public const string Sheet = "ItemIcons";
 
-    private static Dictionary<string, Sprite> byName;
+    private static Dictionary<ItemId, Sprite> byId;
 
-    // null when there's none drawn for it.
+    // null when there's none drawn for it. Asked every frame (the HUD's
+    // slots): looked up by the id itself, its name made once.
     public static Sprite Of(ItemId id)
     {
-        if (byName == null)
+        if (byId == null)
         {
-            byName = new Dictionary<string, Sprite>();
-            foreach (var sprite in Resources.LoadAll<Sprite>(Sheet)) byName[sprite.name] = sprite;
+            byId = new Dictionary<ItemId, Sprite>();
+            foreach (var sprite in Resources.LoadAll<Sprite>(Sheet))
+                if (System.Enum.TryParse<ItemId>(sprite.name, out var named)) byId[named] = sprite;
         }
-        return byName.TryGetValue(id.ToString(), out var found) ? found : null;
+        return byId.TryGetValue(id, out var found) ? found : null;
     }
 }
