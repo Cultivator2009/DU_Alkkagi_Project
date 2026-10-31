@@ -34,6 +34,7 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     private const float CrawlSpin = 3f;     // rad/s
     private const float CrawlSeconds = 2f;
     private float crawling;
+    private bool stalled; // stopped for crawling (UpdateSettleState)
     // A flick is the impulse a go stone of referenceMass gets. Other masses
     // leave at speed / (mass / referenceMass)^massExponent: 1 would give every
     // piece the same momentum (the janggi general left so slowly it hardly
@@ -268,11 +269,12 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     // moving to knock it (one put to sleep in the step it was knocked took
     // none of the knock). Kept awake, stones leaning on one another at a
     // mound's foot shook on between turns, 2-3° and most of a millimetre a
-    // step. Asleep, a piece lies still till one touches it or it's moved.
+    // step. So is one stopped for crawling on any board, which would rock
+    // on. Asleep, a piece lies still till one touches it or it's moved.
     public void Rest()
     {
         var board = GameManager.manager != null ? GameManager.manager.Board : null;
-        if (board != null && board.Active.IsRelief && !rb.isKinematic && gameObject.activeInHierarchy) rb.Sleep();
+        if (board != null && (board.Active.IsRelief || stalled) && !rb.isKinematic && gameObject.activeInHierarchy) rb.Sleep();
     }
 
     // Kinematic pieces (network guest, placement) are moved, not simulated.
@@ -324,11 +326,23 @@ public class GamePieceDragAndReleaseForce : MonoBehaviour
     private void UpdateSettleState()
     {
         var crawl = rb.linearVelocity.sqrMagnitude < CrawlBelow * CrawlBelow && rb.angularVelocity.sqrMagnitude < CrawlSpin * CrawlSpin;
+        if (!crawl) stalled = false; // going again, for real
         crawling = crawl && isGamePieceMoving ? crawling + Time.fixedDeltaTime : 0; // from when it last moved, not from rest
         if (crawling > CrawlSeconds && !rb.isKinematic)
         {
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
+            stalled = true;
+        }
+        // Stopped so, it's settled till it goes faster than a crawl: one
+        // that gravity set rocking again at once - on its edge against the
+        // mesa's side, or tilted at a mound's foot - counted as moving the
+        // step after, settled again two seconds on, and never long enough
+        // for the shot to end (TurnController.LingerSeconds).
+        if (stalled)
+        {
+            isGamePieceMoving = false;
+            return;
         }
         bool isSlow = rb.linearVelocity.sqrMagnitude < settleVelocityThreshold * settleVelocityThreshold &&
                       rb.angularVelocity.sqrMagnitude < settleVelocityThreshold * settleVelocityThreshold;
