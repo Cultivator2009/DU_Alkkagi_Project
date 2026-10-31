@@ -583,6 +583,11 @@ internal static class SelfCheck
             var landscape = Rules(BoardType.Landscape, PieceType.GoStones, 4, 8);
             landscape.Set(MatchSettingId.Items, 1);
             yield return ("landscape, go stones, 4, items", landscape);
+            // Chess pieces, in parts and toppling, off the cross board's
+            // bars, where its box drops the touches (BoardVariant.Clip).
+            var chessCross = Rules(BoardType.Cross, PieceType.ChessPieces, 4, 4);
+            chessCross.Set(MatchSettingId.Items, 1);
+            yield return ("cross, chess pieces, 4, items", chessCross);
         }
 
         // The item mode, tried hard: every side to move with an empty slot
