@@ -409,6 +409,15 @@ public class TurnController
     private void InputReady()
     {
         if (!Ready) return;
+        // None of its pieces may be flicked (Freeze holds each): its turn
+        // goes by, as a pass - where the circle forbids passing too, or a
+        // side held so had neither a shot nor a pass and, with no time
+        // limit, the match stood still.
+        if (Held(CurrentPlayerID))
+        {
+            PassTurn(TurnEnd.Skipped);
+            return;
+        }
         var picked = pieceSelector.TrySelect(CurrentPlayerID);
         if (picked == null) return;
 
@@ -579,6 +588,13 @@ public class TurnController
     }
 
     // Nothing moved, so there's no winner to check: straight to the next side.
+    private bool Held(int side)
+    {
+        foreach (var piece in gamePieceScripts)
+            if (piece != null && piece.Manager.playerIndex == side && (PieceSelector.MayMove == null || PieceSelector.MayMove(piece))) return false;
+        return true;
+    }
+
     private void PassTurn(TurnEnd why)
     {
         if (selGamePiece != null)
