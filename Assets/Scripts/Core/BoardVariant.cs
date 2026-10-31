@@ -149,7 +149,7 @@ public class BoardVariant : MonoBehaviour
     // Boxes standing in for a shape (Build, and the AI's copies of them): a
     // touch outside the shape - over a corner the box fills in - isn't one.
     // Read during the physics step, on its threads; changed only between.
-    private static readonly Dictionary<int, (BoardShape shape, Vector2 origin)> clips = new Dictionary<int, (BoardShape, Vector2)>();
+    private static readonly Dictionary<EntityId, (BoardShape shape, Vector2 origin)> clips = new Dictionary<EntityId, (BoardShape, Vector2)>();
     private const float ClipSlack = 0.002f; // a touch on the edge itself still counts
 
     public static void Clip(Collider cover, BoardShape shape)
@@ -159,13 +159,13 @@ public class BoardVariant : MonoBehaviour
             Physics.ContactModifyEvent += DropOutside;
             Physics.ContactModifyEventCCD += DropOutside;
         }
-        clips[cover.GetInstanceID()] = (shape, new Vector2(cover.transform.position.x, cover.transform.position.z));
+        clips[cover.GetEntityId()] = (shape, new Vector2(cover.transform.position.x, cover.transform.position.z));
         cover.hasModifiableContacts = true;
     }
 
     public static void Unclip(Collider cover)
     {
-        if (cover == null || !clips.Remove(cover.GetInstanceID()) || clips.Count > 0) return;
+        if (cover == null || !clips.Remove(cover.GetEntityId()) || clips.Count > 0) return;
         Physics.ContactModifyEvent -= DropOutside;
         Physics.ContactModifyEventCCD -= DropOutside;
     }
@@ -175,7 +175,7 @@ public class BoardVariant : MonoBehaviour
         for (var p = 0; p < pairs.Length; p++)
         {
             var pair = pairs[p];
-            if (!clips.TryGetValue(pair.colliderInstanceID, out var clip) && !clips.TryGetValue(pair.otherColliderInstanceID, out clip)) continue;
+            if (!clips.TryGetValue(pair.colliderEntityId, out var clip) && !clips.TryGetValue(pair.otherColliderEntityId, out clip)) continue;
             for (var i = 0; i < pair.contactCount; i++)
             {
                 var point = pair.GetPoint(i);

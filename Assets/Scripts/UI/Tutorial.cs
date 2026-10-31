@@ -143,7 +143,7 @@ public class Tutorial : MonoBehaviour
         turns.OnShotEnded += ShotEnded;
         turns.Kills.OnShotResolved += Resolved;
         turns.OnMatchEnded += MatchEnded;
-        white = FindObjectsByType<AIOpponent>(FindObjectsSortMode.None).FirstOrDefault(ai => ai.playerId == 1);
+        white = FindObjectsByType<AIOpponent>().FirstOrDefault(ai => ai.playerId == 1);
         if (white != null) white.paused = true;
         // Each lesson shot goes straight back to black (white passes): no breath, no round card between.
         turns.Breathless = true;
