@@ -12,6 +12,7 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
 {
     private const int Channel = 0;
     private const uint FallbackAppId = 480; // Spacewar test app, used only if steam_appid.txt is missing
+    public const string EditorPrefKey = "Alkkagi.SteamInEditor"; // Tools > Alkkagi > Steam in Play Mode
 
     public static SteamTransport Instance { get; private set; }
 
@@ -32,6 +33,20 @@ public class SteamTransport : MonoBehaviour, ISessionTransport
         }
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+#if UNITY_EDITOR
+        // Steam takes the process that starts it for the game until that
+        // process quits - Stop and Shutdown don't end it - so the editor
+        // stayed in the game till Unity closed, and this account logging in
+        // on another machine had Steam close the editor. So here it starts
+        // only when asked for, for an online test; otherwise it's as if
+        // Steam weren't running, which local play doesn't need.
+        if (!UnityEditor.EditorPrefs.GetBool(EditorPrefKey, false))
+        {
+            Debug.Log("Steam is off in the editor: Tools > Alkkagi > Steam in Play Mode turns it on for an online test.");
+            return;
+        }
+#endif
 
         try
         {

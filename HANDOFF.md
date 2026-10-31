@@ -12,6 +12,7 @@ Claude Code로 진행한 작업의 인계용 요약입니다. 새 머신이나 �
 - 주 개발 머신은 **Mac mini M4**입니다. 경로에 공백이 없어야 합니다 (`~/UnityProject/DU_Alkkagi_Project`). 기존 **Windows PC**는 P2P 테스트용 두 번째 머신입니다.
 - 원격 저장소: `https://github.com/Cultivator2009/DU_Alkkagi_Project.git`, 브랜치 `main`
 - `steam_appid.txt`는 gitignore 대상이라 머신마다 루트에 직접 만들어야 합니다 (`480` 한 줄, `steam_appid.txt.example` 참고).
+- **에디터에서는 Steam이 기본으로 꺼져 있습니다** (2026-10-31, `SteamTransport`). Steam은 `SteamAPI_Init`을 부른 프로세스를 그 프로세스가 끝날 때까지 게임으로 봅니다. Stop이나 `Shutdown`으로는 풀리지 않아서, 에디터가 Unity를 끌 때까지 Spacewar 실행 중으로 남았습니다. 그 사이 같은 계정이 다른 머신에서 로그인하면 Steam이 에디터를 강제 종료했습니다. 에디터에서 온라인을 시험할 때만 **Tools > Alkkagi > Steam in Play Mode**를 켜세요(머신별 EditorPrefs). 켜고 한 번 Play한 뒤로는 Unity를 끌 때까지 같은 계정으로 다른 머신에 로그인하면 안 됩니다. 빌드는 그대로 시작할 때 Steam을 켭니다.
 
 ### 버전 관리에서 주의할 점 (과거에 실제로 사고가 났던 부분)
 
