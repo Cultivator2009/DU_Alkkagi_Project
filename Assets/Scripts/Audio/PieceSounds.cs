@@ -30,7 +30,10 @@ public class PieceSounds : MonoBehaviour
 
     private void OnCollisionEnter(Collision collision)
     {
-        if (body.isKinematic || BoardSounds.Instance == null) return;
+        // No contact left: every touch was dropped, as the cross board's box
+        // drops those off its bars (BoardVariant.Clip) - not a touch at all
+        // (a chess piece going over its edge there threw, reading one).
+        if (body.isKinematic || BoardSounds.Instance == null || collision.contactCount == 0) return;
         // A hit that continuous collision caught inside one step (a hard
         // shot at a piece close by) comes with no relative velocity at all;
         // how fast the two part afterwards measures it just as well.
