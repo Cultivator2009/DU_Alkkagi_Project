@@ -78,27 +78,38 @@ public static class GoStoneCollider
     // the speed, a 60° cut at 30% gave a third of what a slightly different
     // one did. The middles are marked before each step (Mark: RoundKnock,
     // and the AI for its copies); the touches are read during it, on the
-    // physics threads, where nothing of Unity's may be asked.
+    // physics threads, where nothing of Unity's may be asked. Chess pieces
+    // knock so too, by their feet (ChessPieceMesh: the lowest part, its base
+    // the widest and as faceted), while both stand: lying down, a piece's
+    // round parts lie across, their touches nowhere near that line.
     private static readonly Dictionary<EntityId, (Vector2 middle, float radius)> stones = new Dictionary<EntityId, (Vector2, float)>();
-    private const float Widest = 0.0735f; // the band's radius (Rim)
+    private static readonly float Upright = Mathf.Cos(25 * Mathf.Deg2Rad); // tilted further it doesn't stand (the landscape's slopes are 15-16°)
     private const float SideTouch = 0.5f; // a touch whose normal is steeper (on the dome, under a stone resting on it) is left as it is
     private static readonly float Aligned = Mathf.Cos(30 * Mathf.Deg2Rad); // as is one further off the line than a face can turn it
     private const float Still = 0.2f;     // units/s: slower, it's two stones at rest side by side (or going on together), not a knock
     private static float step = 0.02f;    // Time.fixedDeltaTime, read where Unity may be asked
 
-    public static void Round(Collider collider)
+    // Returns its radius where it knocks, unscaled: the hull's widest (the
+    // band, a chess piece's base), whose corners stand out past the round
+    // piece's by 1 / cos(180° / 16) - ChessPieceMesh's hulls have 16 sides too.
+    public static float Round(MeshCollider collider)
     {
         if (stones.Count == 0)
         {
             Physics.ContactModifyEvent += Turn;
             Physics.ContactModifyEventCCD += Turn;
         }
-        Mark(collider.GetEntityId(), collider.transform.position, collider.transform.lossyScale.x);
+        var radius = collider.sharedMesh.bounds.extents.x * Mathf.Cos(Mathf.PI / Segments);
+        Mark(collider.GetEntityId(), collider.attachedRigidbody, radius * collider.transform.lossyScale.x);
         collider.hasModifiableContacts = true;
         step = Time.fixedDeltaTime;
+        return radius;
     }
 
-    public static void Mark(EntityId collider, Vector3 middle, float scale) => stones[collider] = (new Vector2(middle.x, middle.z), Widest * scale);
+    // Its middle and radius (scaled: an item grows or shrinks it) before a
+    // step, the radius 0 while it doesn't stand.
+    public static void Mark(EntityId collider, Rigidbody body, float radius) =>
+        stones[collider] = (new Vector2(body.position.x, body.position.z), (body.rotation * Vector3.up).y > Upright ? radius : 0);
 
     public static void Forget(EntityId collider)
     {
@@ -113,6 +124,7 @@ public static class GoStoneCollider
         {
             var pair = pairs[p];
             if (!stones.TryGetValue(pair.colliderEntityId, out var a) || !stones.TryGetValue(pair.otherColliderEntityId, out var b)) continue;
+            if (a.radius <= 0 || b.radius <= 0) continue;
             var va = new Vector2(pair.bodyVelocity.x, pair.bodyVelocity.z);
             var vb = new Vector2(pair.otherBodyVelocity.x, pair.otherBodyVelocity.z);
             // Two at rest against each other (or going on together) are left
@@ -179,22 +191,24 @@ public static class GoStoneCollider
     }
 }
 
-// A go stone in play (BoardSetup, the menu's demo): its middle marked before
-// each step, for its knocks on the others (GoStoneCollider.Round).
+// A go stone or chess piece in play (BoardSetup, the menu's demo): its
+// middle marked before each step, for its knocks on the others
+// (GoStoneCollider.Round) - a chess piece's first collider is its foot.
 public class RoundKnock : MonoBehaviour
 {
     private Rigidbody body;
     private EntityId solid;
+    private float radius;
 
     private void Awake()
     {
         body = GetComponent<Rigidbody>();
         var collider = GetComponent<MeshCollider>();
         solid = collider.GetEntityId();
-        GoStoneCollider.Round(collider);
+        radius = GoStoneCollider.Round(collider);
     }
 
-    private void FixedUpdate() => GoStoneCollider.Mark(solid, body.position, transform.lossyScale.x);
+    private void FixedUpdate() => GoStoneCollider.Mark(solid, body, radius * transform.lossyScale.x);
 
     private void OnDestroy() => GoStoneCollider.Forget(solid);
 }

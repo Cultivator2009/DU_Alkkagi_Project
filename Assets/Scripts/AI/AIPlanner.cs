@@ -51,7 +51,7 @@ public class AIPlanner : IDisposable
         public GamePieceDragAndReleaseForce Source;
         public Rigidbody Body;
         public Collider Solid;      // the copy's own, for its foot on the board (GamePieceDragAndReleaseForce.Slow)
-        public bool Round;          // a go stone's, knocking as the stone does (GoStoneCollider.Round)
+        public float Round;         // a go stone's or chess piece's radius, knocking as the piece does (GoStoneCollider.Round); 0, neither
         public EntityId SolidId;
         public int Owner;
         public int Value;
@@ -118,8 +118,7 @@ public class AIPlanner : IDisposable
             var manager = piece.Manager;
             var copy = Copy(piece.gameObject);
             var solid = Array.Find(copy.GetComponentsInChildren<Collider>(), c => !c.isTrigger);
-            var round = piece.GetComponent<RoundKnock>() != null;
-            if (round) GoStoneCollider.Round(solid);
+            var round = piece.GetComponent<RoundKnock>() != null ? GoStoneCollider.Round((MeshCollider)solid) : 0;
             stands.Add(new Stand
             {
                 Source = piece,
@@ -140,7 +139,7 @@ public class AIPlanner : IDisposable
     {
         BoardVariant.Unclip(clipped);
         foreach (var stand in stands)
-            if (stand.Round) GoStoneCollider.Forget(stand.SolidId);
+            if (stand.Round > 0) GoStoneCollider.Forget(stand.SolidId);
         if (scene.IsValid() && scene.isLoaded) SceneManager.UnloadSceneAsync(scene);
     }
 
@@ -268,7 +267,7 @@ public class AIPlanner : IDisposable
                 var velocity = stand.Body.linearVelocity;
                 if (velocity.y > stand.MaxRise) stand.Body.linearVelocity = new Vector3(velocity.x, stand.MaxRise, velocity.z);
                 GamePieceDragAndReleaseForce.Slow(stand.Body, stand.Solid, stand.Source.extraSlowing, ground, shape);
-                if (stand.Round) GoStoneCollider.Mark(stand.SolidId, stand.Body.position, stand.Body.transform.lossyScale.x);
+                if (stand.Round > 0) GoStoneCollider.Mark(stand.SolidId, stand.Body, stand.Round * stand.Body.transform.lossyScale.x);
                 if (velocity.sqrMagnitude > 0.0025f || stand.Body.angularVelocity.sqrMagnitude > 0.0025f) moving = true;
             }
             physics.Simulate(Time.fixedDeltaTime);

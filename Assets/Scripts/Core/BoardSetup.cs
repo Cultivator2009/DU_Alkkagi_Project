@@ -310,6 +310,7 @@ public class BoardSetup : MonoBehaviour
             part.sharedMaterial = collider.sharedMaterial;
             part.sharedMesh = parts[i];
         }
+        piece.gameObject.AddComponent<RoundKnock>(); // the first part, its foot, knocks as a round one
         piece.GetComponent<MeshRenderer>().sharedMaterial = SideMaterial(player, piece.GetComponent<MeshRenderer>().sharedMaterial);
         letterKeys[PieceId(player, index)] = "chess." + kind;
 
